@@ -118,6 +118,7 @@ type CachedTimelineAnalysis = {
 
 const recentGameAnalysisMemoryCache = new Map<string, CachedTimelineAnalysis>();
 const recentGameAnalysisInFlightCache = new Map<string, Promise<CachedTimelineAnalysis | null>>();
+type PositionAnalysisProfile = 'review' | 'training';
 
 function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
   if (!category) {
@@ -627,7 +628,7 @@ export function ChessAnalysisLab() {
 
     for (let moveCount = 0; moveCount <= currentMoves.length; moveCount += 1) {
       const moveList = buildMoveUciHistory(currentMoves.slice(0, moveCount));
-      const cacheKey = getPositionCacheKey(initialFen, moveList);
+      const cacheKey = getPositionCacheKey(initialFen, moveList, 'training');
       analyses[moveCount] = positionCacheRef.current.get(cacheKey) ?? null;
     }
 
@@ -931,7 +932,13 @@ export function ChessAnalysisLab() {
   );
 
   const fetchCachedPositionAnalysis = useCallback(
-    (cacheKey: string, fen: string, moves: string[], requestInitialFen = initialFen) => {
+    (
+      cacheKey: string,
+      fen: string,
+      moves: string[],
+      requestInitialFen = initialFen,
+      profile: PositionAnalysisProfile = 'review',
+    ) => {
       const cachedAnalysis = positionCacheRef.current.get(cacheKey);
 
       if (cachedAnalysis) {
@@ -944,8 +951,9 @@ export function ChessAnalysisLab() {
         return inFlight;
       }
 
+      const buildRequest = profile === 'training' ? buildDeterministicAnalyzeRequest : buildReviewAnalyzeRequest;
       const request = analyzeSinglePosition(
-        buildReviewAnalyzeRequest({
+        buildRequest({
           fen,
           initialFen: requestInitialFen,
           moves,
@@ -1810,7 +1818,8 @@ export function ChessAnalysisLab() {
 
   useEffect(() => {
     const requestId = ++positionRequestIdRef.current;
-    const cacheKey = getPositionCacheKey(initialFen, currentMoveList);
+    const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
+    const cacheKey = getPositionCacheKey(initialFen, currentMoveList, positionProfile);
     const cachedAnalysis = positionCacheRef.current.get(cacheKey);
 
     if (cachedAnalysis) {
@@ -1824,7 +1833,7 @@ export function ChessAnalysisLab() {
     setServerError('');
     setPositionAnalysis(null);
 
-    fetchCachedPositionAnalysis(cacheKey, currentFen, currentMoveList)
+    fetchCachedPositionAnalysis(cacheKey, currentFen, currentMoveList, initialFen, positionProfile)
       .then(analysis => {
         if (positionRequestIdRef.current === requestId) {
           setPositionAnalysis(analysis);
@@ -1843,7 +1852,7 @@ export function ChessAnalysisLab() {
       });
 
     return undefined;
-  }, [currentFen, currentLineKey, currentMoveList, fetchCachedPositionAnalysis, initialFen]);
+  }, [activeDeckCard, currentFen, currentLineKey, currentMoveList, fetchCachedPositionAnalysis, initialFen]);
 
   useEffect(() => {
     if (!activeDeckCard || historyIndex <= 0) {
@@ -1865,7 +1874,7 @@ export function ChessAnalysisLab() {
     }
 
     const beforeMoveList = buildMoveUciHistory(currentMoves.slice(0, moveIndex));
-    const beforeKey = getPositionCacheKey(initialFen, beforeMoveList);
+    const beforeKey = getPositionCacheKey(initialFen, beforeMoveList, 'training');
 
     if (positionCacheRef.current.has(beforeKey)) {
       return undefined;
@@ -1873,7 +1882,7 @@ export function ChessAnalysisLab() {
 
     const beforeGame = restoreGameFromHistory(currentMoves, initialFen, moveIndex);
 
-    void fetchCachedPositionAnalysis(beforeKey, beforeGame.fen(), beforeMoveList)
+    void fetchCachedPositionAnalysis(beforeKey, beforeGame.fen(), beforeMoveList, initialFen, 'training')
       .then(() => {
         setTrainAnalysisTick(tick => tick + 1);
       })
@@ -1889,7 +1898,7 @@ export function ChessAnalysisLab() {
 
     for (let index = 0; index <= moveHistory.length; index += 1) {
       const moves = buildMoveUciHistory(moveHistory.slice(0, index));
-      const cacheKey = getPositionCacheKey(initialFen, moves);
+      const cacheKey = getPositionCacheKey(initialFen, moves, 'training');
 
       if (positionCacheRef.current.has(cacheKey) || positionInFlightRef.current.has(cacheKey)) {
         continue;
@@ -1897,7 +1906,7 @@ export function ChessAnalysisLab() {
 
       const game = restoreGameFromHistory(moveHistory, initialFen, index);
 
-      void fetchCachedPositionAnalysis(cacheKey, game.fen(), moves)
+      void fetchCachedPositionAnalysis(cacheKey, game.fen(), moves, initialFen, 'training')
         .then(() => {
           setTrainAnalysisTick(tick => tick + 1);
         })
@@ -1913,21 +1922,23 @@ export function ChessAnalysisLab() {
     }
 
     const timer = window.setTimeout(() => {
+      const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
+
       for (let index = historyIndex + 1; index <= Math.min(moveHistory.length, historyIndex + PRELOAD_AHEAD); index += 1) {
         const moves = buildMoveUciHistory(moveHistory.slice(0, index));
-        const cacheKey = getPositionCacheKey(initialFen, moves);
+        const cacheKey = getPositionCacheKey(initialFen, moves, positionProfile);
 
         if (positionCacheRef.current.has(cacheKey) || positionInFlightRef.current.has(cacheKey)) {
           continue;
         }
 
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, index);
-        void fetchCachedPositionAnalysis(cacheKey, nextGame.fen(), moves).catch(() => undefined);
+        void fetchCachedPositionAnalysis(cacheKey, nextGame.fen(), moves, initialFen, positionProfile).catch(() => undefined);
       }
     }, 180);
 
     return () => window.clearTimeout(timer);
-  }, [fetchCachedPositionAnalysis, historyIndex, initialFen, moveHistory, timelineLoading]);
+  }, [activeDeckCard, fetchCachedPositionAnalysis, historyIndex, initialFen, moveHistory, timelineLoading]);
 
   useEffect(() => {
     setReviewIndex(value => Math.max(0, Math.min(value, Math.max(0, reviewMoments.length - 1))));
@@ -3567,8 +3578,20 @@ function buildTimelineReviews(
   );
 }
 
-function getPositionCacheKey(initialFen: string | null, moves: string[]) {
-  return `analysis:v${GAME_ANALYSIS_CACHE_VERSION}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
+function getPositionCacheKey(
+  initialFen: string | null,
+  moves: string[],
+  profile: PositionAnalysisProfile = 'review',
+) {
+  return `analysis:v${GAME_ANALYSIS_CACHE_VERSION}:${getPositionAnalysisProfileKey(profile)}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
+}
+
+function getPositionAnalysisProfileKey(profile: PositionAnalysisProfile) {
+  if (profile === 'training') {
+    return `training-d${DETERMINISTIC_ANALYSIS_PROFILE.depth}-pv${DETERMINISTIC_ANALYSIS_PROFILE.multipv}`;
+  }
+
+  return `review-d${REVIEW_ANALYSIS_PROFILE.depth}-pv${REVIEW_ANALYSIS_PROFILE.multipv}`;
 }
 
 function getTimelinePositionCacheKey(initialFen: string | null, moves: string[]) {
