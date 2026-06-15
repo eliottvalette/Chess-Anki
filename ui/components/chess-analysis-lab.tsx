@@ -66,6 +66,44 @@ import {
   type DeckFeedback,
   type OpeningSeedLine,
 } from '@/lib/opening-training';
+
+import { useLabState } from '../hooks/useLabState';
+import {
+  createEmptyTrainSessionStats,
+  createEmptyWorkspaceSnapshot,
+  normalizeWorkspaceSnapshot,
+  buildTimelineReviews,
+  getPositionCacheKey,
+  getPositionAnalysisProfileKey,
+  getTimelinePositionCacheKey,
+  mergeDeckProgress,
+  dedupeBoardArrows,
+  isOpponentTurnFromFen,
+  normalizeDeckLoadError,
+  readStoredTrainingUsername,
+  readStoredTrainingPassword,
+  persistTrainingUsername,
+  persistTrainingPassword,
+  persistTrainingCredentials,
+  readCookie,
+  writeCookie,
+  deleteCookie,
+  delay,
+  type CachedTimelineAnalysis,
+  saveCachedTimelineAnalysis,
+  isUsableCachedTimelineAnalysis,
+  getRecentGameCacheKey,
+  recentGameAnalysisMemoryCache,
+  loadCachedTimelineAnalysis
+
+} from '../lib/lab-helpers';
+import {
+  ImportIcon,
+  FlipIcon,
+  ArrowIcon,
+  RefreshIcon,
+  ResetIcon
+} from './lab/lab-icons';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import {
   applyDeckAttempt,
@@ -80,6 +118,8 @@ import {
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import { buildDrillPath, chooseWeightedOpponentEdge, type DrillPathStep, type OpeningTreeDetail, type OpeningTreeSummary } from '@/lib/opening-tree';
 import styles from './chess-analysis-lab.module.css';
+import { useRecentGames } from "../hooks/lab/useRecentGames";
+import { useTrainingProfile } from "../hooks/lab/useTrainingProfile";
 
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ssr: false,
@@ -111,18 +151,6 @@ const RECENT_GAMES_PRELOAD_SCAN_MS = 1_000;
 const GAME_ANALYSIS_CACHE_VERSION = 6;
 const DRILL_OPPONENT_DELAY_MS = 400;
 const TIMELINE_ANALYSIS_PROFILE_KEY = `game-review-v${REVIEW_ANALYSIS_PROFILE.version}-d${REVIEW_ANALYSIS_PROFILE.depth}-pv${REVIEW_ANALYSIS_PROFILE.multipv}`;
-
-type CachedTimelineAnalysis = {
-  quality: 'refined';
-  version?: number;
-  profileKey?: string;
-  preMoveAnalyses: AnalysisResult[];
-  timelineAnalyses: AnalysisResult[];
-  updatedAt?: string;
-};
-
-const recentGameAnalysisMemoryCache = new Map<string, CachedTimelineAnalysis>();
-const recentGameAnalysisInFlightCache = new Map<string, Promise<CachedTimelineAnalysis | null>>();
 type PositionAnalysisProfile = 'review' | 'training';
 
 function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
@@ -278,10 +306,6 @@ function BoardPlayerBar({ player }: { player: BoardPlayerSummary }) {
   );
 }
 
-function getRecentGameCacheKey(game: ChessComRecentGameSummary) {
-  return `chesscom:v${GAME_ANALYSIS_CACHE_VERSION}:${game.link || game.url}`;
-}
-
 function getPgnHash(pgn: string) {
   let hash = 5381;
 
@@ -290,16 +314,6 @@ function getPgnHash(pgn: string) {
   }
 
   return `pgn:${(hash >>> 0).toString(16)}`;
-}
-
-function logRecentGamePreload(status: string, detail: string) {
-  console.info(`[preload:game] ${status} ${detail}`);
-}
-
-function formatRecentGameLogLabel(game: ChessComRecentGameSummary) {
-  const player = game.playerUsername ?? 'You';
-  const opponent = game.opponentUsername ?? 'opponent';
-  return game.playerColor === 'black' ? `${opponent} vs ${player}` : `${player} vs ${opponent}`;
 }
 
 function parseJsonResponse<T>(response: Response, bodyText: string): T {
@@ -318,115 +332,7 @@ async function readJsonResponse<T>(response: Response) {
   return parseJsonResponse<T>(response, await response.text());
 }
 
-async function loadCachedTimelineAnalysis(
-  cacheKey: string,
-  { includeInFlight = true }: { includeInFlight?: boolean } = {},
-): Promise<CachedTimelineAnalysis | null> {
-  const memoryHit = recentGameAnalysisMemoryCache.get(cacheKey);
-
-  if (memoryHit?.version === GAME_ANALYSIS_CACHE_VERSION && memoryHit.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY) {
-    return memoryHit;
-  }
-
-  const inFlightHit = recentGameAnalysisInFlightCache.get(cacheKey);
-
-  if (includeInFlight && inFlightHit) {
-    const analysis = await inFlightHit;
-    return analysis?.version === GAME_ANALYSIS_CACHE_VERSION && analysis.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY
-      ? analysis
-      : null;
-  }
-
-  try {
-    const response = await fetch(`/api/game-analysis-cache?key=${encodeURIComponent(cacheKey)}`, { credentials: 'same-origin' });
-    const payload = (await response.json()) as { analysis?: CachedTimelineAnalysis | null };
-    const analysis = payload.analysis;
-
-    if (
-      response.ok &&
-      analysis &&
-      analysis.quality === 'refined' &&
-      analysis.version === GAME_ANALYSIS_CACHE_VERSION &&
-      analysis.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY &&
-      Array.isArray(analysis.preMoveAnalyses) &&
-      Array.isArray(analysis.timelineAnalyses)
-    ) {
-      recentGameAnalysisMemoryCache.set(cacheKey, analysis);
-      return analysis;
-    }
-  } catch {
-    // Analysis cache is an optimization; misses should not affect review.
-  }
-
-  return null;
-}
-
-async function saveCachedTimelineAnalysis({
-  cacheKey,
-  gameLink,
-  pgn,
-  preMoveAnalyses,
-  timelineAnalyses,
-}: {
-  cacheKey: string;
-  gameLink?: string | null;
-  pgn?: string | null;
-  preMoveAnalyses: AnalysisResult[];
-  timelineAnalyses: AnalysisResult[];
-}) {
-  recentGameAnalysisMemoryCache.set(cacheKey, {
-    quality: 'refined',
-    version: GAME_ANALYSIS_CACHE_VERSION,
-    profileKey: TIMELINE_ANALYSIS_PROFILE_KEY,
-    preMoveAnalyses,
-    timelineAnalyses,
-    updatedAt: new Date().toISOString(),
-  });
-
-  try {
-    await fetch('/api/game-analysis-cache', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        key: cacheKey,
-        gameLink,
-        pgnHash: pgn ? getPgnHash(pgn) : null,
-      analysis: {
-        quality: 'refined',
-        version: GAME_ANALYSIS_CACHE_VERSION,
-        profileKey: TIMELINE_ANALYSIS_PROFILE_KEY,
-        preMoveAnalyses,
-        timelineAnalyses,
-      },
-      }),
-    });
-  } catch {
-    // Best-effort persistence only.
-  }
-}
-
-function isUsableCachedTimelineAnalysis(
-  analysis: CachedTimelineAnalysis | null | undefined,
-  moveCount: number,
-): analysis is CachedTimelineAnalysis {
-  if (
-    !analysis ||
-    analysis.version !== GAME_ANALYSIS_CACHE_VERSION ||
-    analysis.profileKey !== TIMELINE_ANALYSIS_PROFILE_KEY
-  ) {
-    return false;
-  }
-
-  const analyzedPlies = analysis.timelineAnalyses.length;
-  return (
-    analyzedPlies > 0 &&
-    analyzedPlies === moveCount &&
-    analysis.preMoveAnalyses.length === analyzedPlies
-  );
-}
-
-type TrainingProfile = {
+export type TrainingProfile = {
   id: string;
   username: string;
 };
@@ -510,96 +416,47 @@ type WorkspaceSnapshot = {
 };
 
 export function ChessAnalysisLab() {
-  const [game, setGame] = useState(() => new Chess());
-  const [initialFen, setInitialFen] = useState<string | null>(null);
-  const [moveHistory, setMoveHistory] = useState<StoredMove[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const [variationBaseIndex, setVariationBaseIndex] = useState<number | null>(null);
-  const [variationMoves, setVariationMoves] = useState<StoredMove[]>([]);
-  const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
-  const [squareStyles, setSquareStyles] = useState<Record<string, CSSProperties>>({});
-  const [orientation, setOrientation] = useState<'white' | 'black'>('white');
-  const [showArrow, setShowArrow] = useState(true);
-  const [mode, setMode] = useState<WorkspaceMode>('review');
-  const [reviewSide] = useState<ReviewSide>('both');
-  const [reviewIndex, setReviewIndex] = useState(0);
-  const [metadata, setMetadata] = useState<GameMetadata | null>(null);
-  const [whiteAvatarUrl, setWhiteAvatarUrl] = useState<string | null>(null);
-  const [blackAvatarUrl, setBlackAvatarUrl] = useState<string | null>(null);
-  const [fileName, setFileName] = useState('');
-  const [pgnDraft, setPgnDraft] = useState('');
-  const [pgnDialogOpen, setPgnDialogOpen] = useState(false);
-  const [positionAnalysis, setPositionAnalysis] = useState<AnalysisResult | null>(null);
-  const [preMoveAnalyses, setPreMoveAnalyses] = useState<AnalysisResult[]>([]);
-  const [timelineAnalyses, setTimelineAnalyses] = useState<AnalysisResult[]>([]);
-  const [positionLoading, setPositionLoading] = useState(false);
-  const [timelineLoading, setTimelineLoading] = useState(false);
-  const [timelineProgress, setTimelineProgress] = useState<number | null>(null);
-  const [serverError, setServerError] = useState('');
-  const [timelineError, setTimelineError] = useState('');
-  const [boardWidth, setBoardWidth] = useState(640);
-  const [deckIndex, setDeckIndex] = useState(0);
-  const [trainAllSession, setTrainAllSession] = useState(false);
-  const [trainAllQueue, setTrainAllQueue] = useState<DeckCard[]>([]);
-  const [trainSessionIndex, setTrainSessionIndex] = useState(0);
-  const [trainSessionStats, setTrainSessionStats] = useState<TrainSessionStats>({ completed: 0, hits: 0, misses: 0 });
-  const [activeDeckCard, setActiveDeckCard] = useState<DeckCard | null>(null);
-  const [deckFeedback, setDeckFeedback] = useState<DeckFeedback | null>(null);
-  const [deckFeedbackArrowsVisible, setDeckFeedbackArrowsVisible] = useState(false);
-  const [openingLines, setOpeningLines] = useState<OpeningSeedLine[]>([]);
-  const [deckCards, setDeckCards] = useState<DeckCard[]>([]);
-  const [deckSummaries, setDeckSummaries] = useState<TrainingDeckSummary[]>([]);
-  const [selectedDeckId, setSelectedDeckId] = useState<string | null>(null);
-  const [deckLibraryLoading, setDeckLibraryLoading] = useState(false);
-  const [deckCardsLoading, setDeckCardsLoading] = useState(false);
-  const [deckLoadError, setDeckLoadError] = useState('');
-  const [deckActionLoading, setDeckActionLoading] = useState(false);
-  const [deckActionError, setDeckActionError] = useState('');
-  const [openingTrees, setOpeningTrees] = useState<OpeningTreeSummary[]>([]);
-  const [activeOpeningTree, setActiveOpeningTree] = useState<OpeningTreeDetail | null>(null);
-  const [openingTreesLoading, setOpeningTreesLoading] = useState(false);
-  const [openingTreeActionLoading, setOpeningTreeActionLoading] = useState(false);
-  const [openingTreeActionError, setOpeningTreeActionError] = useState('');
-  const [selectedOpeningTreeId, setSelectedOpeningTreeId] = useState<string | null>(null);
-  const [activeOpeningNodeId, setActiveOpeningNodeId] = useState<string | null>(null);
-  const [openingDrillStatus, setOpeningDrillStatus] = useState('');
-  const [openingDrillExpected, setOpeningDrillExpected] = useState<{ nodeId: string; uci: string | null; san: string | null } | null>(null);
-  const [openingDrillActive, setOpeningDrillActive] = useState(false);
-  const drillPathRef = useRef<DrillPathStep[]>([]);
-  const drillPathIndexRef = useRef(0);
-  const [newDeckTitle, setNewDeckTitle] = useState('');
-  const [reviewDeckSaveStatus, setReviewDeckSaveStatus] = useState('');
-  const [deckProgress, setDeckProgress] = useState<DeckProgressMap>({});
-  const [chesscomUsername, setChesscomUsername] = useState('');
-  const [recentGameTimeClass, setRecentGameTimeClass] = useState<ChessComRecentGameTimeClass>('blitz');
-  const [recentChessGames, setRecentChessGames] = useState<ChessComRecentGameSummary[]>([]);
-  const [recentChessGamesLoading, setRecentChessGamesLoading] = useState(false);
-  const [recentChessGamesHasMore, setRecentChessGamesHasMore] = useState(false);
-  const [recentChessGamesNextOffset, setRecentChessGamesNextOffset] = useState(0);
-  const [recentChessGamesNextCursor, setRecentChessGamesNextCursor] = useState<string | null>(null);
-  const [recentChessGamesError, setRecentChessGamesError] = useState('');
-  const [recentPreloadTick, setRecentPreloadTick] = useState(0);
-  const [trainingProfile, setTrainingProfile] = useState<TrainingProfile | null>(null);
-  const [trainingProfileBootstrapping, setTrainingProfileBootstrapping] = useState(true);
-  const [trainingProfileSubmitting, setTrainingProfileSubmitting] = useState(false);
-  const [trainingProfileError, setTrainingProfileError] = useState('');
-  const [trainingUsername, setTrainingUsername] = useState('');
-  const [trainingPassword, setTrainingPassword] = useState('');
-  const trainingCredentialsHydratedRef = useRef(false);
-  const [focusTrainCreateDeck, setFocusTrainCreateDeck] = useState(false);
-  const saveReplayFromStart = true;
-  const [deckPlaybackBusy, setDeckPlaybackBusy] = useState(false);
-  const [trainAnalysisTick, setTrainAnalysisTick] = useState(0);
-
-  const boardStageRef = useRef<HTMLDivElement | null>(null);
-  const evalRailRef = useRef<HTMLDivElement | null>(null);
-  const positionRequestIdRef = useRef(0);
-  const timelineRequestIdRef = useRef(0);
-  const timelineRefineRequestIdRef = useRef(0);
-  const reviewPlaybackRequestIdRef = useRef(0);
-  const deckPlaybackRequestIdRef = useRef(0);
-  const deckReplayMovesRef = useRef<StoredMove[]>([]);
-  const deckReplayInitialFenRef = useRef<string | null>(null);
+  const labState = useLabState();
+  const {
+    game, setGame, initialFen, setInitialFen, moveHistory, setMoveHistory,
+    historyIndex, setHistoryIndex, variationBaseIndex, setVariationBaseIndex,
+    variationMoves, setVariationMoves, selectedSquare, setSelectedSquare,
+    squareStyles, setSquareStyles, orientation, setOrientation, showArrow, setShowArrow,
+    mode, setMode, reviewSide, reviewIndex, setReviewIndex, metadata, setMetadata,
+    whiteAvatarUrl, setWhiteAvatarUrl, blackAvatarUrl, setBlackAvatarUrl,
+    fileName, setFileName, pgnDraft, setPgnDraft, pgnDialogOpen, setPgnDialogOpen,
+    positionAnalysis, setPositionAnalysis, preMoveAnalyses, setPreMoveAnalyses,
+    timelineAnalyses, setTimelineAnalyses, positionLoading, setPositionLoading,
+    timelineLoading, setTimelineLoading, timelineProgress, setTimelineProgress,
+    serverError, setServerError, timelineError, setTimelineError, boardWidth, setBoardWidth,
+    deckIndex, setDeckIndex, trainAllSession, setTrainAllSession, trainAllQueue, setTrainAllQueue,
+    trainSessionIndex, setTrainSessionIndex, trainSessionStats, setTrainSessionStats,
+    activeDeckCard, setActiveDeckCard, deckFeedback, setDeckFeedback,
+    deckFeedbackArrowsVisible, setDeckFeedbackArrowsVisible, openingLines, setOpeningLines,
+    deckCards, setDeckCards, deckSummaries, setDeckSummaries, selectedDeckId, setSelectedDeckId,
+    deckLibraryLoading, setDeckLibraryLoading, deckCardsLoading, setDeckCardsLoading,
+    deckLoadError, setDeckLoadError, deckActionLoading, setDeckActionLoading,
+    deckActionError, setDeckActionError, openingTrees, setOpeningTrees,
+    activeOpeningTree, setActiveOpeningTree, openingTreesLoading, setOpeningTreesLoading,
+    openingTreeActionLoading, setOpeningTreeActionLoading, openingTreeActionError, setOpeningTreeActionError,
+    selectedOpeningTreeId, setSelectedOpeningTreeId, activeOpeningNodeId, setActiveOpeningNodeId,
+    openingDrillStatus, setOpeningDrillStatus, openingDrillExpected, setOpeningDrillExpected,
+    openingDrillActive, setOpeningDrillActive, drillPathRef, drillPathIndexRef,
+    newDeckTitle, setNewDeckTitle, reviewDeckSaveStatus, setReviewDeckSaveStatus,
+    deckProgress, setDeckProgress, chesscomUsername, setChesscomUsername,
+    recentGameTimeClass, setRecentGameTimeClass, recentChessGames, setRecentChessGames,
+    recentChessGamesLoading, setRecentChessGamesLoading, recentChessGamesHasMore, setRecentChessGamesHasMore,
+    recentChessGamesNextOffset, setRecentChessGamesNextOffset, recentChessGamesNextCursor, setRecentChessGamesNextCursor,
+    recentChessGamesError, setRecentChessGamesError, recentPreloadTick, setRecentPreloadTick,
+    trainingProfile, setTrainingProfile, trainingProfileBootstrapping, setTrainingProfileBootstrapping,
+    trainingProfileSubmitting, setTrainingProfileSubmitting, trainingProfileError, setTrainingProfileError,
+    trainingUsername, setTrainingUsername, trainingPassword, setTrainingPassword,
+    trainingCredentialsHydratedRef, focusTrainCreateDeck, setFocusTrainCreateDeck,
+    saveReplayFromStart, deckPlaybackBusy, setDeckPlaybackBusy, trainAnalysisTick, setTrainAnalysisTick,
+    boardStageRef, evalRailRef, positionRequestIdRef, timelineRequestIdRef,
+    timelineRefineRequestIdRef, reviewPlaybackRequestIdRef, deckPlaybackRequestIdRef,
+    deckReplayMovesRef, deckReplayInitialFenRef
+  } = labState;
   const deckCardPromptStartedAtRef = useRef<number | null>(null);
   const suppressSpaceKeyUpRef = useRef(false);
   const deckProgressRef = useRef(deckProgress);
@@ -628,6 +485,33 @@ export function ChessAnalysisLab() {
   const trainWorkspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(null);
   const workspaceStateRef = useRef<WorkspaceSnapshot>(createEmptyWorkspaceSnapshot());
   const modeRef = useRef<WorkspaceMode>('review');
+
+  const recentGamesRefs = useMemo(() => ({
+    modeRef,
+    positionInFlightRef,
+    lastReviewInteractionAtRef,
+  }), []);
+
+  const {
+    fetchRecentChessGames,
+    preloadRecentGameAnalysis,
+    cancelRecentPreload,
+  } = useRecentGames(labState, recentGamesRefs, {
+    analyzeTimelineDeep: (...args) => analyzeTimelineDeep(...args),
+  });
+
+      const trainingProfileRefs = useMemo(() => ({
+        progressHydratedRef,
+        progressSyncTimerRef,
+        trainingCredentialsHydratedRef,
+      }), []);
+
+      const {
+        saveTrainingProgress,
+        saveTrainingAttempt,
+        hydrateTrainingProgressRef,
+      } = useTrainingProfile(labState, trainingProfileRefs);
+
 
   const currentFen = useMemo(() => game.fen(), [game]);
   const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
@@ -775,9 +659,11 @@ export function ChessAnalysisLab() {
     isViewingDeckFailurePosition && !positionLoading && positionAnalysis?.bestMove
       ? formatBestMove(currentFen, positionAnalysis.bestMove)
       : null;
-  const boardArrows = activeDeckCard
-    ? dedupeBoardArrows([...trainBestMoveArrow, ...deckAnswerArrow, ...deckOpponentArrow])
-    : reviewBestMoveArrow;
+  const boardArrows = mode === 'lines'
+    ? []
+    : activeDeckCard
+      ? dedupeBoardArrows([...trainBestMoveArrow, ...deckAnswerArrow, ...deckOpponentArrow])
+      : reviewBestMoveArrow;
   const whiteReviewName = metadata?.whitePlayer ?? 'White';
   const blackReviewName = metadata?.blackPlayer ?? 'Black';
   const whiteBoardPlayer = useMemo(
@@ -870,8 +756,8 @@ export function ChessAnalysisLab() {
     const lastMove = currentMoves[currentMoves.length - 1];
     const reviewCategory = activeDeckCard
       ? activeTrainMoveReview?.category ?? null
-      : mode === 'lines' && deckFeedback != null && historyIndex === moveHistory.length
-        ? (deckFeedback.correct ? 'excellent' : 'mistake')
+      : mode === 'lines' && historyIndex > 0
+        ? (historyIndex === moveHistory.length && deckFeedback != null ? (deckFeedback.correct ? 'excellent' : 'mistake') : 'book')
         : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
           ? timelineReviews[historyIndex - 1]?.category
           : null;
@@ -895,8 +781,8 @@ export function ChessAnalysisLab() {
     const lastMove = currentMoves[currentMoves.length - 1];
     const category = activeDeckCard
       ? activeTrainMoveReview?.category ?? null
-      : mode === 'lines' && deckFeedback != null && historyIndex === moveHistory.length
-        ? (deckFeedback.correct ? 'excellent' : 'mistake')
+      : mode === 'lines' && historyIndex > 0
+        ? (historyIndex === moveHistory.length && deckFeedback != null ? (deckFeedback.correct ? 'excellent' : 'mistake') : 'book')
         : hasLoadedGame
           ? timelineReviews[historyIndex - 1]?.category
           : null;
@@ -1039,397 +925,6 @@ export function ChessAnalysisLab() {
     },
     [],
   );
-
-  const cancelRecentPreload = useCallback((reason: string) => {
-    const hadPreload = recentPreloadBusyRef.current || recentPreloadAbortRef.current != null;
-    recentPreloadRequestIdRef.current += 1;
-    recentPreloadAbortRef.current?.abort();
-    recentPreloadAbortRef.current = null;
-    recentPreloadBusyRef.current = false;
-    timelineBatchInFlightRef.current.clear();
-    positionInFlightRef.current.clear();
-    if (hadPreload) {
-      logRecentGamePreload('cancel', reason);
-    }
-  }, []);
-
-  useEffect(() => {
-    const stage = boardStageRef.current;
-
-    if (!stage || typeof ResizeObserver === 'undefined') {
-      return undefined;
-    }
-
-    const observer = new ResizeObserver(([entry]) => {
-      const railRect = evalRailRef.current?.getBoundingClientRect();
-      const stageWidth = entry.contentRect.width;
-      const stageHeight = entry.contentRect.height;
-      const gap = 26;
-      const railWidth = railRect?.width ?? 0;
-      const railHeight = railRect?.height ?? 0;
-      const isHorizontalRail = railWidth > railHeight * 1.6;
-      const availableWidth = isHorizontalRail ? stageWidth - 12 : stageWidth - railWidth - gap;
-      const playerChromeHeight = 84;
-      const availableHeight = (isHorizontalRail ? stageHeight - railHeight - gap : stageHeight - 12) - playerChromeHeight;
-      const viewportWidth = document.documentElement.clientWidth || window.innerWidth || stageWidth;
-      const isMobileViewport = viewportWidth <= 720;
-      const mobileWidthLimit = isMobileViewport ? viewportWidth - 16 : Number.POSITIVE_INFINITY;
-      const heightLimit = isMobileViewport ? Number.POSITIVE_INFINITY : Math.max(0, availableHeight);
-
-      setBoardWidth(Math.max(
-        188,
-        Math.floor(Math.min(
-          Math.max(0, availableWidth),
-          heightLimit,
-          mobileWidthLimit,
-        )),
-      ));
-    });
-
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, []);
-
-  const fetchRecentChessGames = useCallback(
-    async (usernameOverride?: string, timeClassOverride?: ChessComRecentGameTimeClass, append = false, quiet = false) => {
-      const requestId = ++recentFetchRequestIdRef.current;
-      const username = (usernameOverride ?? chesscomUsername).trim().toLowerCase();
-      const timeClass = timeClassOverride ?? recentGameTimeClass;
-      const offset = append && !recentChessGamesNextCursor ? recentChessGamesNextOffset : 0;
-      const cursor = append ? recentChessGamesNextCursor : null;
-
-      if (!username) {
-        setRecentChessGames([]);
-        setRecentChessGamesHasMore(false);
-        setRecentChessGamesNextOffset(0);
-        setRecentChessGamesNextCursor(null);
-        setRecentChessGamesError('Enter a Chess.com username.');
-        return;
-      }
-
-      if (!quiet) {
-        setRecentChessGamesLoading(true);
-      }
-      if (!append) {
-        setRecentChessGamesError('');
-      }
-
-      try {
-        writeCookie(CHESSCOM_USERNAME_COOKIE, username);
-        writeCookie(CHESSCOM_TIME_CLASS_COOKIE, timeClass);
-        const params = new URLSearchParams({
-          username,
-          timeClass,
-          count: String(RECENT_GAMES_PAGE_SIZE),
-          offset: String(offset),
-        });
-
-        if (cursor) {
-          params.set('cursor', cursor);
-        }
-
-        const response = await fetch(`/api/chesscom/recent-games?${params.toString()}`);
-        const payload = (await response.json()) as {
-          error?: string;
-          games?: ChessComRecentGameSummary[];
-          hasMore?: boolean;
-          nextCursor?: string | null;
-          nextOffset?: number;
-        };
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? `Chess.com fetch failed: HTTP ${response.status}`);
-        }
-
-        if (recentFetchRequestIdRef.current !== requestId) {
-          return;
-        }
-
-        const nextGames = Array.isArray(payload.games) ? payload.games : [];
-        setRecentChessGames(current => {
-          const merged = append ? [...current, ...nextGames] : nextGames;
-          return [...new Map(merged.map(game => [game.link || game.url, game])).values()].sort(
-            (left, right) => Number(right.endTime ?? 0) - Number(left.endTime ?? 0),
-          );
-        });
-        setRecentChessGamesHasMore(Boolean(payload.hasMore));
-        setRecentChessGamesNextCursor(payload.nextCursor ?? null);
-        setRecentChessGamesNextOffset(typeof payload.nextOffset === 'number' ? payload.nextOffset : offset + nextGames.length);
-      } catch (error) {
-        if (recentFetchRequestIdRef.current !== requestId) {
-          return;
-        }
-        setRecentChessGamesError(error instanceof Error ? error.message : 'Unable to fetch Chess.com games.');
-      } finally {
-        if (recentFetchRequestIdRef.current === requestId && !quiet) {
-          setRecentChessGamesLoading(false);
-        }
-      }
-    },
-    [chesscomUsername, recentChessGamesNextCursor, recentChessGamesNextOffset, recentGameTimeClass],
-  );
-
-  const saveTrainingProgress = useCallback(async (progress: DeckProgressMap) => {
-    try {
-      await fetch('/api/training-progress', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ progress }),
-      });
-    } catch {
-      // Local storage remains the fallback when server sync is unavailable.
-    }
-  }, []);
-
-  const saveTrainingAttempt = useCallback(async (card: DeckCard, feedback: DeckFeedback) => {
-    try {
-      await fetch('/api/training-progress', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          attempt: {
-            cardId: card.id,
-            playedUci: feedback.playedUci,
-            playedSan: feedback.playedSan,
-            expectedUci: card.answerUci,
-            expectedSan: feedback.expectedSan,
-            correct: feedback.correct,
-            exact: feedback.exact,
-            evalLossCp: feedback.evalLossCp ?? null,
-          },
-        }),
-      });
-    } catch {
-      // Progress still syncs separately; attempts are best-effort telemetry.
-    }
-  }, []);
-
-  const hydrateTrainingProgressRef = useRef<(options: { saveMerged: boolean }) => Promise<void>>(async () => undefined);
-
-  const hydrateTrainingProgress = useCallback(
-    async (options: { saveMerged: boolean }) => {
-      try {
-        const response = await fetch('/api/training-progress', { credentials: 'same-origin' });
-        const payload = (await response.json()) as { progress?: DeckProgressMap; error?: string };
-        const serverProgress = response.ok && payload.progress ? payload.progress : {};
-
-        if (!response.ok && typeof window !== 'undefined') {
-          window.localStorage.removeItem(DECK_PROGRESS_STORAGE_KEY);
-        }
-        let mergedProgress: DeckProgressMap | null = null;
-
-        setDeckProgress(current => {
-          mergedProgress = mergeDeckProgress(serverProgress, current);
-
-          if (typeof window !== 'undefined' && deckCards.length > 0) {
-            const validCardIds = new Set(deckCards.map(card => card.id));
-            mergedProgress = Object.fromEntries(
-              Object.entries(mergedProgress).filter(([cardId]) => validCardIds.has(cardId)),
-            );
-          }
-
-          return mergedProgress;
-        });
-
-        progressHydratedRef.current = true;
-
-        if (options.saveMerged && mergedProgress) {
-          await saveTrainingProgress(mergedProgress);
-        }
-      } catch {
-        progressHydratedRef.current = true;
-      }
-    },
-    [deckCards, saveTrainingProgress],
-  );
-
-  useEffect(() => {
-    hydrateTrainingProgressRef.current = hydrateTrainingProgress;
-  }, [hydrateTrainingProgress]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    try {
-      const raw = window.localStorage.getItem(DECK_PROGRESS_STORAGE_KEY);
-
-      if (!raw) {
-        return;
-      }
-
-      const parsed = JSON.parse(raw) as DeckProgressMap;
-      setDeckProgress(parsed && typeof parsed === 'object' ? parsed : {});
-    } catch {
-      setDeckProgress({});
-    }
-  }, []);
-
-  useLayoutEffect(() => {
-    if (trainingCredentialsHydratedRef.current) {
-      return;
-    }
-
-    trainingCredentialsHydratedRef.current = true;
-    const savedUsername = readStoredTrainingUsername();
-    const savedPassword = readStoredTrainingPassword();
-
-    if (savedUsername) {
-      setTrainingUsername(savedUsername);
-    }
-
-    if (savedPassword) {
-      setTrainingPassword(savedPassword);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (trainingUsername.trim()) {
-      persistTrainingUsername(trainingUsername.trim());
-    }
-  }, [trainingUsername]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    if (trainingPassword) {
-      persistTrainingPassword(trainingPassword);
-    }
-  }, [trainingPassword]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(DECK_PROGRESS_STORAGE_KEY, JSON.stringify(deckProgress));
-  }, [deckProgress]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function restoreTrainingProfile(username: string, password: string) {
-      const response = await fetch('/api/training-profile', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-      const payload = (await response.json()) as { profile?: TrainingProfile | null; error?: string };
-
-      if (!response.ok || !payload.profile) {
-        throw new Error(payload.error ?? 'Unable to restore training profile.');
-      }
-
-      return payload.profile;
-    }
-
-    async function loadTrainingProfile() {
-      setTrainingProfileError('');
-
-      const savedUsername = readStoredTrainingUsername();
-      const savedPassword = readStoredTrainingPassword();
-
-      if (savedUsername) {
-        setTrainingUsername(savedUsername);
-      }
-
-      if (savedPassword) {
-        setTrainingPassword(savedPassword);
-      }
-
-      try {
-        const response = await fetch('/api/training-profile', { credentials: 'same-origin' });
-        const payload = (await response.json()) as { profile?: TrainingProfile | null };
-
-        if (cancelled) {
-          return;
-        }
-
-        if (payload.profile) {
-          setTrainingProfile(payload.profile);
-          setTrainingUsername(payload.profile.username);
-          await hydrateTrainingProgressRef.current({ saveMerged: false });
-          return;
-        }
-
-        if (savedUsername && savedPassword) {
-          const profile = await restoreTrainingProfile(savedUsername, savedPassword);
-
-          if (cancelled) {
-            return;
-          }
-
-          setTrainingProfile(profile);
-          setTrainingUsername(profile.username);
-          await hydrateTrainingProgressRef.current({ saveMerged: false });
-          return;
-        }
-
-        setTrainingProfile(null);
-      } catch (error) {
-        if (!cancelled) {
-          setTrainingProfile(null);
-          setTrainingProfileError(error instanceof Error ? error.message : 'Unable to load training profile.');
-        }
-      } finally {
-        progressHydratedRef.current = true;
-
-        if (!cancelled) {
-          setTrainingProfileBootstrapping(false);
-        }
-      }
-    }
-
-    void loadTrainingProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!trainingProfile || !progressHydratedRef.current) {
-      return undefined;
-    }
-
-    if (progressSyncTimerRef.current != null) {
-      window.clearTimeout(progressSyncTimerRef.current);
-    }
-
-    progressSyncTimerRef.current = window.setTimeout(() => {
-      void saveTrainingProgress(deckProgress);
-    }, 450);
-
-    return () => {
-      if (progressSyncTimerRef.current != null) {
-        window.clearTimeout(progressSyncTimerRef.current);
-      }
-    };
-  }, [deckProgress, saveTrainingProgress, trainingProfile]);
-
-  useEffect(() => {
-    const savedUsername = readCookie(CHESSCOM_USERNAME_COOKIE);
-    const savedTimeClass = readCookie(CHESSCOM_TIME_CLASS_COOKIE);
-
-    if (savedUsername) {
-      setChesscomUsername(savedUsername);
-    }
-
-    if (savedTimeClass === 'all' || savedTimeClass === 'bullet' || savedTimeClass === 'blitz' || savedTimeClass === 'rapid') {
-      setRecentGameTimeClass(savedTimeClass);
-    }
-  }, []);
-
   useEffect(() => {
     const markInteraction = () => {
       lastReviewInteractionAtRef.current = Date.now();
@@ -1443,143 +938,6 @@ export function ChessAnalysisLab() {
       window.removeEventListener('keydown', markInteraction);
     };
   }, []);
-
-  useEffect(() => {
-    const username = chesscomUsername.trim().toLowerCase();
-
-    if (!username || recentAutoFetchStartedRef.current) {
-      return;
-    }
-
-    recentAutoFetchStartedRef.current = true;
-    void fetchRecentChessGames(username, recentGameTimeClass, false, true);
-  }, [chesscomUsername, fetchRecentChessGames, recentGameTimeClass]);
-
-  useEffect(() => {
-    if (!chesscomUsername.trim()) {
-      return undefined;
-    }
-
-    const timer = window.setInterval(() => {
-      if (modeRef.current !== 'review' || document.visibilityState !== 'visible') {
-        return;
-      }
-
-      void fetchRecentChessGames(undefined, undefined, false, true);
-    }, RECENT_GAMES_AUTO_REFRESH_MS);
-
-    return () => window.clearInterval(timer);
-  }, [chesscomUsername, fetchRecentChessGames]);
-
-  const preloadRecentGameAnalysis = useCallback(async () => {
-    if (recentPreloadBusyRef.current) {
-      return;
-    }
-
-    if (
-      modeRef.current !== 'review' ||
-      document.visibilityState !== 'visible' ||
-      timelineLoading ||
-      positionLoading ||
-      positionInFlightRef.current.size > 0 ||
-      Date.now() - lastReviewInteractionAtRef.current < RECENT_GAMES_INTERACTION_IDLE_MS
-    ) {
-      return;
-    }
-
-    const nextGame = [...recentChessGames]
-      .sort((left, right) => Number(right.endTime ?? 0) - Number(left.endTime ?? 0))
-      .find(game => {
-        const cacheKey = getRecentGameCacheKey(game);
-        return cacheKey !== activeRecentGameCacheKeyRef.current && !recentPreloadedKeysRef.current.has(cacheKey);
-      });
-
-    if (!nextGame?.pgn) {
-      return;
-    }
-
-    const cacheKey = getRecentGameCacheKey(nextGame);
-    recentPreloadedKeysRef.current.add(cacheKey);
-    recentPreloadBusyRef.current = true;
-    let requestId = 0;
-    let preloadAbortController: AbortController | null = null;
-
-    try {
-      const cached = await loadCachedTimelineAnalysis(cacheKey);
-      if (cached) {
-        logRecentGamePreload('cache', `${formatRecentGameLogLabel(nextGame)} ${cached.timelineAnalyses.length} plies`);
-        setRecentPreloadTick(tick => tick + 1);
-        return;
-      }
-
-      requestId = ++recentPreloadRequestIdRef.current;
-      preloadAbortController = new AbortController();
-      recentPreloadAbortRef.current = preloadAbortController;
-      const preloadPromise = (async (): Promise<CachedTimelineAnalysis | null> => {
-        const preloadGame = new Chess();
-        preloadGame.loadPgn(nextGame.pgn);
-        const nextInitialFen = preloadGame.header().FEN ?? null;
-        const nextHistory = preloadGame.history({ verbose: true }).map(toStoredMove);
-
-        if (nextHistory.length === 0) {
-          return null;
-        }
-
-        logRecentGamePreload('start', `${formatRecentGameLogLabel(nextGame)} ${nextHistory.length} plies`);
-        const sequence = await analyzeTimelineDeep(
-          nextHistory,
-          nextInitialFen,
-          undefined,
-          `preload:${formatRecentGameLogLabel(nextGame)}`,
-          preloadAbortController.signal,
-        );
-
-        if (recentPreloadRequestIdRef.current !== requestId) {
-          return null;
-        }
-
-        const analysis = {
-          quality: 'refined',
-          version: GAME_ANALYSIS_CACHE_VERSION,
-          preMoveAnalyses: sequence.slice(0, -1),
-          timelineAnalyses: sequence.slice(1),
-        } satisfies CachedTimelineAnalysis;
-
-        await saveCachedTimelineAnalysis({
-          cacheKey,
-          gameLink: nextGame.link || nextGame.url,
-          pgn: nextGame.pgn,
-          preMoveAnalyses: analysis.preMoveAnalyses,
-          timelineAnalyses: analysis.timelineAnalyses,
-        });
-        return analysis;
-      })();
-
-      recentGameAnalysisInFlightCache.set(cacheKey, preloadPromise);
-
-      const analysis = await preloadPromise;
-      if (analysis) {
-        recentGameAnalysisMemoryCache.set(cacheKey, analysis);
-        logRecentGamePreload('done', `${formatRecentGameLogLabel(nextGame)} ${analysis.timelineAnalyses.length} plies`);
-      } else {
-        logRecentGamePreload('skip', `${formatRecentGameLogLabel(nextGame)} stale`);
-      }
-      setRecentPreloadTick(tick => tick + 1);
-    } catch (error) {
-      recentPreloadedKeysRef.current.delete(cacheKey);
-      const message = error instanceof Error ? error.message : String(error);
-      logRecentGamePreload(message === 'Analysis aborted.' ? 'cancel' : 'fail', `${formatRecentGameLogLabel(nextGame)} ${message}`);
-    } finally {
-      if (requestId === 0 || recentPreloadRequestIdRef.current === requestId) {
-        recentPreloadBusyRef.current = false;
-        if (preloadAbortController && recentPreloadAbortRef.current === preloadAbortController) {
-          recentPreloadAbortRef.current = null;
-        }
-      }
-      recentGameAnalysisInFlightCache.delete(cacheKey);
-    }
-  }, [analyzeTimelineDeep, positionLoading, recentChessGames, timelineLoading]);
-
   useEffect(() => {
     if (recentChessGames.length === 0) {
       return undefined;
@@ -1927,6 +1285,8 @@ export function ChessAnalysisLab() {
       await loadOpeningTrees();
     } catch (error) {
       setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to import opening trees.');
+
+
     } finally {
       setOpeningTreeActionLoading(false);
     }
@@ -3392,7 +2752,7 @@ export function ChessAnalysisLab() {
       setTrainingUsername(payload.profile.username);
       persistTrainingCredentials(payload.profile.username, trainingPassword);
       setTrainingPassword(trainingPassword);
-      await hydrateTrainingProgress({ saveMerged: true });
+      await hydrateTrainingProgressRef.current({ saveMerged: false });
       await loadTrainingDeck(selectedDeckId);
     } catch (error) {
       setTrainingProfileError(error instanceof Error ? error.message : 'Unable to open training profile.');
@@ -4019,263 +3379,3 @@ export function ChessAnalysisLab() {
   );
 }
 
-function createEmptyTrainSessionStats(): TrainSessionStats {
-  return {
-    completed: 0,
-    hits: 0,
-    misses: 0,
-  };
-}
-
-function createEmptyWorkspaceSnapshot(): WorkspaceSnapshot {
-  return {
-    initialFen: null,
-    moveHistory: [],
-    historyIndex: 0,
-    variationBaseIndex: null,
-    variationMoves: [],
-    metadata: null,
-    whiteAvatarUrl: null,
-    blackAvatarUrl: null,
-    fileName: '',
-    orientation: 'white',
-    showArrow: true,
-    reviewIndex: 0,
-    activeDeckCard: null,
-    deckFeedback: null,
-    deckIndex: 0,
-    trainAllSession: false,
-    trainAllQueue: [],
-    trainSessionIndex: 0,
-    trainSessionStats: createEmptyTrainSessionStats(),
-    positionAnalysis: null,
-    preMoveAnalyses: [],
-    timelineAnalyses: [],
-    serverError: '',
-    timelineError: '',
-  };
-}
-
-function normalizeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): WorkspaceSnapshot {
-  return {
-    ...snapshot,
-    moveHistory: [...snapshot.moveHistory],
-    variationMoves: [...snapshot.variationMoves],
-    preMoveAnalyses: [...snapshot.preMoveAnalyses],
-    timelineAnalyses: [...snapshot.timelineAnalyses],
-    trainAllQueue: [...snapshot.trainAllQueue],
-    trainSessionStats: { ...snapshot.trainSessionStats },
-  };
-}
-
-function buildTimelineReviews(
-  moves: StoredMove[],
-  preMoveAnalyses: AnalysisResult[],
-  timelineAnalyses: AnalysisResult[],
-  requestInitialFen: string | null,
-  requestMetadata: GameMetadata | null,
-): TimelineReview[] {
-  const reviewedMoveCount = Math.min(moves.length, preMoveAnalyses.length, timelineAnalyses.length);
-
-  if (reviewedMoveCount === 0) {
-    return [];
-  }
-
-  const reviewedMoves = moves.slice(0, reviewedMoveCount);
-  const openingBookFlags = resolveOpeningBookFlagsLocal(reviewedMoves, requestInitialFen);
-
-  return classifyTimelineMoves(
-    reviewedMoves,
-    preMoveAnalyses.slice(0, reviewedMoveCount),
-    timelineAnalyses.slice(0, reviewedMoveCount),
-    requestInitialFen,
-    requestMetadata,
-    openingBookFlags,
-  );
-}
-
-function getPositionCacheKey(
-  initialFen: string | null,
-  moves: string[],
-  profile: PositionAnalysisProfile = 'review',
-) {
-  return `analysis:v${GAME_ANALYSIS_CACHE_VERSION}:${getPositionAnalysisProfileKey(profile)}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
-}
-
-function getPositionAnalysisProfileKey(profile: PositionAnalysisProfile) {
-  if (profile === 'training') {
-    return `training-d${DETERMINISTIC_ANALYSIS_PROFILE.depth}-pv${DETERMINISTIC_ANALYSIS_PROFILE.multipv}`;
-  }
-
-  return `review-d${REVIEW_ANALYSIS_PROFILE.depth}-pv${REVIEW_ANALYSIS_PROFILE.multipv}`;
-}
-
-function getTimelinePositionCacheKey(initialFen: string | null, moves: string[]) {
-  return `timeline:${TIMELINE_ANALYSIS_PROFILE_KEY}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
-}
-
-function mergeDeckProgress(serverProgress: DeckProgressMap, localProgress: DeckProgressMap) {
-  const merged: DeckProgressMap = { ...serverProgress };
-
-  for (const [cardId, localEntry] of Object.entries(localProgress)) {
-    const serverEntry = serverProgress[cardId];
-
-    if (!serverEntry) {
-      merged[cardId] = localEntry;
-    }
-  }
-
-  return merged;
-}
-
-function dedupeBoardArrows(arrows: Array<{ startSquare: string; endSquare: string; color: string }>) {
-  const unique = new Map<string, { startSquare: string; endSquare: string; color: string }>();
-
-  for (const arrow of arrows) {
-    unique.set(`${arrow.startSquare}-${arrow.endSquare}`, arrow);
-  }
-
-  return [...unique.values()];
-}
-
-function isOpponentTurnFromFen(fen: string, side: 'white' | 'black') {
-  const turn = fen.trim().split(/\s+/)[1];
-  const playerTurn = turn === 'b' ? 'black' : 'white';
-  return playerTurn !== side;
-}
-
-function normalizeDeckLoadError(message: string) {
-  if (
-    message.includes('deck_cards.source_type') ||
-    message.includes('deck_cards.validation_mode') ||
-    message.includes('deck_cards.reference_eval_cp') ||
-    message.includes('deck_cards.max_eval_loss_cp') ||
-    message.includes('deck_cards.replay_from_start') ||
-    message.includes('deck_cards.initial_fen') ||
-    message.includes('deck_cards.setup_moves') ||
-    message.includes('deck_cards.move_reviews')
-  ) {
-    return 'Supabase deck schema is outdated. Recreate the canonical deck tables and reseed.';
-  }
-
-  return message;
-}
-
-function readStoredTrainingUsername() {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  const cookieValue = readCookie(TRAINING_USERNAME_COOKIE);
-  const storageValue = window.localStorage.getItem(TRAINING_USERNAME_STORAGE_KEY);
-  return cookieValue || storageValue || '';
-}
-
-function readStoredTrainingPassword() {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  const cookieValue = readCookie(TRAINING_PASSWORD_COOKIE);
-  const storageValue = window.localStorage.getItem(TRAINING_PASSWORD_STORAGE_KEY);
-  return cookieValue || storageValue || '';
-}
-
-function persistTrainingUsername(username: string) {
-  writeCookie(TRAINING_USERNAME_COOKIE, username);
-  window.localStorage.setItem(TRAINING_USERNAME_STORAGE_KEY, username);
-}
-
-function persistTrainingPassword(password: string) {
-  writeCookie(TRAINING_PASSWORD_COOKIE, password);
-  window.localStorage.setItem(TRAINING_PASSWORD_STORAGE_KEY, password);
-}
-
-function persistTrainingCredentials(username: string, password: string) {
-  persistTrainingUsername(username);
-  persistTrainingPassword(password);
-}
-
-function readCookie(name: string) {
-  if (typeof document === 'undefined') {
-    return '';
-  }
-
-  const prefix = `${name}=`;
-  const entry = document.cookie
-    .split(';')
-    .map(part => part.trim())
-    .find(part => part.startsWith(prefix));
-
-  return entry ? decodeURIComponent(entry.slice(prefix.length)) : '';
-}
-
-function writeCookie(name: string, value: string) {
-  if (typeof document === 'undefined') {
-    return;
-  }
-
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
-}
-
-function deleteCookie(name: string) {
-  if (typeof document === 'undefined') {
-    return;
-  }
-
-  document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
-}
-
-function delay(ms: number) {
-  return new Promise(resolve => window.setTimeout(resolve, ms));
-}
-
-function ImportIcon() {
-  return (
-    <svg className={styles.toolIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3v10" />
-      <path d="m8 9 4 4 4-4" />
-      <path d="M5 15v4h14v-4" />
-    </svg>
-  );
-}
-
-function FlipIcon() {
-  return (
-    <svg className={styles.toolIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M7 7h8.5a4.5 4.5 0 0 1 4.5 4.5v0A4.5 4.5 0 0 1 15.5 16H9" />
-      <path d="M7 7l3-3M7 7l3 3M17 17H8.5A4.5 4.5 0 0 1 4 12.5v0A4.5 4.5 0 0 1 8.5 8H15" />
-      <path d="M17 17l-3-3M17 17l-3 3" />
-    </svg>
-  );
-}
-
-function ArrowIcon({ off }: { off: boolean }) {
-  return (
-    <svg className={styles.toolIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M5 19 18 6" />
-      <path d="M10 6h8v8" />
-      {off ? <path d="M4 4l16 16" /> : null}
-    </svg>
-  );
-}
-
-function RefreshIcon() {
-  return (
-    <svg className={styles.toolIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 11a8 8 0 0 0-14.5-4.6L4 8" />
-      <path d="M4 4v4h4" />
-      <path d="M4 13a8 8 0 0 0 14.5 4.6L20 16" />
-      <path d="M20 20v-4h-4" />
-    </svg>
-  );
-}
-
-function ResetIcon() {
-  return (
-    <svg className={styles.toolIcon} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 6l12 12" />
-      <path d="M18 6 6 18" />
-    </svg>
-  );
-}

@@ -12,7 +12,9 @@ function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | n
     if (activeNodeId) {
       const node = getNode(activeNodeId);
       if (node && node.position) {
-        setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, { duration: 800, zoom: 0.8 });
+        requestAnimationFrame(() => {
+          setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, { duration: 800, zoom: 1.2 });
+        });
       }
     }
   }, [activeNodeId, getNode, setCenter]);
@@ -42,7 +44,7 @@ import {
 } from '@/lib/deck-progress';
 import type { OpeningLibrary, OpeningTreeDetail, OpeningTreeSummary } from '@/lib/opening-tree';
 
-type TrainSessionStats = {
+export type TrainSessionStats = {
   completed: number;
   hits: number;
   misses: number;
@@ -192,7 +194,7 @@ export function LinesPanel({
                   Back
                 </button>
               </div>
-              <div className={styles.trainBackRow} style={{ marginTop: '-4px' }}>
+              <div className={styles.trainBackRow} style={{ marginTop: '-4px', marginBottom: '16px' }}>
                 <button className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`} onClick={() => onChangeTrainSide('white')} type="button">
                   White
                 </button>
@@ -200,30 +202,10 @@ export function LinesPanel({
                   Black
                 </button>
               </div>
-              {drillStatus && !deckFeedback ? (
-                <div className={`${styles.feedbackBox} ${styles.feedbackPending}`} style={{ marginBottom: '16px' }}>
-                  <strong>Drill Step</strong>
-                  <span>{drillStatus}</span>
-                </div>
-              ) : null}
-              {deckFeedback ? (
-                <div className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`} style={{ marginBottom: '16px' }}>
-                  <strong>
-                    {deckFeedback.pending
-                      ? 'Checking eval'
-                      : deckFeedback.correct
-                        ? 'Best move'
-                        : 'Miss'}
-                  </strong>
-                  <span>
-                    played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
-                    {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
-                  </span>
-                </div>
-              ) : null}
             </>
           ) : null}
-          <section className={`${styles.card} ${styles.openingTreeCard}`}>
+
+          <section className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}>
             {!drillActive ? (
               <div className={styles.panelHeader}>
                 <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
@@ -237,32 +219,46 @@ export function LinesPanel({
                 </div>
               </div>
             )}
-          <div className={styles.trainingCardMeta}>
-            <span>depth {activeTree.targetDepth}</span>
-            <span>{activeTree.nodeCount} nodes</span>
-            <span>{activeTree.dueCount} weak</span>
-          </div>
-          <div className={styles.openingTreeCanvas}>
-            <ReactFlowProvider>
-              <ReactFlow
-                edges={graph.edges}
-                fitView
-                fitViewOptions={{ padding: 0.5 }}
-                minZoom={0.25}
-                nodes={graph.nodes}
-                nodesDraggable
-                nodesConnectable={false}
-                onNodeClick={(_, node) => onSelectNode(node.id)}
-                proOptions={{ hideAttribution: true }}
-              >
-                <Background />
-                <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} />
-              </ReactFlow>
-            </ReactFlowProvider>
-          </div>
+            
+            {drillActive && (drillStatus || deckFeedback) ? (
+              <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 16px 16px 16px', padding: '16px', borderRadius: '12px' }}>
+                <strong>
+                  {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
+                </strong>
+                <span>
+                  {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
+                </span>
+              </div>
+            ) : null}
 
+            <div className={styles.trainingCardMeta}>
+              <span>depth {activeTree.targetDepth}</span>
+              <span>{activeTree.nodeCount} nodes</span>
+              <span>{activeTree.dueCount} weak</span>
+            </div>
 
-
+            <div className={styles.openingTreeCanvas}>
+              <ReactFlowProvider>
+                <ReactFlow
+                  edges={graph.edges}
+                  fitView
+                  fitViewOptions={{ padding: 0.5 }}
+                  minZoom={0.25}
+                  nodes={graph.nodes}
+                  nodesDraggable={false}
+                  zoomOnScroll={false}
+                  panOnScroll={false}
+                  zoomOnDoubleClick={false}
+                  panOnDrag={false}
+                  nodesConnectable={false}
+                  onNodeClick={(_, node) => onSelectNode(node.id)}
+                  proOptions={{ hideAttribution: true }}
+                >
+                  <Background />
+                  <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} />
+                </ReactFlow>
+              </ReactFlowProvider>
+            </div>
           </section>
         </>
       ) : null}
@@ -333,8 +329,8 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
       data: {
         label: (
           <button className={styles.openingTreeNodeButton} onClick={() => onSelectNode(node.id)} type="button">
-            <strong>{showAnswer ? `? ${node.bestSan}` : `Ply ${node.ply}`}</strong>
-            <span>{isTrainTurn ? `your move · ${node.masteryScore}/100` : 'opponent'}</span>
+            <strong>{isTrainTurn && showAnswer ? `Best: ${node.bestSan}` : `Ply ${node.ply}`}</strong>
+            <span>{isTrainTurn ? `${node.masteryScore}/100` : 'Opponent'}</span>
           </button>
         ),
       },
