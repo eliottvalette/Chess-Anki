@@ -7,7 +7,9 @@ import { Chess, type Square } from 'chess.js';
 import type { AnalysisResult } from '@/lib/analysis-types';
 import {
   DETERMINISTIC_ANALYSIS_PROFILE,
+  REVIEW_ANALYSIS_PROFILE,
   buildDeterministicAnalyzeRequest,
+  buildReviewAnalyzeRequest,
 } from '@/lib/analysis-profile';
 import { runTimelineAnalysisDedupe } from '@/lib/timeline-analysis-runner';
 import {
@@ -102,8 +104,8 @@ const RECENT_GAMES_PAGE_SIZE = 10;
 const RECENT_GAMES_AUTO_REFRESH_MS = 90_000;
 const RECENT_GAMES_INTERACTION_IDLE_MS = 2_500;
 const RECENT_GAMES_PRELOAD_SCAN_MS = 1_000;
-const GAME_ANALYSIS_CACHE_VERSION = DETERMINISTIC_ANALYSIS_PROFILE.version + 1;
-const TIMELINE_ANALYSIS_PROFILE_KEY = 'game-review-depth17-v1';
+const GAME_ANALYSIS_CACHE_VERSION = 6;
+const TIMELINE_ANALYSIS_PROFILE_KEY = `game-review-v${REVIEW_ANALYSIS_PROFILE.version}-d${REVIEW_ANALYSIS_PROFILE.depth}-pv${REVIEW_ANALYSIS_PROFILE.multipv}`;
 
 type CachedTimelineAnalysis = {
   quality: 'refined';
@@ -316,7 +318,7 @@ async function loadCachedTimelineAnalysis(
 ): Promise<CachedTimelineAnalysis | null> {
   const memoryHit = recentGameAnalysisMemoryCache.get(cacheKey);
 
-  if (memoryHit?.version === GAME_ANALYSIS_CACHE_VERSION) {
+  if (memoryHit?.version === GAME_ANALYSIS_CACHE_VERSION && memoryHit.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY) {
     return memoryHit;
   }
 
@@ -324,7 +326,9 @@ async function loadCachedTimelineAnalysis(
 
   if (includeInFlight && inFlightHit) {
     const analysis = await inFlightHit;
-    return analysis?.version === GAME_ANALYSIS_CACHE_VERSION ? analysis : null;
+    return analysis?.version === GAME_ANALYSIS_CACHE_VERSION && analysis.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY
+      ? analysis
+      : null;
   }
 
   try {
@@ -337,6 +341,7 @@ async function loadCachedTimelineAnalysis(
       analysis &&
       analysis.quality === 'refined' &&
       analysis.version === GAME_ANALYSIS_CACHE_VERSION &&
+      analysis.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY &&
       Array.isArray(analysis.preMoveAnalyses) &&
       Array.isArray(analysis.timelineAnalyses)
     ) {
@@ -940,7 +945,7 @@ export function ChessAnalysisLab() {
       }
 
       const request = analyzeSinglePosition(
-        buildDeterministicAnalyzeRequest({
+        buildReviewAnalyzeRequest({
           fen,
           initialFen: requestInitialFen,
           moves,
@@ -979,14 +984,14 @@ export function ChessAnalysisLab() {
         batchInFlight: timelineBatchInFlightRef.current,
         batchSize: TIMELINE_ANALYSIS_BATCH_SIZE,
         getCacheKey: position => getTimelinePositionCacheKey(requestInitialFen, position.moves ?? []),
-        buildRequest: position => buildDeterministicAnalyzeRequest({
+        buildRequest: position => buildReviewAnalyzeRequest({
           ...position,
           initialFen: requestInitialFen,
         }),
         analyzeBatch: async (batchPositions, batchSignal) => {
           const response = await analyzeGamePositions({
             positions: batchPositions,
-            depth: DETERMINISTIC_ANALYSIS_PROFILE.depth,
+            depth: REVIEW_ANALYSIS_PROFILE.depth,
           }, batchSignal);
           return response.analyses ?? [];
         },
@@ -3031,10 +3036,16 @@ export function ChessAnalysisLab() {
         throw new Error('Choose a deck and wait for analysis before saving.');
       }
 
+      const verifiedRootAnalysis = await analyzeSinglePosition(
+        buildDeterministicAnalyzeRequest({
+          fen: currentFen,
+        }),
+      );
+
       const verifiedAnswer = await resolvePostMoveVerifiedReviewCardAnswer({
         fen: currentFen,
         side,
-        rootAnalysis,
+        rootAnalysis: verifiedRootAnalysis,
         analyzePosition: request => analyzeSinglePosition(request),
       });
       const setupMoves = saveReplayFromStart ? currentMoves.map(move => move.san) : [];
@@ -3561,7 +3572,7 @@ function getPositionCacheKey(initialFen: string | null, moves: string[]) {
 }
 
 function getTimelinePositionCacheKey(initialFen: string | null, moves: string[]) {
-  return `timeline:${TIMELINE_ANALYSIS_PROFILE_KEY}:d${DETERMINISTIC_ANALYSIS_PROFILE.depth}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
+  return `timeline:${TIMELINE_ANALYSIS_PROFILE_KEY}:${initialFen ?? 'startpos'}|${moves.join(' ')}`;
 }
 
 function mergeDeckProgress(serverProgress: DeckProgressMap, localProgress: DeckProgressMap) {

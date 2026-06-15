@@ -7,6 +7,8 @@ import {
 } from './deterministic-runner.mjs';
 import {
   DETERMINISTIC_ANALYSIS_PROFILE,
+  REVIEW_ANALYSIS_PROFILE,
+  buildReviewAnalyzeRequest,
   getDeterministicAnalysisCacheKey,
 } from '../../lib/analysis-profile.ts';
 
@@ -19,6 +21,17 @@ test('deterministic profile defaults to fixed depth without movetime', () => {
   assert.equal(profile.multipv, 3);
   assert.equal(profile.movetimeMs, null);
   assert.equal(payload.depth, 17);
+  assert.equal(payload.multipv, 3);
+  assert.equal('movetimeMs' in payload, false);
+});
+
+test('review profile uses the benchmarked depth 14 multipv 3 profile', () => {
+  const payload = buildReviewAnalyzeRequest({ fen: 'start-fen', depth: 17, multipv: 1, movetimeMs: 800 });
+
+  assert.equal(REVIEW_ANALYSIS_PROFILE.depth, 14);
+  assert.equal(REVIEW_ANALYSIS_PROFILE.multipv, 3);
+  assert.equal(REVIEW_ANALYSIS_PROFILE.movetimeMs, null);
+  assert.equal(payload.depth, 14);
   assert.equal(payload.multipv, 3);
   assert.equal('movetimeMs' in payload, false);
 });
