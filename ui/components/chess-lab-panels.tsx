@@ -93,6 +93,8 @@ export function LinesPanel({
   onSelectTree,
   onStartDrill,
   onStopDrill,
+  trainSide,
+  onChangeTrainSide,
   trees,
 }: {
   actionError: string;
@@ -110,6 +112,8 @@ export function LinesPanel({
   onSelectTree: (treeId: string) => void;
   onStartDrill: () => void;
   onStopDrill: () => void;
+  trainSide: 'white' | 'black';
+  onChangeTrainSide: (side: 'white' | 'black') => void;
   trees: OpeningTreeSummary[];
 }) {
   const groupedTrees = useMemo(() => groupOpeningTrees(trees), [trees]);
@@ -182,11 +186,42 @@ export function LinesPanel({
       {activeTree ? (
         <>
           {drillActive ? (
-            <div className={styles.trainBackRow}>
-              <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onStopDrill} type="button">
-                Back
-              </button>
-            </div>
+            <>
+              <div className={styles.trainBackRow}>
+                <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onStopDrill} type="button">
+                  Back
+                </button>
+              </div>
+              <div className={styles.trainBackRow} style={{ marginTop: '-4px' }}>
+                <button className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`} onClick={() => onChangeTrainSide('white')} type="button">
+                  White
+                </button>
+                <button className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'black' ? styles.primary : ''}`} onClick={() => onChangeTrainSide('black')} type="button">
+                  Black
+                </button>
+              </div>
+              {drillStatus && !deckFeedback ? (
+                <div className={`${styles.feedbackBox} ${styles.feedbackPending}`} style={{ marginBottom: '16px' }}>
+                  <strong>Drill Step</strong>
+                  <span>{drillStatus}</span>
+                </div>
+              ) : null}
+              {deckFeedback ? (
+                <div className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`} style={{ marginBottom: '16px' }}>
+                  <strong>
+                    {deckFeedback.pending
+                      ? 'Checking eval'
+                      : deckFeedback.correct
+                        ? 'Best move'
+                        : 'Miss'}
+                  </strong>
+                  <span>
+                    played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
+                    {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
+                  </span>
+                </div>
+              ) : null}
+            </>
           ) : null}
           <section className={`${styles.card} ${styles.openingTreeCard}`}>
             {!drillActive ? (
@@ -212,7 +247,7 @@ export function LinesPanel({
               <ReactFlow
                 edges={graph.edges}
                 fitView
-                fitViewOptions={{ padding: 0.22 }}
+                fitViewOptions={{ padding: 0.5 }}
                 minZoom={0.25}
                 nodes={graph.nodes}
                 nodesDraggable
@@ -226,31 +261,7 @@ export function LinesPanel({
             </ReactFlowProvider>
           </div>
 
-          {drillActive ? (
-            <>
-              {drillStatus && !deckFeedback ? (
-                <div className={`${styles.feedbackBox} ${styles.feedbackPending}`}>
-                  <strong>Drill Step</strong>
-                  <span>{drillStatus}</span>
-                </div>
-              ) : null}
-              {deckFeedback ? (
-                <div className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`}>
-                  <strong>
-                    {deckFeedback.pending
-                      ? 'Checking eval'
-                      : deckFeedback.correct
-                        ? 'Best move'
-                        : 'Miss'}
-                  </strong>
-                  <span>
-                    played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
-                    {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
-                  </span>
-                </div>
-              ) : null}
-            </>
-          ) : null}
+
 
           </section>
         </>

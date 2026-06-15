@@ -276,14 +276,17 @@ export type DrillPathStep = {
   masteryScore: number;
   isTrainTurn: boolean;
   edgeSanFromParent: string | null;
+  edgeUciFromParent: string | null;
 };
 
 export function buildDrillPath(
   tree: { nodes: OpeningTreeNode[]; edges: OpeningTreeEdge[]; rootSan: string[] },
-  options: { preferWeak?: boolean; seed?: number } = {},
+  options: { preferWeak?: boolean; seed?: number; startNodeId?: string } = {},
 ): DrillPathStep[] {
   const rootPly = tree.rootSan.length;
-  const rootNode = tree.nodes.find(node => node.ply === rootPly) ?? tree.nodes[0];
+  const rootNode = options.startNodeId 
+    ? tree.nodes.find(node => node.id === options.startNodeId)
+    : (tree.nodes.find(node => node.ply === rootPly) ?? tree.nodes[0]);
 
   if (!rootNode) {
     return [];
@@ -313,6 +316,7 @@ export function buildDrillPath(
       masteryScore: node.masteryScore,
       isTrainTurn,
       edgeSanFromParent: null,
+      edgeUciFromParent: null,
     });
 
     const outgoing = tree.edges.filter(edge => edge.fromNodeId === currentNodeId);
@@ -371,6 +375,7 @@ export function buildDrillPath(
       edge => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
     );
     step.edgeSanFromParent = connectingEdge?.san ?? null;
+    step.edgeUciFromParent = connectingEdge?.uci ?? null;
   }
 
   return path;

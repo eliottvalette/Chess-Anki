@@ -25,6 +25,7 @@ import {
 import {
   analyzeGamePositions,
   analyzeSinglePosition,
+  buildChartOptions,
   buildGameReview,
   buildMoveUciHistory,
   buildStoredMovesFromSanList,
@@ -1932,7 +1933,7 @@ export function ChessAnalysisLab() {
   }, [loadOpeningTrees]);
 
 
-  const advanceDrillToStep = useCallback((stepIndex: number) => {
+  const advanceDrillToStep = useCallback((stepIndex: number, isOpponentMovePlayback = false) => {
     const path = drillPathRef.current;
     const step = path[stepIndex];
 
@@ -1949,15 +1950,38 @@ export function ChessAnalysisLab() {
     const trainStepTotal = trainSteps.length;
 
     setActiveOpeningNodeId(step.nodeId);
-    setInitialFen(step.fen);
-    setMoveHistory([]);
-    setHistoryIndex(0);
-    clearVariation();
-    setGame(new Chess(step.fen));
+    
+    if (isOpponentMovePlayback && step.edgeUciFromParent) {
+      setGame(prevGame => {
+        const nextGame = new Chess(prevGame.fen());
+        const move = nextGame.move({
+          from: step.edgeUciFromParent!.substring(0, 2),
+          to: step.edgeUciFromParent!.substring(2, 4),
+          promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
+        });
+        if (move) {
+          setMoveHistory(prev => [...prev, toStoredMove(move)]);
+          setHistoryIndex(prev => prev + 1);
+          playSoundSequence(
+            getMoveSoundSequence({
+              move: toStoredMove(move),
+              isSelfMove: false,
+              isCheck: nextGame.isCheck(),
+              isCheckmate: nextGame.isCheckmate(),
+              isGameOver: nextGame.isGameOver(),
+            }),
+          );
+        }
+        return nextGame;
+      });
+    }
+
     setPositionAnalysis(null);
     setServerError('');
-    setDeckFeedback(null);
-    setDeckFeedbackArrowsVisible(false);
+    if (step.isTrainTurn) {
+      setDeckFeedback(null);
+      setDeckFeedbackArrowsVisible(false);
+    }
     clearSelection();
 
     if (step.isTrainTurn) {
@@ -1974,14 +1998,14 @@ export function ChessAnalysisLab() {
         setOpeningDrillStatus(edgeSan ? `Opponent plays ${edgeSan}...` : 'Opponent playing...');
 
         window.setTimeout(() => {
-          advanceDrillToStep(nextIndex);
+          advanceDrillToStep(nextIndex, true);
         }, DRILL_OPPONENT_DELAY_MS);
       } else {
         setOpeningDrillActive(false);
         setOpeningDrillStatus('Branch complete. Click Drill to start another path.');
       }
     }
-  }, [clearSelection]);
+  }, [clearSelection, playSound]);
 
   const startOpeningDrill = useCallback((overrideTree?: OpeningTreeDetail) => {
     const tree = overrideTree ?? activeOpeningTree;
@@ -2017,8 +2041,6 @@ export function ChessAnalysisLab() {
     playSound('game-start');
 
     if (firstTrainIndex === 0) {
-      advanceDrillToStep(0);
-    } else {
       const firstStep = path[0]!;
       setActiveOpeningNodeId(firstStep.nodeId);
       setInitialFen(firstStep.fen);
@@ -2026,13 +2048,33 @@ export function ChessAnalysisLab() {
       setHistoryIndex(0);
       clearVariation();
       setGame(new Chess(firstStep.fen));
-      setOpeningDrillStatus('Playing opening moves...');
-      setOpeningDrillExpected(null);
-      clearSelection();
+      advanceDrillToStep(0);
+    } else {
+      const rootStep = path[0]!;
+      setActiveOpeningNodeId(rootStep.nodeId);
+      setInitialFen(rootStep.fen);
+      
+      const sans = path.slice(1, firstTrainIndex + 1).map(step => step.edgeSanFromParent).filter(Boolean) as string[];
+      try {
+        const moves = buildStoredMovesFromSanList(rootStep.fen, sans);
+        setMoveHistory(moves);
+        deckReplayInitialFenRef.current = rootStep.fen;
+        deckReplayMovesRef.current = moves;
+        setHistoryIndex(0);
+        clearVariation();
+        setGame(new Chess(rootStep.fen));
+        setOpeningDrillStatus('Playing opening moves...');
+        setOpeningDrillExpected(null);
+        clearSelection();
 
-      window.setTimeout(() => {
+        window.setTimeout(async () => {
+          await playDeckReplayToIndex(moves.length, rootStep.trainSide);
+          advanceDrillToStep(firstTrainIndex);
+        }, 500);
+      } catch (err) {
+        console.error('Failed to parse drill opening moves', err);
         advanceDrillToStep(firstTrainIndex);
-      }, DRILL_OPPONENT_DELAY_MS * Math.min(firstTrainIndex, 4));
+      }
     }
   }, [activeOpeningTree, advanceDrillToStep, clearSelection, playSound]);
 
@@ -2399,14 +2441,30 @@ export function ChessAnalysisLab() {
       }
 
       if (modeRef.current === 'lines' && activeOpeningNodeId) {
-        const expectedUci = openingDrillExpected?.uci ?? positionAnalysis?.bestMove ?? null;
-        const expectedSan = openingDrillExpected?.san ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
-        const correct = expectedUci ? move.uci === expectedUci : true;
+        let expectedUci = openingDrillExpected?.uci ?? positionAnalysis?.bestMove ?? null;
+        let expectedSan = openingDrillExpected?.san ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
+        let correct = expectedUci ? move.uci === expectedUci : true;
         const nodeId = activeOpeningNodeId;
+        let isAlternativeValid = false;
+        let newActiveNodeId = nodeId;
 
-        setInitialFen(currentFen);
-        setMoveHistory([move]);
-        setHistoryIndex(1);
+        if (activeOpeningTree && activeOpeningNodeId && !correct) {
+          const outgoing = activeOpeningTree.edges.filter(e => e.fromNodeId === activeOpeningNodeId);
+          const altEdge = outgoing.find(e => e.uci === move.uci);
+          if (altEdge) {
+            const targetNode = activeOpeningTree.nodes.find(n => n.id === altEdge.toNodeId);
+            if (targetNode) {
+              isAlternativeValid = true;
+              correct = true;
+              expectedUci = move.uci;
+              expectedSan = move.san;
+              newActiveNodeId = targetNode.id;
+            }
+          }
+        }
+
+        setMoveHistory(prev => [...prev, move]);
+        setHistoryIndex(prev => prev + 1);
         clearVariation();
         setGame(nextGame);
         setPositionAnalysis(null);
@@ -2451,11 +2509,21 @@ export function ChessAnalysisLab() {
         });
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
-          const currentPathIndex = drillPathIndexRef.current;
-          const nextStepIndex = currentPathIndex + 1;
+          let currentPathIndex = drillPathIndexRef.current;
+          let nextStepIndex = currentPathIndex + 1;
+
+          if (isAlternativeValid && activeOpeningTree) {
+            const newPath = buildDrillPath(activeOpeningTree, { seed: Date.now(), startNodeId: newActiveNodeId });
+            if (newPath.length > 0) {
+              drillPathRef.current = newPath;
+              drillPathIndexRef.current = 0;
+              currentPathIndex = 0;
+              nextStepIndex = 1;
+            }
+          }
 
           if (correct) {
-            setOpeningDrillStatus('Correct.');
+            setOpeningDrillStatus(isAlternativeValid ? 'Alternative valid.' : 'Correct.');
 
             window.setTimeout(() => {
               advanceDrillToStep(nextStepIndex);
@@ -2465,7 +2533,7 @@ export function ChessAnalysisLab() {
 
             window.setTimeout(() => {
               advanceDrillToStep(nextStepIndex);
-            }, DRILL_OPPONENT_DELAY_MS * 3);
+            }, DRILL_OPPONENT_DELAY_MS + 500);
           }
         } else {
           const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === (expectedUci ?? move.uci));
@@ -2583,6 +2651,10 @@ export function ChessAnalysisLab() {
   const tryMove = useCallback(
     (from: string, to: string, promotion = 'q') => {
       if (deckPlaybackBusy) {
+        return false;
+      }
+
+      if (openingDrillActive && historyIndex < moveHistory.length) {
         return false;
       }
 
@@ -3851,6 +3923,8 @@ export function ChessAnalysisLab() {
                 onSelectTree={selectOpeningTree}
                 onStartDrill={() => startOpeningDrill()}
                 onStopDrill={stopOpeningDrill}
+                trainSide={orientation}
+                onChangeTrainSide={setOrientation}
                 trees={openingTrees}
               />
             ) : (
