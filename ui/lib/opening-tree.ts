@@ -266,6 +266,116 @@ export function applyOpeningAttemptScore(currentScore: number, correct: boolean)
   return Math.max(0, Math.min(100, currentScore + (correct ? 18 : -22)));
 }
 
+export type DrillPathStep = {
+  nodeId: string;
+  fen: string;
+  sideToMove: OpeningSide;
+  trainSide: OpeningSide;
+  bestUci: string | null;
+  bestSan: string | null;
+  masteryScore: number;
+  isTrainTurn: boolean;
+  edgeSanFromParent: string | null;
+};
+
+export function buildDrillPath(
+  tree: { nodes: OpeningTreeNode[]; edges: OpeningTreeEdge[]; rootSan: string[] },
+  options: { preferWeak?: boolean; seed?: number } = {},
+): DrillPathStep[] {
+  const rootPly = tree.rootSan.length;
+  const rootNode = tree.nodes.find(node => node.ply === rootPly) ?? tree.nodes[0];
+
+  if (!rootNode) {
+    return [];
+  }
+
+  const path: DrillPathStep[] = [];
+  const visited = new Set<string>();
+  let currentNodeId = rootNode.id;
+  let currentSeed = options.seed ?? Date.now();
+
+  while (currentNodeId && !visited.has(currentNodeId)) {
+    visited.add(currentNodeId);
+    const node = tree.nodes.find(candidate => candidate.id === currentNodeId);
+
+    if (!node) {
+      break;
+    }
+
+    const isTrainTurn = node.sideToMove === node.trainSide;
+    path.push({
+      nodeId: node.id,
+      fen: node.fen,
+      sideToMove: node.sideToMove,
+      trainSide: node.trainSide,
+      bestUci: node.bestUci,
+      bestSan: node.bestSan,
+      masteryScore: node.masteryScore,
+      isTrainTurn,
+      edgeSanFromParent: null,
+    });
+
+    const outgoing = tree.edges.filter(edge => edge.fromNodeId === currentNodeId);
+
+    if (outgoing.length === 0) {
+      break;
+    }
+
+    let chosenEdge: OpeningTreeEdge | null = null;
+
+    if (isTrainTurn) {
+      chosenEdge = outgoing.find(edge => edge.isEngineBest) ?? outgoing[0] ?? null;
+    } else {
+      if (options.preferWeak) {
+        const weakTargets = outgoing.filter(edge => {
+          const target = tree.nodes.find(candidate => candidate.id === edge.toNodeId);
+          return target && target.sideToMove === target.trainSide && target.masteryScore < 80;
+        });
+
+        if (weakTargets.length > 0) {
+          chosenEdge = chooseWeightedOpponentEdge(weakTargets, currentSeed);
+        }
+      }
+
+      if (!chosenEdge) {
+        chosenEdge = chooseWeightedOpponentEdge(outgoing, currentSeed);
+      }
+    }
+
+    if (!chosenEdge) {
+      break;
+    }
+
+    if (path.length > 0) {
+      const lastStep = path[path.length - 1];
+
+      if (lastStep) {
+        lastStep.edgeSanFromParent = null;
+      }
+    }
+
+    const nextStep = tree.nodes.find(candidate => candidate.id === chosenEdge!.toNodeId);
+
+    if (nextStep) {
+      currentNodeId = nextStep.id;
+      currentSeed += 1;
+    } else {
+      break;
+    }
+  }
+
+  for (let index = 1; index < path.length; index += 1) {
+    const step = path[index]!;
+    const parentStep = path[index - 1]!;
+    const connectingEdge = tree.edges.find(
+      edge => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
+    );
+    step.edgeSanFromParent = connectingEdge?.san ?? null;
+  }
+
+  return path;
+}
+
 function buildTreeForGroup(
   group: { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[],
   options: { ownerProfileId: string; rootPly: number; targetDepth: number },

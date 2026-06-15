@@ -1,9 +1,24 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
-import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node as FlowNode } from '@xyflow/react';
+import { Background, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node as FlowNode } from '@xyflow/react';
 import dagre from 'dagre';
 import '@xyflow/react/dist/style.css';
+
+function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
+  const { setCenter, getNode } = useReactFlow();
+
+  useEffect(() => {
+    if (activeNodeId) {
+      const node = getNode(activeNodeId);
+      if (node && node.position) {
+        setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, { duration: 800, zoom: 0.8 });
+      }
+    }
+  }, [activeNodeId, getNode, setCenter]);
+
+  return null;
+}
 
 import type { AnalysisLine, AnalysisResult } from '@/lib/analysis-types';
 import {
@@ -68,6 +83,8 @@ export function LinesPanel({
   activeNodeId,
   activeTree,
   activeTreeId,
+  deckFeedback,
+  drillActive,
   drillStatus,
   expectedSan,
   loading,
@@ -75,6 +92,7 @@ export function LinesPanel({
   onSelectNode,
   onSelectTree,
   onStartDrill,
+  onStopDrill,
   trees,
 }: {
   actionError: string;
@@ -82,6 +100,8 @@ export function LinesPanel({
   activeNodeId: string | null;
   activeTree: OpeningTreeDetail | null;
   activeTreeId: string | null;
+  deckFeedback: DeckFeedback | null;
+  drillActive: boolean;
   drillStatus: string;
   expectedSan: string | null;
   loading: boolean;
@@ -89,6 +109,7 @@ export function LinesPanel({
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
   onStartDrill: () => void;
+  onStopDrill: () => void;
   trees: OpeningTreeSummary[];
 }) {
   const groupedTrees = useMemo(() => groupOpeningTrees(trees), [trees]);
@@ -96,115 +117,143 @@ export function LinesPanel({
     () => activeTree?.nodes.find(node => node.id === activeNodeId) ?? null,
     [activeNodeId, activeTree],
   );
-  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, onSelectNode), [activeNodeId, activeTree, onSelectNode]);
+  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, onSelectNode, drillActive), [activeNodeId, activeTree, drillActive, onSelectNode]);
 
   return (
     <>
-      <section className={`${styles.card} ${styles.emptyStateCard}`}>
-        <div className={styles.panelHeader}>
-          <h2 className={styles.sectionTitle}>Lines</h2>
-          <span className={styles.statusText}>{loading ? 'loading' : `${trees.length} openings`}</span>
-        </div>
-        {trees.length === 0 ? (
-          <p className={styles.copy}>Import your recent games to build opening trees grouped by the position after 4 plies.</p>
-        ) : (
-          <div className={styles.linesLibrary}>
-            {OPENING_LIBRARY_ORDER.map(library => {
-              const libraryTrees = groupedTrees.get(library) ?? [];
-
-              if (libraryTrees.length === 0) {
-                return null;
-              }
-
-              return (
-                <section className={styles.linesLibraryGroup} key={library}>
-                  <h3 className={styles.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
-                  <div className={styles.openingTreeList}>
-                    {libraryTrees.map(tree => (
-                      <button
-                        className={`${styles.openingTreeItem} ${tree.id === activeTreeId ? styles.openingTreeItemActive : ''}`}
-                        key={tree.id}
-                        onClick={() => onSelectTree(tree.id)}
-                        type="button"
-                      >
-                        <span className={styles.openingTreeItemHead}>
-                          <strong>{tree.name}</strong>
-                          <span className={styles.openingTreeMastery}>{tree.masteryScore}/100</span>
-                        </span>
-                        <span className={styles.openingTreeItemRoot}>{tree.rootSan.join(' ') || 'Starting position'}</span>
-                        <span className={styles.openingTreeItemStats}>
-                          <span>{tree.sourceCount} sources</span>
-                          <span>{tree.nodeCount} nodes</span>
-                          <span>{tree.dueCount} weak</span>
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              );
-            })}
+      {!drillActive ? (
+        <section className={`${styles.card} ${styles.emptyStateCard}`}>
+          <div className={styles.panelHeader}>
+            <h2 className={styles.sectionTitle}>Lines</h2>
+            <span className={styles.statusText}>{loading ? 'loading' : `${trees.length} openings`}</span>
           </div>
-        )}
-        <button
-          className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
-          disabled={actionLoading}
-          onClick={onImportRecent}
-          type="button"
-        >
-          {actionLoading ? 'Importing' : 'Import 100-game opening trees'}
-        </button>
-        {actionError ? <p className={styles.error}>{actionError}</p> : null}
-      </section>
+          {trees.length === 0 ? (
+            <p className={styles.copy}>Import your recent games to build opening trees grouped by the position after 4 plies.</p>
+          ) : (
+            <div className={styles.linesLibrary}>
+              {OPENING_LIBRARY_ORDER.map(library => {
+                const libraryTrees = groupedTrees.get(library) ?? [];
+
+                if (libraryTrees.length === 0) {
+                  return null;
+                }
+
+                return (
+                  <section className={styles.linesLibraryGroup} key={library}>
+                    <h3 className={styles.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
+                    <div className={styles.openingTreeList}>
+                      {libraryTrees.map(tree => (
+                        <button
+                          className={`${styles.openingTreeItem} ${tree.id === activeTreeId ? styles.openingTreeItemActive : ''}`}
+                          key={tree.id}
+                          onClick={() => onSelectTree(tree.id)}
+                          type="button"
+                        >
+                          <span className={styles.openingTreeItemHead}>
+                            <strong>{tree.name}</strong>
+                            <span className={styles.openingTreeMastery}>{tree.masteryScore}/100</span>
+                          </span>
+                          <span className={styles.openingTreeItemRoot}>{tree.rootSan.join(' ') || 'Starting position'}</span>
+                          <span className={styles.openingTreeItemStats}>
+                            <span>{tree.sourceCount} sources</span>
+                            <span>{tree.nodeCount} nodes</span>
+                            <span>{tree.dueCount} weak</span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
+          )}
+          <button
+            className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
+            disabled={actionLoading}
+            onClick={onImportRecent}
+            type="button"
+          >
+            {actionLoading ? 'Importing' : 'Import 100-game opening trees'}
+          </button>
+          {actionError ? <p className={styles.error}>{actionError}</p> : null}
+        </section>
+      ) : null}
 
       {activeTree ? (
-        <section className={`${styles.card} ${styles.openingTreeCard}`}>
-          <div className={styles.panelHeader}>
-            <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
-            <span className={styles.statusText}>{formatOpeningLibrary(activeTree.library)}</span>
-          </div>
+        <>
+          {drillActive ? (
+            <div className={styles.trainBackRow}>
+              <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onStopDrill} type="button">
+                Back
+              </button>
+            </div>
+          ) : null}
+          <section className={`${styles.card} ${styles.openingTreeCard}`}>
+            {!drillActive ? (
+              <div className={styles.panelHeader}>
+                <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
+                <span className={styles.statusText}>{formatOpeningLibrary(activeTree.library)}</span>
+              </div>
+            ) : (
+              <div className={styles.trainingCardHead}>
+                <div className={styles.trainingCardTitleBlock}>
+                  <strong className={styles.trainingCardTitle}>{activeTree.name}</strong>
+                  <span className={styles.trainingCardEco}>{formatOpeningLibrary(activeTree.library)}</span>
+                </div>
+              </div>
+            )}
           <div className={styles.trainingCardMeta}>
             <span>depth {activeTree.targetDepth}</span>
             <span>{activeTree.nodeCount} nodes</span>
             <span>{activeTree.dueCount} weak</span>
           </div>
           <div className={styles.openingTreeCanvas}>
-            <ReactFlow
-              edges={graph.edges}
-              fitView
-              fitViewOptions={{ padding: 0.22 }}
-              minZoom={0.25}
-              nodes={graph.nodes}
-              nodesDraggable
-              nodesConnectable={false}
-              onNodeClick={(_, node) => onSelectNode(node.id)}
-              proOptions={{ hideAttribution: true }}
-            >
-              <Background />
-              <Controls showInteractive={false} />
-              <MiniMap pannable zoomable />
-            </ReactFlow>
+            <ReactFlowProvider>
+              <ReactFlow
+                edges={graph.edges}
+                fitView
+                fitViewOptions={{ padding: 0.22 }}
+                minZoom={0.25}
+                nodes={graph.nodes}
+                nodesDraggable
+                nodesConnectable={false}
+                onNodeClick={(_, node) => onSelectNode(node.id)}
+                proOptions={{ hideAttribution: true }}
+              >
+                <Background />
+                <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} />
+              </ReactFlow>
+            </ReactFlowProvider>
           </div>
-          {selectedNode ? (
-            <div className={styles.openingTreeNodeDetails}>
-              <strong>ply {selectedNode.ply}</strong>
-              <span>{selectedNode.sideToMove} to move</span>
-              <span>{selectedNode.recentGames} recent</span>
-              <span>{selectedNode.cardCount} cards</span>
-              <span>{selectedNode.masteryScore}/100</span>
-              {selectedNode.bestSan ? <span>best {selectedNode.bestSan}</span> : null}
-            </div>
+
+          {drillActive ? (
+            <>
+              {drillStatus && !deckFeedback ? (
+                <div className={`${styles.feedbackBox} ${styles.feedbackPending}`}>
+                  <strong>Drill Step</strong>
+                  <span>{drillStatus}</span>
+                </div>
+              ) : null}
+              {deckFeedback ? (
+                <div className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`}>
+                  <strong>
+                    {deckFeedback.pending
+                      ? 'Checking eval'
+                      : deckFeedback.correct
+                        ? 'Best move'
+                        : 'Miss'}
+                  </strong>
+                  <span>
+                    played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
+                    {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
+                  </span>
+                </div>
+              ) : null}
+            </>
           ) : null}
-          {drillStatus ? <p className={styles.openingTreeStatus}>{drillStatus}</p> : null}
-          {expectedSan ? <p className={styles.openingTreeStatus}>Expected: {expectedSan}</p> : null}
-          <button
-            className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
-            disabled={activeTree.nodes.length === 0}
-            onClick={onStartDrill}
-            type="button"
-          >
-            Drill this opening
-          </button>
-        </section>
+
+          </section>
+        </>
       ) : null}
     </>
   );
@@ -241,7 +290,7 @@ function formatOpeningLibrary(library: OpeningLibrary) {
   }
 }
 
-function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, onSelectNode: (nodeId: string) => void) {
+function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, onSelectNode: (nodeId: string) => void, drillActive = false) {
   if (!tree) {
     return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
   }
@@ -265,6 +314,7 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
     const isActive = node.id === activeNodeId;
     const isTrainTurn = node.sideToMove === node.trainSide;
     const isWeak = node.masteryScore < 60 && isTrainTurn;
+    const showAnswer = isTrainTurn && node.bestSan && !drillActive;
 
     return {
       id: node.id,
@@ -272,8 +322,8 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
       data: {
         label: (
           <button className={styles.openingTreeNodeButton} onClick={() => onSelectNode(node.id)} type="button">
-            <strong>{node.bestSan && isTrainTurn ? `? ${node.bestSan}` : `Ply ${node.ply}`}</strong>
-            <span>{isTrainTurn ? 'your move' : 'opponent'} · {node.masteryScore}/100</span>
+            <strong>{showAnswer ? `? ${node.bestSan}` : `Ply ${node.ply}`}</strong>
+            <span>{isTrainTurn ? `your move · ${node.masteryScore}/100` : 'opponent'}</span>
           </button>
         ),
       },

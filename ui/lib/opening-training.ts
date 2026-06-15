@@ -77,6 +77,7 @@ export type DeckFeedback = {
   correct: boolean;
   exact: boolean;
   expectedSan: string;
+  expectedUci?: string;
   playedSan: string;
   playedUci: string;
   validationMode: DeckValidationMode;
