@@ -42,7 +42,7 @@ export async function resolvePostMoveVerifiedReviewCardAnswer({
         throw new Error(`Candidate move ${answerUci} is not legal in this position.`);
       }
 
-      const analysis = await analyzePosition(buildDeterministicAnalyzeRequest({ fen: chess.fen() }, { multipv: 1 }));
+      const analysis = await analyzePosition(buildDeterministicAnalyzeRequest({ fen: chess.fen() }));
       const scoreCp = scoreToCpForSide(analysis.whitePerspective, side);
 
       return {

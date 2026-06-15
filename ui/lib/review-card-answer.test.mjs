@@ -57,6 +57,37 @@ test('manual review card answer is selected from post-move eval of the top three
   assert.equal(result.referenceEvalCp, 157);
 });
 
+test('manual review card answer uses the deterministic profile for post-move evals', async () => {
+  const rootAnalysis = analysis({
+    bestMove: 'c1g5',
+    lines: [
+      { bestMove: 'c1g5', whiteCp: 152 },
+      { bestMove: 'b1c3', whiteCp: 143 },
+    ],
+  });
+  const requests = [];
+  const postMoveScores = new Map([
+    ['rnb1kbnr/ppp2ppp/3p1q2/4p1B1/3PP3/5N2/PPP2PPP/RN1QKB1R b KQkq - 2 4', 157],
+    ['rnb1kbnr/ppp2ppp/3p1q2/4p3/3PP3/2N2N2/PPP2PPP/R1BQKB1R b KQkq - 2 4', 160],
+  ]);
+
+  const result = await resolvePostMoveVerifiedReviewCardAnswer({
+    fen: 'rnb1kbnr/ppp2ppp/3p1q2/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 1 4',
+    side: 'white',
+    rootAnalysis,
+    analyzePosition: async request => {
+      requests.push(request);
+      return analysis({ whiteCp: postMoveScores.get(request.fen) ?? -999 });
+    },
+  });
+
+  assert.equal(result.answerUci, 'b1c3');
+  assert.equal(result.answerSan, 'Nc3');
+  assert.equal(result.referenceEvalCp, 160);
+  assert.deepEqual([...new Set(requests.map(request => request.multipv))], [3]);
+  assert.deepEqual([...new Set(requests.map(request => request.depth))], [17]);
+});
+
 test('manual review card answer minimizes white eval for black to move', async () => {
   const rootAnalysis = analysis({
     bestMove: 'e7e5',

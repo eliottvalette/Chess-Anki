@@ -266,7 +266,7 @@ async function resolveVerifiedCardAnswer({ card, baseUrl, profile, analysisCache
     const postMoveAnalysis = await analyzeSingleCached(baseUrl, {
       position: {
         fen: chess.fen(),
-        multipv: 1,
+        multipv: profile.multipv,
       },
       profile,
       cache: analysisCache,
