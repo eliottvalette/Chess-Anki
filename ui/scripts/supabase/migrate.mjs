@@ -9,6 +9,13 @@ const { Client } = pg;
 const RESET_DECK_SCHEMA_SQL = `
 drop table if exists public.training_card_attempts cascade;
 drop table if exists public.training_card_progress cascade;
+drop table if exists public.opening_drill_progress cascade;
+drop table if exists public.opening_edges cascade;
+drop table if exists public.opening_nodes cascade;
+drop table if exists public.opening_trees cascade;
+drop table if exists public.repertoire_line_cards cascade;
+drop table if exists public.repertoire_variations cascade;
+drop table if exists public.repertoire_lines cascade;
 drop table if exists public.training_profiles cascade;
 drop table if exists public.user_card_attempts cascade;
 drop table if exists public.user_card_progress cascade;

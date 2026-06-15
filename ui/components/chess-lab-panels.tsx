@@ -1,6 +1,9 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
+import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node as FlowNode } from '@xyflow/react';
+import dagre from 'dagre';
+import '@xyflow/react/dist/style.css';
 
 import type { AnalysisLine, AnalysisResult } from '@/lib/analysis-types';
 import {
@@ -22,6 +25,7 @@ import {
   type DeckProgressSummary,
   type MasteryGrade,
 } from '@/lib/deck-progress';
+import type { OpeningLibrary, OpeningTreeDetail, OpeningTreeSummary } from '@/lib/opening-tree';
 
 type TrainSessionStats = {
   completed: number;
@@ -31,7 +35,7 @@ type TrainSessionStats = {
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import styles from './chess-analysis-lab.module.css';
 
-export type WorkspaceMode = 'review' | 'train';
+export type WorkspaceMode = 'review' | 'train' | 'lines';
 
 export type TrainingDeckSummary = {
   id: string;
@@ -53,7 +57,233 @@ export function getModeLabel(mode: WorkspaceMode) {
       return 'Review';
     case 'train':
       return 'Train';
+    case 'lines':
+      return 'Lines';
   }
+}
+
+export function LinesPanel({
+  actionError,
+  actionLoading,
+  activeNodeId,
+  activeTree,
+  activeTreeId,
+  drillStatus,
+  expectedSan,
+  loading,
+  onImportRecent,
+  onSelectNode,
+  onSelectTree,
+  onStartDrill,
+  trees,
+}: {
+  actionError: string;
+  actionLoading: boolean;
+  activeNodeId: string | null;
+  activeTree: OpeningTreeDetail | null;
+  activeTreeId: string | null;
+  drillStatus: string;
+  expectedSan: string | null;
+  loading: boolean;
+  onImportRecent: () => void;
+  onSelectNode: (nodeId: string) => void;
+  onSelectTree: (treeId: string) => void;
+  onStartDrill: () => void;
+  trees: OpeningTreeSummary[];
+}) {
+  const groupedTrees = useMemo(() => groupOpeningTrees(trees), [trees]);
+  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, onSelectNode), [activeNodeId, activeTree, onSelectNode]);
+
+  return (
+    <>
+      <section className={`${styles.card} ${styles.emptyStateCard}`}>
+        <div className={styles.panelHeader}>
+          <h2 className={styles.sectionTitle}>Lines</h2>
+          <span className={styles.statusText}>{loading ? 'loading' : `${trees.length} openings`}</span>
+        </div>
+        {trees.length === 0 ? (
+          <p className={styles.copy}>Import your recent games to build opening trees grouped by the position after 4 plies.</p>
+        ) : (
+          <div className={styles.linesLibrary}>
+            {OPENING_LIBRARY_ORDER.map(library => {
+              const libraryTrees = groupedTrees.get(library) ?? [];
+
+              if (libraryTrees.length === 0) {
+                return null;
+              }
+
+              return (
+                <section className={styles.linesLibraryGroup} key={library}>
+                  <h3 className={styles.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
+                  <div className={styles.deckLibrary}>
+                    {libraryTrees.map(tree => (
+                      <button
+                        className={`${styles.deckLibraryItem} ${tree.id === activeTreeId ? styles.activeDeckLibraryItem : ''}`}
+                        key={tree.id}
+                        onClick={() => onSelectTree(tree.id)}
+                        type="button"
+                      >
+                        <span className={styles.deckLibraryHead}>
+                          <strong>{tree.name}</strong>
+                          <span>{tree.masteryScore}/100</span>
+                        </span>
+                        <span className={styles.deckLibraryMeta}>
+                          <span>{tree.rootSan.join(' ')}</span>
+                          <span>{tree.nodeCount} nodes</span>
+                        </span>
+                        <span className={styles.deckLibraryMeta}>
+                          <span>{tree.sourceCount} sources</span>
+                          <span>{tree.dueCount} weak</span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
+          </div>
+        )}
+        <button
+          className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
+          disabled={actionLoading}
+          onClick={onImportRecent}
+          type="button"
+        >
+          {actionLoading ? 'Importing' : 'Import 100-game opening trees'}
+        </button>
+        {actionError ? <p className={styles.error}>{actionError}</p> : null}
+      </section>
+
+      {activeTree ? (
+        <section className={`${styles.card} ${styles.openingTreeCard}`}>
+          <div className={styles.panelHeader}>
+            <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
+            <span className={styles.statusText}>{formatOpeningLibrary(activeTree.library)}</span>
+          </div>
+          <div className={styles.trainingCardMeta}>
+            <span>depth {activeTree.targetDepth}</span>
+            <span>{activeTree.nodeCount} nodes</span>
+            <span>{activeTree.dueCount} weak</span>
+          </div>
+          <div className={styles.openingTreeCanvas}>
+            <ReactFlow
+              edges={graph.edges}
+              fitView
+              minZoom={0.25}
+              nodes={graph.nodes}
+              nodesDraggable
+              nodesConnectable={false}
+              onNodeClick={(_, node) => onSelectNode(node.id)}
+              proOptions={{ hideAttribution: true }}
+            >
+              <Background />
+              <Controls showInteractive={false} />
+              <MiniMap pannable zoomable />
+            </ReactFlow>
+          </div>
+          {drillStatus ? <p className={styles.copy}>{drillStatus}</p> : null}
+          {expectedSan ? <p className={styles.copy}>Expected: {expectedSan}</p> : null}
+          <button
+            className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
+            disabled={activeTree.nodes.length === 0}
+            onClick={onStartDrill}
+            type="button"
+          >
+            Drill this opening
+          </button>
+        </section>
+      ) : null}
+    </>
+  );
+}
+
+const OPENING_LIBRARY_ORDER: OpeningLibrary[] = ['white', 'black_vs_e4', 'black_vs_d4', 'black_vs_c4', 'black_vs_n_f3', 'black_other'];
+
+function groupOpeningTrees(trees: OpeningTreeSummary[]) {
+  const groups = new Map<OpeningLibrary, OpeningTreeSummary[]>();
+
+  for (const tree of trees) {
+    const group = groups.get(tree.library) ?? [];
+    group.push(tree);
+    groups.set(tree.library, group);
+  }
+
+  return groups;
+}
+
+function formatOpeningLibrary(library: OpeningLibrary) {
+  switch (library) {
+    case 'white':
+      return 'White';
+    case 'black_vs_e4':
+      return 'Black vs 1.e4';
+    case 'black_vs_d4':
+      return 'Black vs 1.d4';
+    case 'black_vs_c4':
+      return 'Black vs 1.c4';
+    case 'black_vs_n_f3':
+      return 'Black vs 1.Nf3';
+    case 'black_other':
+      return 'Black other';
+  }
+}
+
+function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, onSelectNode: (nodeId: string) => void) {
+  if (!tree) {
+    return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
+  }
+
+  const graph = new dagre.graphlib.Graph();
+  graph.setDefaultEdgeLabel(() => ({}));
+  graph.setGraph({ rankdir: 'TB', nodesep: 32, ranksep: 64 });
+
+  for (const node of tree.nodes) {
+    graph.setNode(node.id, { width: 156, height: 58 });
+  }
+
+  for (const edge of tree.edges) {
+    graph.setEdge(edge.fromNodeId, edge.toNodeId);
+  }
+
+  dagre.layout(graph);
+
+  const nodes = tree.nodes.map(node => {
+    const point = graph.node(node.id) ?? { x: 0, y: 0 };
+    const isActive = node.id === activeNodeId;
+    const isTrainTurn = node.sideToMove === node.trainSide;
+    const isWeak = node.masteryScore < 60 && isTrainTurn;
+
+    return {
+      id: node.id,
+      position: { x: point.x - 78, y: point.y - 29 },
+      data: {
+        label: (
+          <button className={styles.openingTreeNodeButton} onClick={() => onSelectNode(node.id)} type="button">
+            <strong>{node.bestSan && isTrainTurn ? `? ${node.bestSan}` : `Ply ${node.ply}`}</strong>
+            <span>{isTrainTurn ? 'your move' : 'opponent'} · {node.masteryScore}/100</span>
+          </button>
+        ),
+      },
+      draggable: true,
+      className: [
+        styles.openingTreeNode,
+        isActive ? styles.openingTreeNodeActive : '',
+        isTrainTurn ? styles.openingTreeNodeTrain : styles.openingTreeNodeOpponent,
+        isWeak ? styles.openingTreeNodeWeak : '',
+      ].filter(Boolean).join(' '),
+      type: 'default',
+    } satisfies FlowNode;
+  });
+  const edges = tree.edges.map(edge => ({
+    id: edge.id,
+    source: edge.fromNodeId,
+    target: edge.toNodeId,
+    animated: edge.isEngineBest,
+    label: edge.san,
+    className: edge.isEngineBest ? styles.openingTreeEdgeBest : undefined,
+  } satisfies Edge));
+
+  return { nodes, edges };
 }
 
 export function ReviewPanel({

@@ -14,6 +14,7 @@ import {
 import { runTimelineAnalysisDedupe } from '@/lib/timeline-analysis-runner';
 import {
   PgnImportDialog,
+  LinesPanel,
   ReviewPanel,
   TrainPanel,
   TrainingProfilePanel,
@@ -75,6 +76,7 @@ import {
   type DeckProgressMap,
 } from '@/lib/deck-progress';
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
+import { chooseWeightedOpponentEdge, type OpeningTreeDetail, type OpeningTreeSummary } from '@/lib/opening-tree';
 import styles from './chess-analysis-lab.module.css';
 
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
@@ -434,6 +436,17 @@ type TrainingDeckPayload = {
   error?: string;
 };
 
+type OpeningTreesPayload = {
+  trees?: OpeningTreeSummary[];
+  tree?: OpeningTreeDetail;
+  imported?: number;
+  nodes?: number;
+  edges?: number;
+  nodeId?: string;
+  masteryScore?: number;
+  error?: string;
+};
+
 type TrainingDeckCardRow = {
   id: string;
   kind: string;
@@ -539,6 +552,15 @@ export function ChessAnalysisLab() {
   const [deckLoadError, setDeckLoadError] = useState('');
   const [deckActionLoading, setDeckActionLoading] = useState(false);
   const [deckActionError, setDeckActionError] = useState('');
+  const [openingTrees, setOpeningTrees] = useState<OpeningTreeSummary[]>([]);
+  const [activeOpeningTree, setActiveOpeningTree] = useState<OpeningTreeDetail | null>(null);
+  const [openingTreesLoading, setOpeningTreesLoading] = useState(false);
+  const [openingTreeActionLoading, setOpeningTreeActionLoading] = useState(false);
+  const [openingTreeActionError, setOpeningTreeActionError] = useState('');
+  const [selectedOpeningTreeId, setSelectedOpeningTreeId] = useState<string | null>(null);
+  const [activeOpeningNodeId, setActiveOpeningNodeId] = useState<string | null>(null);
+  const [openingDrillStatus, setOpeningDrillStatus] = useState('');
+  const [openingDrillExpected, setOpeningDrillExpected] = useState<{ nodeId: string; uci: string | null; san: string | null } | null>(null);
   const [newDeckTitle, setNewDeckTitle] = useState('');
   const [reviewDeckSaveStatus, setReviewDeckSaveStatus] = useState('');
   const [deckProgress, setDeckProgress] = useState<DeckProgressMap>({});
@@ -1783,6 +1805,154 @@ export function ChessAnalysisLab() {
     }
   }, [startDeckCardWithReplay]);
 
+  const loadOpeningTreeDetail = useCallback(async (treeId: string) => {
+    setOpeningTreeActionError('');
+
+    try {
+      const response = await fetch(`/api/opening-trees?treeId=${encodeURIComponent(treeId)}`, { credentials: 'same-origin' });
+      const payload = await readJsonResponse<OpeningTreesPayload>(response);
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
+      }
+
+      setActiveOpeningTree(payload.tree ?? null);
+      setActiveOpeningNodeId(payload.tree?.nodes[0]?.id ?? null);
+    } catch (error) {
+      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening tree.');
+      setActiveOpeningTree(null);
+    }
+  }, []);
+
+  const loadOpeningTrees = useCallback(async () => {
+    setOpeningTreesLoading(true);
+    setOpeningTreeActionError('');
+
+    try {
+      const response = await fetch('/api/opening-trees', { credentials: 'same-origin' });
+      const payload = await readJsonResponse<OpeningTreesPayload>(response);
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Opening trees fetch failed: HTTP ${response.status}`);
+      }
+
+      const nextTrees = payload.trees ?? [];
+      setOpeningTrees(nextTrees);
+      const nextSelectedId = selectedOpeningTreeId && nextTrees.some(tree => tree.id === selectedOpeningTreeId)
+        ? selectedOpeningTreeId
+        : nextTrees[0]?.id ?? null;
+
+      setSelectedOpeningTreeId(nextSelectedId);
+
+      if (nextSelectedId) {
+        await loadOpeningTreeDetail(nextSelectedId);
+      } else {
+        setActiveOpeningTree(null);
+        setActiveOpeningNodeId(null);
+      }
+    } catch (error) {
+      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
+      setOpeningTrees([]);
+    } finally {
+      setOpeningTreesLoading(false);
+    }
+  }, [loadOpeningTreeDetail, selectedOpeningTreeId]);
+
+  const importRecentOpeningTrees = useCallback(async () => {
+    setOpeningTreeActionLoading(true);
+    setOpeningTreeActionError('');
+
+    try {
+      const response = await fetch('/api/opening-trees', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'import_recent' }),
+      });
+      const payload = await readJsonResponse<OpeningTreesPayload>(response);
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? 'Unable to import opening trees.');
+      }
+
+      await loadOpeningTrees();
+    } catch (error) {
+      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to import opening trees.');
+    } finally {
+      setOpeningTreeActionLoading(false);
+    }
+  }, [loadOpeningTrees]);
+
+  const selectOpeningTree = useCallback((treeId: string) => {
+    setSelectedOpeningTreeId(treeId);
+    setOpeningDrillStatus('');
+    setOpeningDrillExpected(null);
+    void loadOpeningTreeDetail(treeId);
+  }, [loadOpeningTreeDetail]);
+
+  const startOpeningDrill = useCallback(() => {
+    if (!activeOpeningTree) {
+      return;
+    }
+
+    const firstTrainNode =
+      activeOpeningTree.nodes.find(node => node.sideToMove === node.trainSide && node.masteryScore < 80) ??
+      activeOpeningTree.nodes.find(node => node.sideToMove === node.trainSide) ??
+      activeOpeningTree.nodes[0] ??
+      null;
+
+    if (!firstTrainNode) {
+      setOpeningDrillStatus('No trainable node in this tree yet.');
+      return;
+    }
+
+    positionRequestIdRef.current += 1;
+    timelineRequestIdRef.current += 1;
+    setMode('lines');
+    modeRef.current = 'lines';
+    setInitialFen(firstTrainNode.fen);
+    setMoveHistory([]);
+    setHistoryIndex(0);
+    clearVariation();
+    setGame(new Chess(firstTrainNode.fen));
+    setMetadata(null);
+    setFileName('');
+    setPositionAnalysis(null);
+    setPreMoveAnalyses([]);
+    setTimelineAnalyses([]);
+    setTimelineError('');
+    setServerError('');
+    setActiveOpeningNodeId(firstTrainNode.id);
+    setOpeningDrillExpected({
+      nodeId: firstTrainNode.id,
+      uci: firstTrainNode.bestUci,
+      san: firstTrainNode.bestSan,
+    });
+    setOrientation(firstTrainNode.trainSide);
+    setShowArrow(false);
+    setOpeningDrillStatus(firstTrainNode.bestSan ? 'Find the best move in this opening node.' : 'Analyze this node, then play the best move.');
+    clearSelection();
+    playSound('game-start');
+  }, [activeOpeningTree, clearSelection, playSound]);
+
+  const selectOpeningNode = useCallback((nodeId: string) => {
+    const node = activeOpeningTree?.nodes.find(candidate => candidate.id === nodeId);
+
+    setActiveOpeningNodeId(nodeId);
+
+    if (node) {
+      setInitialFen(node.fen);
+      setMoveHistory([]);
+      setHistoryIndex(0);
+      clearVariation();
+      setGame(new Chess(node.fen));
+      setOpeningDrillExpected(node.sideToMove === node.trainSide ? { nodeId: node.id, uci: node.bestUci, san: node.bestSan } : null);
+      setOpeningDrillStatus(node.sideToMove === node.trainSide ? 'Find the best move from this node.' : 'Opponent node selected.');
+      setOrientation(node.trainSide);
+      clearSelection();
+    }
+  }, [activeOpeningTree, clearSelection]);
+
   loadTrainingDeckRef.current = loadTrainingDeck;
 
   useEffect(() => {
@@ -1815,6 +1985,18 @@ export function ChessAnalysisLab() {
 
     void loadTrainingDeckRef.current(storedDeckId, { libraryLoading: true });
   }, [trainingProfile?.id, trainingProfileBootstrapping, trainAllSession]);
+
+  useEffect(() => {
+    if (!trainingProfile?.id || trainingProfileBootstrapping) {
+      setOpeningTrees([]);
+      setActiveOpeningTree(null);
+      setSelectedOpeningTreeId(null);
+      setActiveOpeningNodeId(null);
+      return;
+    }
+
+    void loadOpeningTrees();
+  }, [loadOpeningTrees, trainingProfile?.id, trainingProfileBootstrapping]);
 
   useEffect(() => {
     const requestId = ++positionRequestIdRef.current;
@@ -2010,12 +2192,16 @@ export function ChessAnalysisLab() {
 
     if (modeRef.current === 'review') {
       reviewWorkspaceSnapshotRef.current = snapshot;
-    } else {
+    } else if (modeRef.current === 'train') {
       trainWorkspaceSnapshotRef.current = snapshot;
     }
 
     const restoreTarget =
-      nextMode === 'review' ? reviewWorkspaceSnapshotRef.current : trainWorkspaceSnapshotRef.current;
+      nextMode === 'review'
+        ? reviewWorkspaceSnapshotRef.current
+        : nextMode === 'train'
+          ? trainWorkspaceSnapshotRef.current
+          : null;
 
     setMode(nextMode);
     modeRef.current = nextMode;
@@ -2082,6 +2268,71 @@ export function ChessAnalysisLab() {
   const commitMove = useCallback(
     (nextGame: Chess, move: StoredMove) => {
       if (deckPlaybackBusy) {
+        return;
+      }
+
+      if (modeRef.current === 'lines' && activeOpeningNodeId) {
+        const expectedUci = openingDrillExpected?.uci ?? positionAnalysis?.bestMove ?? null;
+        const expectedSan = openingDrillExpected?.san ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
+        const correct = expectedUci ? move.uci === expectedUci : true;
+        const nodeId = activeOpeningNodeId;
+        const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === (expectedUci ?? move.uci));
+        const nextNode = nextNodeEdge ? activeOpeningTree?.nodes.find(node => node.id === nextNodeEdge.toNodeId) ?? null : null;
+
+        setMoveHistory([move]);
+        setHistoryIndex(1);
+        clearVariation();
+        setGame(nextGame);
+        setPositionAnalysis(null);
+        setServerError('');
+        setSelectedSquare(null);
+        setSquareStyles({});
+        setOpeningDrillStatus(correct ? 'Correct. Continuing the branch.' : `Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}.`);
+        setOpeningDrillExpected(null);
+        playSoundSequence(
+          getMoveSoundSequence({
+            move,
+            isSelfMove: true,
+            isCheck: nextGame.isCheck(),
+            isCheckmate: nextGame.isCheckmate(),
+            isGameOver: nextGame.isGameOver(),
+          }),
+        );
+
+        void fetch('/api/opening-trees', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ action: 'attempt', nodeId, playedUci: move.uci, expectedUci, correct }),
+        });
+
+        if (nextNode) {
+          setActiveOpeningNodeId(nextNode.id);
+
+          if (nextNode.sideToMove === nextNode.trainSide) {
+            setInitialFen(nextNode.fen);
+            setMoveHistory([]);
+            setHistoryIndex(0);
+            setGame(new Chess(nextNode.fen));
+            setOpeningDrillExpected({ nodeId: nextNode.id, uci: nextNode.bestUci, san: nextNode.bestSan });
+            setOpeningDrillStatus('Next node. Find the best move.');
+          } else {
+            const opponentEdges = activeOpeningTree?.edges.filter(edge => edge.fromNodeId === nextNode.id) ?? [];
+            const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
+            const afterOpponent = opponentEdge ? activeOpeningTree?.nodes.find(node => node.id === opponentEdge.toNodeId) ?? null : null;
+
+            if (afterOpponent) {
+              setInitialFen(afterOpponent.fen);
+              setMoveHistory([]);
+              setHistoryIndex(0);
+              setGame(new Chess(afterOpponent.fen));
+              setActiveOpeningNodeId(afterOpponent.id);
+              setOpeningDrillExpected({ nodeId: afterOpponent.id, uci: afterOpponent.bestUci, san: afterOpponent.bestSan });
+              setOpeningDrillStatus(`Opponent played ${opponentEdge?.san ?? 'a branch'}. Find the best move.`);
+            }
+          }
+        }
+
         return;
       }
 
@@ -2154,7 +2405,7 @@ export function ChessAnalysisLab() {
         void saveTrainingAttempt(activeDeckCard, gradedFeedback);
       }
     },
-    [activeDeckCard, deckFeedback, deckPlaybackBusy, hasLoadedGame, historyIndex, moveHistory, playSoundSequence, saveTrainingAttempt, trainAllSession, variationBaseIndex, variationMoves],
+    [activeDeckCard, activeOpeningNodeId, activeOpeningTree, currentFen, deckFeedback, deckPlaybackBusy, hasLoadedGame, historyIndex, moveHistory, openingDrillExpected, playSoundSequence, positionAnalysis?.bestMove, saveTrainingAttempt, trainAllSession, variationBaseIndex, variationMoves],
   );
 
   const tryMove = useCallback(
@@ -3291,7 +3542,7 @@ export function ChessAnalysisLab() {
 
         <aside className={`${styles.panel} ${styles.contextPanel}`}>
           <section className={styles.modeTabs}>
-            {(['review', 'train'] satisfies WorkspaceMode[]).map(nextMode => (
+            {(['review', 'train', 'lines'] satisfies WorkspaceMode[]).map(nextMode => (
               <button
                 className={`${styles.modeTab} ${mode === nextMode ? styles.activeModeTab : ''}`}
                 key={nextMode}
@@ -3410,6 +3661,22 @@ export function ChessAnalysisLab() {
                 setUsername={setTrainingUsername}
                 username={trainingUsername}
                 onSubmit={() => void openTrainingProfile()}
+              />
+            ) : mode === 'lines' ? (
+              <LinesPanel
+                actionError={openingTreeActionError}
+                actionLoading={openingTreeActionLoading}
+                activeNodeId={activeOpeningNodeId}
+                activeTree={activeOpeningTree}
+                activeTreeId={selectedOpeningTreeId}
+                drillStatus={openingDrillStatus}
+                expectedSan={openingDrillExpected?.san ?? (openingDrillExpected?.uci ? formatBestMove(currentFen, openingDrillExpected.uci) : null)}
+                loading={openingTreesLoading}
+                onImportRecent={() => void importRecentOpeningTrees()}
+                onSelectNode={selectOpeningNode}
+                onSelectTree={selectOpeningTree}
+                onStartDrill={startOpeningDrill}
+                trees={openingTrees}
               />
             ) : (
               <TrainPanel

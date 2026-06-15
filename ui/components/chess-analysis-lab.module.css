@@ -120,6 +120,103 @@
   gap: 14px;
 }
 
+.linesLibrary {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.linesLibraryGroup {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.linesLibraryTitle {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.openingTreeCard {
+  min-height: 520px;
+}
+
+.openingTreeCanvas {
+  min-height: 380px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(4, 8, 15, 0.42);
+}
+
+.openingTreeNode {
+  width: 156px;
+  border: 1px solid rgba(214, 226, 244, 0.2);
+  border-radius: 10px;
+  background: rgba(13, 20, 32, 0.94);
+  color: var(--text);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+}
+
+.openingTreeNodeButton {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.openingTreeNodeButton strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openingTreeNodeButton span {
+  overflow: hidden;
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.openingTreeNodeActive {
+  border-color: rgba(198, 215, 255, 0.78);
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.28),
+    0 0 0 2px rgba(198, 215, 255, 0.16);
+}
+
+.openingTreeNodeTrain {
+  background: rgba(20, 34, 54, 0.96);
+}
+
+.openingTreeNodeOpponent {
+  background: rgba(23, 18, 31, 0.96);
+}
+
+.openingTreeNodeWeak {
+  border-color: rgba(255, 208, 118, 0.48);
+}
+
+.openingTreeEdgeBest {
+  stroke: rgba(184, 247, 161, 0.9);
+}
+
 .titleBlock {
   min-width: 0;
   display: flex;
@@ -200,7 +297,7 @@
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
   flex: 0 0 auto;
 }
@@ -2744,10 +2841,6 @@
   .trainSessionMode .boardPlayerElo,
   .trainSessionMode .boardMaterialAdvantage {
     font-size: 12px;
-  }
-
-  .modeTabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .accuracyGrid,
