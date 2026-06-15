@@ -27,6 +27,7 @@ import {
   analyzeSinglePosition,
   buildGameReview,
   buildMoveUciHistory,
+  buildStoredMovesFromSanList,
   buildTimelineSequencePositions,
   classifyTimelineMoves,
   extractMetadataFromGame,
@@ -1805,7 +1806,38 @@ export function ChessAnalysisLab() {
     }
   }, [startDeckCardWithReplay]);
 
-  const loadOpeningTreeDetail = useCallback(async (treeId: string) => {
+  function loadOpeningTreeRootOnBoard(tree: OpeningTreeDetail) {
+    const rootMoves = buildStoredMovesFromSanList(null, tree.rootSan);
+    const rootGame = restoreGameFromHistory(rootMoves, null, rootMoves.length);
+    const rootNode = tree.nodes.find(node => node.ply === tree.rootSan.length) ?? tree.nodes[0] ?? null;
+
+    positionRequestIdRef.current += 1;
+    timelineRequestIdRef.current += 1;
+    setMode('lines');
+    modeRef.current = 'lines';
+    setInitialFen(null);
+    setMoveHistory(rootMoves);
+    setHistoryIndex(rootMoves.length);
+    clearVariation();
+    setGame(rootGame);
+    setMetadata(null);
+    setFileName('');
+    setPositionAnalysis(null);
+    setPreMoveAnalyses([]);
+    setTimelineAnalyses([]);
+    setTimelineError('');
+    setServerError('');
+    setActiveOpeningNodeId(rootNode?.id ?? null);
+    setOpeningDrillExpected(rootNode && rootNode.sideToMove === rootNode.trainSide ? { nodeId: rootNode.id, uci: rootNode.bestUci, san: rootNode.bestSan } : null);
+    setOpeningDrillStatus('');
+    if (rootNode) {
+      setOrientation(rootNode.trainSide);
+    }
+    setShowArrow(false);
+    clearSelection();
+  }
+
+  const loadOpeningTreeDetail = useCallback(async (treeId: string, options: { syncBoard?: boolean } = {}) => {
     setOpeningTreeActionError('');
 
     try {
@@ -1816,8 +1848,14 @@ export function ChessAnalysisLab() {
         throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
       }
 
-      setActiveOpeningTree(payload.tree ?? null);
-      setActiveOpeningNodeId(payload.tree?.nodes[0]?.id ?? null);
+      const tree = payload.tree ?? null;
+      setActiveOpeningTree(tree);
+
+      if (tree && options.syncBoard) {
+        loadOpeningTreeRootOnBoard(tree);
+      } else {
+        setActiveOpeningNodeId(tree?.nodes[0]?.id ?? null);
+      }
     } catch (error) {
       setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening tree.');
       setActiveOpeningTree(null);
@@ -1887,7 +1925,7 @@ export function ChessAnalysisLab() {
     setSelectedOpeningTreeId(treeId);
     setOpeningDrillStatus('');
     setOpeningDrillExpected(null);
-    void loadOpeningTreeDetail(treeId);
+    void loadOpeningTreeDetail(treeId, { syncBoard: true });
   }, [loadOpeningTreeDetail]);
 
   const startOpeningDrill = useCallback(() => {
@@ -2279,6 +2317,7 @@ export function ChessAnalysisLab() {
         const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === (expectedUci ?? move.uci));
         const nextNode = nextNodeEdge ? activeOpeningTree?.nodes.find(node => node.id === nextNodeEdge.toNodeId) ?? null : null;
 
+        setInitialFen(currentFen);
         setMoveHistory([move]);
         setHistoryIndex(1);
         clearVariation();

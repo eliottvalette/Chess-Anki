@@ -23,15 +23,15 @@ type PendingRun = {
   abort?: () => void;
 };
 
-const BROWSER_ENGINE_CACHE_VERSION = 2;
-const BROWSER_ENGINE_CACHE_NAME = 'chess-analysis-engine-full-single-v1';
-const BROWSER_ENGINE_LEGACY_CACHE_NAMES = ['chess-analysis-engine-v1'];
+const BROWSER_ENGINE_CACHE_VERSION = 3;
+const BROWSER_ENGINE_CACHE_NAME = 'chess-analysis-engine-lite-single-v1';
+const BROWSER_ENGINE_LEGACY_CACHE_NAMES = ['chess-analysis-engine-v1', 'chess-analysis-engine-full-single-v1'];
 const BROWSER_ENGINE_STORE_NAME = 'analysis';
 const BROWSER_ENGINE_MAX_CACHE_ENTRIES = 6_000;
 const BROWSER_ENGINE_DEFAULT_POOL_SIZE = 2;
 const BROWSER_ENGINE_MAX_POOL_SIZE = 2;
 const BROWSER_ENGINE_TIMEOUT_MS = 120_000;
-const STOCKFISH_SCRIPT_URL = '/stockfish/stockfish-18-single.js#/stockfish/stockfish-18-single.wasm';
+const STOCKFISH_SCRIPT_URL = '/stockfish/stockfish-18-lite-single.js#/stockfish/stockfish-18-lite-single.wasm';
 
 let browserEnginePool: Promise<BrowserStockfishSession[]> | null = null;
 let browserRoundRobin = 0;
@@ -283,7 +283,7 @@ class BrowserStockfishSession {
 
 function getBrowserAnalysisCacheKey(request: AnalyzeRequest) {
   return JSON.stringify({
-    engine: 'browser-stockfish-18-full-single',
+    engine: 'browser-stockfish-18-lite-single',
     version: BROWSER_ENGINE_CACHE_VERSION,
     positionCommand: buildPositionCommand(request),
     depth: sanitizeDepth(request.depth),

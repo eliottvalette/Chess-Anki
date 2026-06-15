@@ -121,9 +121,13 @@
 }
 
 .linesLibrary {
+  min-height: 0;
+  max-height: 300px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden auto;
+  padding-right: 3px;
 }
 
 .linesLibraryGroup {
@@ -142,25 +146,172 @@
   text-transform: uppercase;
 }
 
+.openingTreeList {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.openingTreeItem {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid rgba(214, 226, 244, 0.18);
+  border-radius: 10px;
+  background: rgba(9, 14, 23, 0.4);
+  color: var(--text-muted);
+  padding: 11px 12px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+
+.openingTreeItem:hover {
+  border-color: rgba(214, 226, 244, 0.28);
+}
+
+.openingTreeItemActive {
+  border-color: rgba(198, 215, 255, 0.58);
+  background: rgba(46, 58, 82, 0.58);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(198, 215, 255, 0.1);
+}
+
+.openingTreeItemHead {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+}
+
+.openingTreeItemHead strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.openingTreeMastery {
+  flex: 0 0 auto;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.openingTreeItemRoot {
+  display: block;
+  color: var(--text-muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.openingTreeItemStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.openingTreeItemStats span {
+  color: var(--text-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .openingTreeCard {
-  min-height: 520px;
+  min-height: 0;
+  max-height: min(690px, calc(100svh - 174px));
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
 }
 
 .openingTreeCanvas {
-  min-height: 380px;
+  width: 100%;
+  height: 430px;
+  min-height: 320px;
+  flex: 1 1 430px;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: rgba(4, 8, 15, 0.42);
+  background:
+    radial-gradient(circle at 18% 16%, rgba(152, 184, 255, 0.1), transparent 28%),
+    rgba(4, 8, 15, 0.58);
+}
+
+.openingTreeCanvas :global(.react-flow) {
+  width: 100%;
+  height: 100%;
+}
+
+.openingTreeCanvas :global(.react-flow__viewport) {
+  cursor: grab;
+}
+
+.openingTreeCanvas :global(.react-flow__edge-text) {
+  fill: #eef5ff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.openingTreeCanvas :global(.react-flow__edge-textbg) {
+  fill: rgba(5, 10, 17, 0.88);
+  stroke: rgba(214, 226, 244, 0.18);
+  stroke-width: 1px;
+}
+
+.openingTreeCanvas :global(.react-flow__edge-path) {
+  stroke: rgba(143, 156, 178, 0.68);
+  stroke-width: 1.7;
 }
 
 .openingTreeNode {
   width: 156px;
-  border: 1px solid rgba(214, 226, 244, 0.2);
+  border: 1px solid rgba(214, 226, 244, 0.24);
   border-radius: 10px;
   background: rgba(13, 20, 32, 0.94);
   color: var(--text);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+}
+
+.openingTreeCanvas :global(.react-flow__node-default) {
+  color: var(--text);
+  padding: 0;
+}
+
+.openingTreeCanvas :global(.react-flow__node-default).openingTreeNode {
+  border: 1px solid rgba(214, 226, 244, 0.24);
+  background: rgba(13, 20, 32, 0.94);
+}
+
+.openingTreeCanvas :global(.react-flow__node-default).openingTreeNodeTrain {
+  border-color: rgba(138, 198, 255, 0.34);
+  background: rgba(42, 82, 126, 0.2);
+}
+
+.openingTreeCanvas :global(.react-flow__node-default).openingTreeNodeOpponent {
+  border-color: rgba(214, 226, 244, 0.2);
+  background: rgba(13, 20, 32, 0.94);
+}
+
+.openingTreeCanvas :global(.react-flow__node-default).openingTreeNodeWeak {
+  border-color: rgba(255, 176, 84, 0.36);
+  background: rgba(130, 82, 32, 0.18);
 }
 
 .openingTreeNodeButton {
@@ -175,6 +326,7 @@
   color: inherit;
   padding: 8px 10px;
   text-align: left;
+  cursor: pointer;
 }
 
 .openingTreeNodeButton strong {
@@ -202,19 +354,60 @@
 }
 
 .openingTreeNodeTrain {
-  background: rgba(20, 34, 54, 0.96);
+  border-color: rgba(138, 198, 255, 0.34);
+  background: rgba(42, 82, 126, 0.2);
 }
 
 .openingTreeNodeOpponent {
-  background: rgba(23, 18, 31, 0.96);
+  border-color: rgba(214, 226, 244, 0.2);
+  background: rgba(13, 20, 32, 0.94);
 }
 
 .openingTreeNodeWeak {
-  border-color: rgba(255, 208, 118, 0.48);
+  border-color: rgba(255, 176, 84, 0.36);
+  background: rgba(130, 82, 32, 0.18);
 }
 
 .openingTreeEdgeBest {
-  stroke: rgba(184, 247, 161, 0.9);
+  stroke: rgba(138, 227, 193, 0.95);
+  stroke-width: 2.8;
+}
+
+.openingTreeNodeDetails,
+.openingTreeStatus {
+  border: 1px solid rgba(214, 226, 244, 0.12);
+  border-radius: 10px;
+  background: rgba(5, 10, 17, 0.46);
+}
+
+.openingTreeNodeDetails {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  padding: 9px;
+}
+
+.openingTreeNodeDetails strong,
+.openingTreeNodeDetails span {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.openingTreeNodeDetails strong {
+  color: var(--text);
+}
+
+.openingTreeStatus {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.35;
+  padding: 9px 10px;
 }
 
 .titleBlock {

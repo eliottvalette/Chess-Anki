@@ -92,6 +92,10 @@ export function LinesPanel({
   trees: OpeningTreeSummary[];
 }) {
   const groupedTrees = useMemo(() => groupOpeningTrees(trees), [trees]);
+  const selectedNode = useMemo(
+    () => activeTree?.nodes.find(node => node.id === activeNodeId) ?? null,
+    [activeNodeId, activeTree],
+  );
   const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, onSelectNode), [activeNodeId, activeTree, onSelectNode]);
 
   return (
@@ -115,24 +119,22 @@ export function LinesPanel({
               return (
                 <section className={styles.linesLibraryGroup} key={library}>
                   <h3 className={styles.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
-                  <div className={styles.deckLibrary}>
+                  <div className={styles.openingTreeList}>
                     {libraryTrees.map(tree => (
                       <button
-                        className={`${styles.deckLibraryItem} ${tree.id === activeTreeId ? styles.activeDeckLibraryItem : ''}`}
+                        className={`${styles.openingTreeItem} ${tree.id === activeTreeId ? styles.openingTreeItemActive : ''}`}
                         key={tree.id}
                         onClick={() => onSelectTree(tree.id)}
                         type="button"
                       >
-                        <span className={styles.deckLibraryHead}>
+                        <span className={styles.openingTreeItemHead}>
                           <strong>{tree.name}</strong>
-                          <span>{tree.masteryScore}/100</span>
+                          <span className={styles.openingTreeMastery}>{tree.masteryScore}/100</span>
                         </span>
-                        <span className={styles.deckLibraryMeta}>
-                          <span>{tree.rootSan.join(' ')}</span>
-                          <span>{tree.nodeCount} nodes</span>
-                        </span>
-                        <span className={styles.deckLibraryMeta}>
+                        <span className={styles.openingTreeItemRoot}>{tree.rootSan.join(' ') || 'Starting position'}</span>
+                        <span className={styles.openingTreeItemStats}>
                           <span>{tree.sourceCount} sources</span>
+                          <span>{tree.nodeCount} nodes</span>
                           <span>{tree.dueCount} weak</span>
                         </span>
                       </button>
@@ -169,6 +171,7 @@ export function LinesPanel({
             <ReactFlow
               edges={graph.edges}
               fitView
+              fitViewOptions={{ padding: 0.22 }}
               minZoom={0.25}
               nodes={graph.nodes}
               nodesDraggable
@@ -181,8 +184,18 @@ export function LinesPanel({
               <MiniMap pannable zoomable />
             </ReactFlow>
           </div>
-          {drillStatus ? <p className={styles.copy}>{drillStatus}</p> : null}
-          {expectedSan ? <p className={styles.copy}>Expected: {expectedSan}</p> : null}
+          {selectedNode ? (
+            <div className={styles.openingTreeNodeDetails}>
+              <strong>ply {selectedNode.ply}</strong>
+              <span>{selectedNode.sideToMove} to move</span>
+              <span>{selectedNode.recentGames} recent</span>
+              <span>{selectedNode.cardCount} cards</span>
+              <span>{selectedNode.masteryScore}/100</span>
+              {selectedNode.bestSan ? <span>best {selectedNode.bestSan}</span> : null}
+            </div>
+          ) : null}
+          {drillStatus ? <p className={styles.openingTreeStatus}>{drillStatus}</p> : null}
+          {expectedSan ? <p className={styles.openingTreeStatus}>Expected: {expectedSan}</p> : null}
           <button
             className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
             disabled={activeTree.nodes.length === 0}
@@ -281,6 +294,9 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
     animated: edge.isEngineBest,
     label: edge.san,
     className: edge.isEngineBest ? styles.openingTreeEdgeBest : undefined,
+    labelBgPadding: [6, 4],
+    labelBgBorderRadius: 6,
+    labelShowBg: true,
   } satisfies Edge));
 
   return { nodes, edges };

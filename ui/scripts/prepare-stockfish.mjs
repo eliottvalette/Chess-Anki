@@ -15,7 +15,12 @@ const outputPath = path.join(projectDir, 'bin', 'stockfish');
 const outputDir = path.dirname(outputPath);
 const browserStockfishDir = path.join(projectDir, 'public', 'stockfish');
 const stockfishPackageBinDir = path.join(projectDir, 'node_modules', 'stockfish', 'bin');
-const browserStockfishAssets = ['stockfish-18-single.js', 'stockfish-18-single.wasm'];
+const browserStockfishAssets = [
+  'stockfish-18-single.js',
+  'stockfish-18-single.wasm',
+  'stockfish-18-lite-single.js',
+  'stockfish-18-lite-single.wasm',
+];
 const shouldPrepare =
   process.env.NETLIFY === 'true' || process.env.VERCEL === '1' || process.env.PREPARE_STOCKFISH === 'true';
 
