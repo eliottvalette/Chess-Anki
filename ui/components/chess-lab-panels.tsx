@@ -295,18 +295,13 @@ export function LinesPanel({
             
             {drillActive && (drillStatus || deckFeedback) ? (
               <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <strong>
-                      {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
-                    </strong>
-                    <span>
-                      {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
-                    </span>
-                  </div>
-                  <button className={`${styles.action} ${styles.secondary}`} onClick={undoMove} type="button">
-                    Undo
-                  </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <strong>
+                    {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
+                  </strong>
+                  <span>
+                    {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
+                  </span>
                 </div>
               </div>
             ) : null}

@@ -303,42 +303,36 @@ export function useLabLines(
     setOpeningDrillActive(true);
     playSound('game-start');
 
-    if (firstTrainIndex === 0) {
-      const firstStep = path[0]!;
-      setActiveOpeningNodeId(firstStep.nodeId);
-      setInitialFen(firstStep.fen);
-      setMoveHistory([]);
+    const fullSans = [...tree.rootSan];
+    if (firstTrainIndex > 0) {
+      const sans = path.slice(1, firstTrainIndex + 1).map((step: any) => step.edgeSanFromParent).filter(Boolean) as string[];
+      fullSans.push(...sans);
+    }
+
+    const targetStep = path[firstTrainIndex] ?? path[0]!;
+    setActiveOpeningNodeId(targetStep.nodeId);
+
+    try {
+      const moves = buildStoredMovesFromSanList(null, fullSans);
+      setInitialFen(null);
+      setMoveHistory(moves);
+      deckReplayInitialFenRef.current = null;
+      deckReplayMovesRef.current = moves;
       setHistoryIndex(0);
       clearVariation();
-      setGame(new Chess(firstStep.fen));
-      advanceDrillToStep(0);
-    } else {
-      const rootStep = path[0]!;
-      setActiveOpeningNodeId(rootStep.nodeId);
-      setInitialFen(rootStep.fen);
-      
-      const sans = path.slice(1, firstTrainIndex + 1).map((step: any) => step.edgeSanFromParent).filter(Boolean) as string[];
-      try {
-        const moves = buildStoredMovesFromSanList(rootStep.fen, sans);
-        setMoveHistory(moves);
-        deckReplayInitialFenRef.current = rootStep.fen;
-        deckReplayMovesRef.current = moves;
-        setHistoryIndex(0);
-        clearVariation();
-        setGame(new Chess(rootStep.fen));
-        setOpeningDrillStatus('Playing opening moves...');
-        setOpeningDrillExpected(null);
-        clearSelection();
+      setGame(new Chess());
+      setOpeningDrillStatus('Playing opening moves...');
+      setOpeningDrillExpected(null);
+      clearSelection();
 
-        window.setTimeout(async () => {
-          await playDeckReplayToIndex(moves.length, activeTrainSide);
-          advanceDrillToStep(firstTrainIndex);
-        }, 500);
+      window.setTimeout(async () => {
+        await playDeckReplayToIndex(moves.length, activeTrainSide);
+        advanceDrillToStep(firstTrainIndex);
+      }, 500);
       } catch (err) {
         console.error('Failed to parse drill opening moves', err);
         advanceDrillToStep(firstTrainIndex);
       }
-    }
   }, [activeOpeningTree, activeTrainSide, advanceDrillToStep, clearSelection, clearVariation, deckReplayInitialFenRef, deckReplayMovesRef, modeRef, playDeckReplayToIndex, playSound, positionRequestIdRef, setActiveOpeningNodeId, setFileName, setGame, setHistoryIndex, setInitialFen, setMetadata, setMode, setMoveHistory, setOpeningDrillActive, setOpeningDrillExpected, setOpeningDrillStatus, setOrientation, setPreMoveAnalyses, setServerError, setShowArrow, setTimelineAnalyses, setTimelineError, timelineRequestIdRef]);
 
   const stopOpeningDrill = useCallback(() => {
@@ -357,6 +351,19 @@ export function useLabLines(
     setOpeningDrillStatus('');
     setOpeningDrillExpected(null);
     
+    if (!treeId) {
+      setActiveOpeningTree(null);
+      setInitialFen(null);
+      setMoveHistory([]);
+      setHistoryIndex(0);
+      setGame(new Chess());
+      clearVariation();
+      clearSelection();
+      setTimelineAnalyses([]);
+      setPreMoveAnalyses([]);
+      return;
+    }
+
     let tree = treeObj;
     if (tree) {
       setActiveOpeningTree(tree);
