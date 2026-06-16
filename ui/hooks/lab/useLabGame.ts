@@ -219,6 +219,23 @@ export function useLabGame(
             setOpeningDrillStatus(`Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Continuing...`);
 
             window.setTimeout(() => {
+              const correctStep = drillPathRef.current[nextStepIndex];
+              if (correctStep && correctStep.edgeUciFromParent) {
+                const prevGame = new Chess(drillPathRef.current[currentPathIndex].fen);
+                try {
+                  const correctMove = prevGame.move({
+                    from: correctStep.edgeUciFromParent.substring(0, 2),
+                    to: correctStep.edgeUciFromParent.substring(2, 4),
+                    promotion: correctStep.edgeUciFromParent.length === 5 ? correctStep.edgeUciFromParent[4] : undefined
+                  });
+                  if (correctMove) {
+                    setGame(prevGame);
+                    setMoveHistory(prev => [...prev.slice(0, -1), toStoredMove(correctMove)]);
+                  }
+                } catch (e) {
+                  // Fallback if anything goes wrong
+                }
+              }
               advanceDrillToStepRef.current(nextStepIndex);
             }, DRILL_OPPONENT_DELAY_MS + 500);
           }

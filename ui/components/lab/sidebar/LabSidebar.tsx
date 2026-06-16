@@ -10,7 +10,7 @@ import {
 import { formatBestMove } from '@/lib/chess-analysis-client';
 import styles from '../../chess-analysis-lab.module.css';
 import { Chess } from 'chess.js';
-import { createEmptyTrainSessionStats } from '../../../lib/lab-helpers';
+import { createEmptyTrainSessionStats, LAST_TRAINING_DECK_STORAGE_KEY } from '../../../lib/lab-helpers';
 import { type WorkspaceMode } from '../../../lib/analysis-types';
 
 export function LabSidebar() {
@@ -18,12 +18,12 @@ export function LabSidebar() {
   
   return (
     <>
-      <section className={`${styles.panel} ${styles.reviewPanel} ${lab.labState.mode === 'review' && lab.hasLoadedGame ? styles.reviewPanelLoaded : ''}`}>
-        <div className={styles.panelTabs}>
+      <section className={`${styles.panel} ${styles.contextPanel}`}>
+        <div className={styles.modeTabs}>
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map(tabMode => (
             <button
               key={tabMode}
-              className={`${styles.panelTab} ${lab.labState.mode === tabMode ? styles.panelTabActive : ''}`}
+              className={`${styles.modeTab} ${lab.labState.mode === tabMode ? styles.activeModeTab : ''}`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
             >
               {getModeLabel(tabMode)}
@@ -165,9 +165,38 @@ export function LabSidebar() {
               newDeckTitle={lab.labState.newDeckTitle}
               nextCard={lab.nextDeckCard}
               onBack={() => {
-                if (lab.labState.trainAllSession) {
-                  lab.labState.setTrainAllSession(false);
-                  void lab.loadTrainingDeck(lab.labState.selectedDeckId, { autoStart: false, libraryLoading: false });
+                const wasTrainAllSession = lab.labState.trainAllSession;
+                const restoreDeckId =
+                  lab.labState.selectedDeckId ??
+                  (typeof window !== 'undefined' ? window.localStorage.getItem(LAST_TRAINING_DECK_STORAGE_KEY) : null);
+
+                lab.labState.positionRequestIdRef.current += 1;
+                lab.labState.timelineRequestIdRef.current += 1;
+                lab.labState.setGame(new Chess());
+                lab.labState.setInitialFen(null);
+                lab.labState.setMoveHistory([]);
+                lab.labState.setHistoryIndex(0);
+                lab.clearVariation();
+                lab.labState.setMetadata(null);
+                lab.labState.setFileName('');
+                lab.labState.setPositionAnalysis(null);
+                lab.labState.setPreMoveAnalyses([]);
+                lab.labState.setTimelineAnalyses([]);
+                lab.labState.setPositionLoading(false);
+                lab.labState.setTimelineLoading(false);
+                lab.labState.setServerError('');
+                lab.labState.setTimelineError('');
+                lab.labState.setActiveDeckCard(null);
+                lab.labState.setDeckFeedback(null);
+                lab.labState.setDeckFeedbackArrowsVisible(false);
+                lab.labState.setTrainAllSession(false);
+                lab.labState.setTrainAllQueue([]);
+                lab.labState.setTrainSessionIndex(0);
+                lab.labState.setTrainSessionStats(createEmptyTrainSessionStats());
+                lab.clearSelection();
+
+                if (wasTrainAllSession) {
+                  void lab.loadTrainingDeck(restoreDeckId, { autoStart: false, libraryLoading: false });
                 }
               }}
               selectedDeckId={lab.labState.selectedDeckId}

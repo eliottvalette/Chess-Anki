@@ -215,15 +215,20 @@ export function useLabLines(
     if (isOpponentMovePlayback && step.edgeUciFromParent) {
       setGame(prevGame => {
         const nextGame = new Chess(prevGame.fen());
-        const move = nextGame.move({
-          from: step.edgeUciFromParent!.substring(0, 2),
-          to: step.edgeUciFromParent!.substring(2, 4),
-          promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
-        });
-        if (move) {
-          setMoveHistory(prev => [...prev, toStoredMove(move)]);
-          setHistoryIndex(prev => prev + 1);
-          playSound('move'); // Simplified from getMoveSoundSequence for decoupling
+        try {
+          const move = nextGame.move({
+            from: step.edgeUciFromParent!.substring(0, 2),
+            to: step.edgeUciFromParent!.substring(2, 4),
+            promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
+          });
+          if (move) {
+            setMoveHistory(prev => [...prev, toStoredMove(move)]);
+            setHistoryIndex(prev => prev + 1);
+            playSound('move'); // Simplified from getMoveSoundSequence for decoupling
+          }
+        } catch (e) {
+          // If the move fails (e.g. board out of sync), gracefully fallback to the correct state
+          return new Chess(step.fen);
         }
         return nextGame;
       });
