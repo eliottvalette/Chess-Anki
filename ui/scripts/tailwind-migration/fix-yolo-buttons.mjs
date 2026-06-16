@@ -5,7 +5,7 @@ const panelsPath = resolve('components/chess-lab-panels.tsx');
 let content = readFileSync(panelsPath, 'utf8');
 
 const YOLO_BASE =
-  "'border-[1px] border-solid border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] transition-border-color duration-[160ms] transition-ease,background-color delay-[160ms] transition-ease,color delay-[160ms] transition-ease,transform delay-[160ms] ease-[ease] border-[rgba(214,226,244,0.28)] bg-[rgba(4,8,15,0.58)] box-border min-h-[42px] px-[14px] py-0 rounded-[10px] text-[12px] font-[weight:400] tracking-[0.04em] uppercase text-[var(--text-disabled)] bg-[rgba(9,14,23,0.26)] border-[rgba(214,226,244,0.1)] cursor-not-allowed op-100 outline-2px solid var(--accent-strong) outline-offset-2px min-h-[36px] min-h-[38px] px-[8px] py-0 text-[11px] min-h-[34px] text-[10px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap'";
+  "'border-[1px] border-solid border-[--border)] bg-[rgba(9,14,23,0.38)] text-[--text)] transition-border-color duration-[160ms] transition-ease,background-color delay-[160ms] transition-ease,color delay-[160ms] transition-ease,transform delay-[160ms] ease-[ease] border-[rgba(214,226,244,0.28)] bg-[rgba(4,8,15,0.58)] box-border min-h-[42px] px-[14px] py-0 rounded-[10px] text-[12px] font-[400] tracking-[0.04em] uppercase text-[--text-disabled)] bg-[rgba(9,14,23,0.26)] border-[rgba(214,226,244,0.1)] cursor-not-allowed op-100 outline-2px solid var(--accent-strong) outline-offset-2px min-h-[36px] min-h-[38px] px-[8px] py-0 text-[11px] min-h-[34px] text-[10px] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap'";
 
 const YOLO_PRIMARY =
   "'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'";
@@ -19,10 +19,10 @@ const YOLO_CONFIRM =
   "'border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] border-[rgba(184,247,161,0.72)] bg-[rgba(184,247,161,0.18)]'";
 
 const YOLO_OPENING_TREE =
-  "'w-full min-w-0 flex flex-col gap-[8px] border-[1px] border-solid border-[rgba(214,226,244,0.18)] rounded-[10px] bg-[rgba(9,14,23,0.4)] text-[var(--text-muted)] px-[12px] py-[11px] text-left cursor-pointer transition-border-color duration-[160ms] transition-ease,background-color delay-[160ms] ease-[ease] border-[rgba(214,226,244,0.28)]'";
+  "'w-full min-w-0 flex flex-col gap-[8px] border-[1px] border-solid border-[rgba(214,226,244,0.18)] rounded-[10px] bg-[rgba(9,14,23,0.4)] text-[--text-muted)] px-[12px] py-[11px] text-left cursor-pointer transition-border-color duration-[160ms] transition-ease,background-color delay-[160ms] ease-[ease] border-[rgba(214,226,244,0.28)]'";
 
 const YOLO_ACTIVE_SIDE =
-  "'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]'";
+  "'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]'";
 
 const replacements = [
   [`\${${YOLO_BASE}} \${${YOLO_PRIMARY}} \${${YOLO_FULLWIDTH}}`, '${labFullWidthSideTab} ${labPrimaryButton}'],

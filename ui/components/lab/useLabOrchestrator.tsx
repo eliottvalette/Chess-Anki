@@ -2059,11 +2059,10 @@ export function useLabOrchestrator() {
   };
 
   const pageClassName = [
-    'min-h-svh h-svh overflow-hidden p-[18px] text-[var(--text)]',
-    '[--app-bg:#07101b] [--panel-bg:rgba(12,18,29,0.54)] [--surface:rgba(18,25,38,0.48)] [--surface-strong:rgba(9,14,23,0.72)] [--border:rgba(214,226,244,0.2)] [--border-soft:rgba(214,226,244,0.12)] [--text:#f5f8ff] [--text-muted:#c0cadb] [--text-soft:#8f9cb2] [--text-disabled:#657185] [--accent:#98b8ff] [--accent-strong:#c6d7ff] [--accent-bg:rgba(152,184,255,0.16)] [--positive:#8ae3c1] [--warning:#ffd27a] [--danger:#ff8d91] [--glass-shadow:0_24px_70px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] [--panel-scroll-gap:14px]',
+    'chess-lab min-h-svh h-svh overflow-hidden p-[18px] text-[--text)]',
     'max-[980px]:h-auto max-[980px]:min-h-svh max-[980px]:overflow-auto max-[720px]:p-3',
-    mode === 'train' ? '[--workspace-mode:train]' : '',
-    mode === 'train' && activeDeckCard ? '[--panel-scroll-gap:10px] max-[720px]:overflow-auto max-[720px]:p-1' : '',
+    mode === 'train' ? 'chess-lab--train' : '',
+    mode === 'train' && activeDeckCard ? 'chess-lab--train-session max-[720px]:overflow-auto max-[720px]:p-1' : '',
   ]
     .filter(Boolean)
     .join(' ');

@@ -7,10 +7,10 @@ import {
   TrainingProfilePanel,
   TrainPanel,
 } from '@/components/chess-lab-panels';
+import { lab } from '@/components/lab/lab-ui-classes';
 import { formatBestMove } from '@/lib/chess-analysis-client';
 import type { WorkspaceMode } from '../../../lib/analysis-types';
 import { createEmptyTrainSessionStats, LAST_TRAINING_DECK_STORAGE_KEY } from '../../../lib/lab-helpers';
-import styles from '../../chess-analysis-lab.module.css';
 import { useLab } from '../LabContext';
 
 export function LabSidebar() {
@@ -18,12 +18,12 @@ export function LabSidebar() {
 
   return (
     <>
-      <section className={`${styles.panel} ${styles.contextPanel}`}>
-        <div className={styles.modeTabs}>
+      <section className={`${lab.panel} ${lab.contextPanel}`}>
+        <div className={lab.modeTabs}>
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
             <button
               key={tabMode}
-              className={`${styles.modeTab} ${lab.labState.mode === tabMode ? styles.activeModeTab : ''}`}
+              className={`${lab.modeTab} ${lab.labState.mode === tabMode ? lab.activeModeTab : ''}`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
               type="button"
             >
@@ -33,7 +33,7 @@ export function LabSidebar() {
         </div>
 
         <div
-          className={`${styles.panelScroll} ${lab.labState.mode === 'review' && lab.hasLoadedGame ? styles.reviewPanelScroll : ''}`}
+          className={`${lab.panelScroll} ${lab.labState.mode === 'review' && lab.hasLoadedGame ? lab.reviewPanelScroll : ''}`}
         >
           {lab.labState.mode === 'review' ? (
             <ReviewPanel
