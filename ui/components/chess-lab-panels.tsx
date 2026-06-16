@@ -9,7 +9,7 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import dagre from 'dagre';
-import { type ChangeEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 
 function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
@@ -1005,7 +1005,8 @@ export function GameReviewPanel({
   timelineReviews: TimelineReview[];
   whiteReviewName: string;
 }) {
-  const activeMoveButtonRef = useRef<HTMLButtonElement | null>(null);
+  const historyScrollRef = useRef<HTMLDivElement | null>(null);
+  const activeRowRef = useRef<HTMLTableRowElement | null>(null);
   const currentReview = historyIndex > 0 ? (timelineReviews[historyIndex - 1] ?? null) : null;
   const activeMomentIsQueued =
     activeReviewMoment != null &&
@@ -1019,13 +1020,29 @@ export function GameReviewPanel({
   );
   const hasNextReviewStep = nextMomentIndex >= 0 || historyIndex < moveHistoryLength;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!hasLoadedGame) {
       return;
     }
 
-    activeMoveButtonRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' });
-  }, [hasLoadedGame]);
+    const scroller = historyScrollRef.current;
+    if (!scroller) {
+      return;
+    }
+
+    if (displayActivePly <= 0) {
+      scroller.scrollTo({ top: 0 });
+      return;
+    }
+
+    const activeRow = activeRowRef.current;
+    if (!activeRow) {
+      return;
+    }
+
+    const scrollTop = scroller.scrollTop + activeRow.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    scroller.scrollTo({ top: scrollTop });
+  }, [displayActivePly, hasLoadedGame, historyIndex]);
 
   if (!hasLoadedGame) {
     return (
@@ -1190,41 +1207,50 @@ export function GameReviewPanel({
         </div>
       </div>
 
-      <div className="min-h-0 overflow-y-auto overflow-x-hidden px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        className="min-h-0 overflow-y-auto overflow-x-hidden px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        ref={historyScrollRef}
+      >
         <table className="w-full table-fixed border-collapse" aria-label="Reviewed moves">
           <tbody>
-            {movePairs.map((pair) => (
-              <tr className="h-[38px] bg-[rgba(255,255,255,0.026)]" key={pair.moveNumber}>
-                <th
-                  className="text-(--text-soft) text-[12px] font-normal text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
-                  scope="row"
+            {movePairs.map((pair) => {
+              const isActiveRow = pair.whitePly === displayActivePly || pair.blackPly === displayActivePly;
+
+              return (
+                <tr
+                  className="h-[38px] bg-[rgba(255,255,255,0.026)]"
+                  key={pair.moveNumber}
+                  ref={isActiveRow ? activeRowRef : undefined}
                 >
-                  {pair.moveNumber}.
-                </th>
-                <ReviewMoveBadgeCell review={timelineReviews[pair.whitePly - 1] ?? null} />
-                <td className="p-0 align-middle">
-                  <ReviewMoveButton
-                    activeMoveButtonRef={activeMoveButtonRef}
-                    activePly={displayActivePly}
-                    jumpToIndex={jumpToIndex}
-                    move={pair.white}
-                    ply={pair.whitePly}
-                    review={timelineReviews[pair.whitePly - 1] ?? null}
-                  />
-                </td>
-                <ReviewMoveBadgeCell review={timelineReviews[pair.blackPly - 1] ?? null} />
-                <td className="p-0 align-middle">
-                  <ReviewMoveButton
-                    activeMoveButtonRef={activeMoveButtonRef}
-                    activePly={displayActivePly}
-                    jumpToIndex={jumpToIndex}
-                    move={pair.black}
-                    ply={pair.blackPly}
-                    review={timelineReviews[pair.blackPly - 1] ?? null}
-                  />
-                </td>
-              </tr>
-            ))}
+                  <th
+                    className="text-(--text-soft) text-[12px] font-normal text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
+                    scope="row"
+                  >
+                    {pair.moveNumber}.
+                  </th>
+                  <ReviewMoveBadgeCell review={timelineReviews[pair.whitePly - 1] ?? null} />
+                  <td className="p-0 align-middle">
+                    <ReviewMoveButton
+                      activePly={displayActivePly}
+                      jumpToIndex={jumpToIndex}
+                      move={pair.white}
+                      ply={pair.whitePly}
+                      review={timelineReviews[pair.whitePly - 1] ?? null}
+                    />
+                  </td>
+                  <ReviewMoveBadgeCell review={timelineReviews[pair.blackPly - 1] ?? null} />
+                  <td className="p-0 align-middle">
+                    <ReviewMoveButton
+                      activePly={displayActivePly}
+                      jumpToIndex={jumpToIndex}
+                      move={pair.black}
+                      ply={pair.blackPly}
+                      review={timelineReviews[pair.blackPly - 1] ?? null}
+                    />
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1364,14 +1390,12 @@ function ReviewSaveDeckPanel({
 }
 
 function ReviewMoveButton({
-  activeMoveButtonRef,
   activePly,
   jumpToIndex,
   move,
   ply,
   review,
 }: {
-  activeMoveButtonRef: RefObject<HTMLButtonElement | null>;
   activePly: number;
   jumpToIndex: (index: number) => void;
   move: StoredMove | null;
@@ -1389,7 +1413,6 @@ function ReviewMoveButton({
     <button
       className={`w-full min-w-0 min-h-[30px] relative inline-flex items-center justify-start gap-[6px] border border-solid border-transparent rounded-[7px] bg-transparent pt-0 pb-0 pl-[2px] pr-[8px] font-inherit text-[15px] font-normal text-left cursor-pointer text-(--text-muted) hover:bg-[rgba(255,255,255,0.06)] hover:text-(--text) ${isActive ? 'bg-[rgba(198,215,255,0.14)] text-(--text)' : ''}`}
       onClick={() => jumpToIndex(ply)}
-      ref={isActive ? activeMoveButtonRef : undefined}
       style={moveColor ? { color: moveColor } : undefined}
       type="button"
     >

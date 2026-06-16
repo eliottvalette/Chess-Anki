@@ -1045,7 +1045,7 @@ export function useLabOrchestrator() {
     { loadTrainingDeck },
   );
 
-  const { goToReviewMoment } = useLabReview(labState, {
+  const { goToReviewMoment, cancelReviewPlayback } = useLabReview(labState, {
     reviewPlaybackRequestIdRef,
     playSoundSequence,
     jumpToIndex,
@@ -1053,6 +1053,16 @@ export function useLabOrchestrator() {
     reviewPlayerSide,
     orientation,
   });
+
+  const jumpToReviewIndex = useCallback(
+    (index: number) => {
+      if (mode === 'review' && !activeDeckCard) {
+        cancelReviewPlayback();
+      }
+      jumpToIndex(index);
+    },
+    [activeDeckCard, cancelReviewPlayback, jumpToIndex, mode],
+  );
 
   const handleGoToReviewMoment = useCallback(
     (index: number) => {
@@ -1452,6 +1462,10 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
+          cancelReviewPlayback();
+        }
+
         if (openingDrillActive) {
           jumpToIndex(historyIndex - 1);
           return;
@@ -1488,6 +1502,10 @@ export function useLabOrchestrator() {
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         event.stopPropagation();
+
+        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
+          cancelReviewPlayback();
+        }
 
         if (openingDrillActive) {
           jumpToIndex(historyIndex + 1);
@@ -1533,6 +1551,10 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
+          cancelReviewPlayback();
+        }
+
         if (openingDrillActive) {
           jumpToIndex(moveHistory.length);
           return;
@@ -1553,6 +1575,10 @@ export function useLabOrchestrator() {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         event.stopPropagation();
+
+        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
+          cancelReviewPlayback();
+        }
 
         if (openingDrillActive) {
           jumpToIndex(moveHistory.length > 0 ? 1 : 0);
@@ -1591,6 +1617,7 @@ export function useLabOrchestrator() {
   }, [
     activeDeckCard,
     advanceDeckCard,
+    cancelReviewPlayback,
     clearSelection,
     clearVariation,
     deckFeedback,
@@ -2074,6 +2101,8 @@ export function useLabOrchestrator() {
     trainingContext,
     tryMove,
     jumpToIndex,
+    jumpToReviewIndex,
+    cancelReviewPlayback,
     undoMove,
     highlightMoves,
     clearSelection,

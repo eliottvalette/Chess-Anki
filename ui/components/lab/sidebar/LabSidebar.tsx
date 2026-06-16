@@ -44,11 +44,12 @@ export function LabSidebar() {
               goToReviewMoment={lab.handleGoToReviewMoment}
               hasLoadedGame={lab.hasLoadedGame}
               historyIndex={lab.labState.historyIndex}
-              jumpToIndex={lab.jumpToIndex}
+              jumpToIndex={lab.jumpToReviewIndex}
               loadRecentGame={lab.loadRecentChessGame}
               moveHistoryLength={lab.labState.moveHistory.length}
               movePairs={lab.movePairs}
               onBack={() => {
+                lab.cancelReviewPlayback();
                 lab.persistReviewWorkspaceSnapshot();
                 lab.labState.setGame(new Chess());
                 lab.labState.setInitialFen(null);

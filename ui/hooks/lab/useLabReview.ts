@@ -109,8 +109,13 @@ export function useLabReview(
     [moveHistory.length, playToHistoryIndex, setMode, setReviewIndex],
   );
 
+  const cancelReviewPlayback = useCallback(() => {
+    reviewPlaybackRequestIdRef.current += 1;
+  }, [reviewPlaybackRequestIdRef]);
+
   return {
     playToHistoryIndex,
     goToReviewMoment,
+    cancelReviewPlayback,
   };
 }
