@@ -4,9 +4,11 @@ import test from 'node:test';
 import {
   buildOpeningTrees,
   chooseWeightedOpponentEdge,
+  classifyOpeningDrillMove,
   formatOpeningTreeDisplayName,
   normalizeOpeningFen,
   parseSanMoves,
+  resolveAcceptedTrainMoveUcis,
   resolveOpeningLibrary,
 } from './opening-tree.ts';
 
@@ -37,7 +39,7 @@ test('buildOpeningTrees groups openings by normalized position after 4 plies', (
         source: 'recent_game',
       },
     ],
-    { ownerProfileId: 'profile-1', targetDepth: 8 },
+    { ownerProfileId: 'profile-1', targetDepth: 8, rootPly: 4 },
   );
 
   assert.equal(trees.length, 1);
@@ -45,13 +47,152 @@ test('buildOpeningTrees groups openings by normalized position after 4 plies', (
   assert.equal(trees[0].sourceCount, 2);
 });
 
-test('resolveOpeningLibrary separates black repertoires by first white move', () => {
+test('resolveOpeningLibrary groups by first white move', () => {
   const e4 = parseSanMoves(['e4', 'c5', 'Nf3', 'd6']);
   const d4 = parseSanMoves(['d4', 'Nf6', 'c4', 'g6']);
 
-  assert.equal(resolveOpeningLibrary('black', e4), 'black_vs_e4');
-  assert.equal(resolveOpeningLibrary('black', d4), 'black_vs_d4');
-  assert.equal(resolveOpeningLibrary('white', e4), 'white');
+  assert.equal(resolveOpeningLibrary(e4), 'e4');
+  assert.equal(resolveOpeningLibrary(d4), 'd4');
+});
+
+test('resolveAcceptedTrainMoveUcis keeps engine best and masters edges only', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'train-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'root',
+        ply: 1,
+        sideToMove: 'white',
+        bestUci: 'g1f3',
+        bestSan: 'Nf3',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 50,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'engine-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-best',
+        uci: 'g1f3',
+        san: 'Nf3',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+      {
+        id: 'recent-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-recent',
+        uci: 'd2d4',
+        san: 'd4',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 3,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 9,
+        isEngineBest: false,
+      },
+      {
+        id: 'masters-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-masters',
+        uci: 'b1c3',
+        san: 'Nc3',
+        moveBy: 'white',
+        source: 'lichess_masters',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 120,
+        priority: 8,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const accepted = resolveAcceptedTrainMoveUcis(tree, 'train-node');
+
+  assert.deepEqual(accepted.acceptedUcis.sort(), ['b1c3', 'g1f3']);
+  assert.equal(accepted.primaryUci, 'g1f3');
+});
+
+test('classifyOpeningDrillMove marks best, book, and miss', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'train-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'root',
+        ply: 1,
+        sideToMove: 'white',
+        bestUci: 'g1f3',
+        bestSan: 'Nf3',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 50,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'engine-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-best',
+        uci: 'g1f3',
+        san: 'Nf3',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+      {
+        id: 'masters-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-masters',
+        uci: 'b1c3',
+        san: 'Nc3',
+        moveBy: 'white',
+        source: 'lichess_masters',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 120,
+        priority: 8,
+        isEngineBest: false,
+      },
+    ],
+  };
+  const fenBefore = tree.nodes[0].fen;
+  const expected = { primaryUci: 'g1f3', acceptedUcis: ['g1f3', 'b1c3'] };
+
+  assert.deepEqual(classifyOpeningDrillMove(tree, 'train-node', fenBefore, 'g1f3', expected), {
+    correct: true,
+    exact: true,
+  });
+  assert.deepEqual(classifyOpeningDrillMove(tree, 'train-node', fenBefore, 'b1c3', expected), {
+    correct: true,
+    exact: false,
+  });
+  assert.deepEqual(classifyOpeningDrillMove(tree, 'train-node', fenBefore, 'd2d4', expected), {
+    correct: false,
+    exact: false,
+  });
 });
 
 test('chooseWeightedOpponentEdge prefers higher-priority branches deterministically for a seed', () => {

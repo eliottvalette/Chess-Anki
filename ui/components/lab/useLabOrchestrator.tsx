@@ -639,7 +639,7 @@ export function useLabOrchestrator() {
 
     return {
       move: classifiedMove,
-      category: deckFeedback.correct ? ('best' as const) : ('miss' as const),
+      category: deckFeedback.correct ? (deckFeedback.exact ? ('best' as const) : ('book' as const)) : ('miss' as const),
     };
   }, [currentMoves, deckFeedback, historyIndex, mode, moveHistory.length, openingDrillActive]);
   const boardSquareStyles = useMemo(() => {

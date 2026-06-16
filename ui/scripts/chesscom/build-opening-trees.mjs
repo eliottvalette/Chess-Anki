@@ -203,6 +203,7 @@ function buildTreeForGroup(group, options) {
     rootUci: rootMoves.map((move) => move.uci),
     sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
     targetDepth: options.targetDepth,
+    trainSide: first.input.trainSide,
     nodes: [...nodes.values()],
     edges: [...edges.values()],
   };

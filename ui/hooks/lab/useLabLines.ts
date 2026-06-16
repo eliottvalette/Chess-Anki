@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
@@ -7,6 +7,7 @@ import type { ChessSoundKey } from '@/lib/chess-sounds';
 import { DRILL_OPPONENT_DELAY_MS, type OpeningTreesPayload, readJsonResponse } from '@/lib/lab-helpers';
 import {
   buildDrillPath,
+  buildOpeningDrillExpected,
   type DrillPathStep,
   findPathToNode,
   type OpeningSide,
@@ -100,9 +101,7 @@ export function useLabLines(
       setServerError('');
       setActiveOpeningNodeId(rootNode?.id ?? null);
       setOpeningDrillExpected(
-        rootNode && rootNode.sideToMove === activeTrainSide
-          ? { nodeId: rootNode.id, uci: rootNode.bestUci, san: rootNode.bestSan }
-          : null,
+        rootNode && rootNode.sideToMove === activeTrainSide ? buildOpeningDrillExpected(tree, rootNode.id) : null,
       );
       setOpeningDrillStatus('');
       if (rootNode) {
@@ -219,7 +218,6 @@ export function useLabLines(
   }, [loadOpeningTrees, setOpeningTreeActionError, setOpeningTreeActionLoading]);
 
   const drillTimeoutRef = useRef<number | null>(null);
-  const restartOpeningDrillRef = useRef<() => void>(() => {});
 
   const cancelDrillOpponentMove = useCallback(() => {
     if (drillTimeoutRef.current) {
@@ -227,15 +225,6 @@ export function useLabLines(
       drillTimeoutRef.current = null;
     }
   }, []);
-
-  const scheduleOpeningDrillRestart = useCallback(() => {
-    setOpeningDrillExpected(null);
-    setOpeningDrillStatus('Branch complete. Starting another path...');
-    cancelDrillOpponentMove();
-    drillTimeoutRef.current = window.setTimeout(() => {
-      restartOpeningDrillRef.current();
-    }, DRILL_OPPONENT_DELAY_MS);
-  }, [cancelDrillOpponentMove, setOpeningDrillExpected, setOpeningDrillStatus]);
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -245,7 +234,9 @@ export function useLabLines(
       const step = path[stepIndex];
 
       if (!step) {
-        scheduleOpeningDrillRestart();
+        setOpeningDrillExpected(null);
+        setOpeningDrillStatus('Branch complete.');
+        setOpeningDrillActive(false);
         return;
       }
 
@@ -300,7 +291,15 @@ export function useLabLines(
       clearSelection();
 
       if (step.isTrainTurn) {
-        setOpeningDrillExpected({ nodeId: step.nodeId, uci: step.bestUci, san: step.bestSan });
+        const drillExpected = activeOpeningTree
+          ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
+          : {
+              nodeId: step.nodeId,
+              uci: step.bestUci,
+              san: step.bestSan,
+              acceptedUcis: step.bestUci ? [step.bestUci] : [],
+            };
+        setOpeningDrillExpected(drillExpected);
         setOpeningDrillStatus(`Your move (${trainStepNumber}/${trainStepTotal}). Find the best move.`);
         setShowArrow(false);
       } else if (!syncOnly) {
@@ -317,7 +316,9 @@ export function useLabLines(
             advanceDrillToStep(nextIndex, { isOpponentMovePlayback: true });
           }, DRILL_OPPONENT_DELAY_MS);
         } else {
-          scheduleOpeningDrillRestart();
+          setOpeningDrillExpected(null);
+          setOpeningDrillStatus('Branch complete.');
+          setOpeningDrillActive(false);
         }
       } else {
         setOpeningDrillExpected(null);
@@ -326,12 +327,12 @@ export function useLabLines(
       }
     },
     [
+      activeOpeningTree,
       cancelDrillOpponentMove,
       clearSelection,
       drillPathIndexRef,
       drillPathRef,
       playSound,
-      scheduleOpeningDrillRestart,
       setActiveOpeningNodeId,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
@@ -340,6 +341,7 @@ export function useLabLines(
       setMoveHistory,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
+      setOpeningDrillActive,
       setPositionAnalysis,
       setServerError,
       setShowArrow,
@@ -451,12 +453,6 @@ export function useLabLines(
     ],
   );
 
-  useEffect(() => {
-    restartOpeningDrillRef.current = () => {
-      startOpeningDrill();
-    };
-  }, [startOpeningDrill]);
-
   const stopOpeningDrill = useCallback(() => {
     setOpeningDrillActive(false);
     setOpeningDrillExpected(null);
@@ -556,9 +552,7 @@ export function useLabLines(
         setHistoryIndex(0);
         clearVariation();
         setGame(new Chess(node.fen));
-        setOpeningDrillExpected(
-          node.sideToMove === activeTrainSide ? { nodeId: node.id, uci: node.bestUci, san: node.bestSan } : null,
-        );
+        setOpeningDrillExpected(node.sideToMove === activeTrainSide ? buildOpeningDrillExpected(tree, node.id) : null);
         setOpeningDrillStatus(
           node.sideToMove === activeTrainSide ? 'Find the best move from this node.' : 'Opponent node selected.',
         );
@@ -610,7 +604,7 @@ export function useLabLines(
         } else {
           setOpeningDrillActive(false);
           setOpeningDrillExpected(
-            node.sideToMove === activeTrainSide ? { nodeId: node.id, uci: node.bestUci, san: node.bestSan } : null,
+            node.sideToMove === activeTrainSide ? buildOpeningDrillExpected(tree, node.id) : null,
           );
           setOpeningDrillStatus(
             node.sideToMove === activeTrainSide ? 'Find the best move from this node.' : 'Opponent node selected.',

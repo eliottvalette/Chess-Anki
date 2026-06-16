@@ -33,8 +33,22 @@ export type OpeningTreeDraft = {
   rootUci: string[];
   sourceCount: number;
   targetDepth: number;
+  trainSide: OpeningSide;
   nodes: OpeningNodeDraft[];
   edges: OpeningEdgeDraft[];
+};
+
+export type OpeningDrillExpectedMove = {
+  nodeId: string;
+  uci: string | null;
+  san: string | null;
+  acceptedUcis: string[];
+};
+
+export type AcceptedTrainMoves = {
+  primaryUci: string | null;
+  primarySan: string | null;
+  acceptedUcis: string[];
 };
 
 export type OpeningNodeDraft = {
@@ -144,6 +158,87 @@ export function formatOpeningTreeDisplayName(name: string) {
   const withoutMoves = withoutEco.replace(/\s+\d+\.(?:\.{2})?.+$/, '').trim();
 
   return withoutMoves || withoutEco || cleanName;
+}
+
+export function resolveAcceptedTrainMoveUcis(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+): AcceptedTrainMoves {
+  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+
+  if (!node) {
+    return { primaryUci: null, primarySan: null, acceptedUcis: [] };
+  }
+
+  const acceptedUcis = new Set<string>();
+
+  if (node.bestUci) {
+    acceptedUcis.add(node.bestUci);
+  }
+
+  for (const edge of tree.edges) {
+    if (edge.fromNodeId !== nodeId) {
+      continue;
+    }
+
+    if (edge.isEngineBest || edge.mastersGames > 0) {
+      acceptedUcis.add(edge.uci);
+    }
+  }
+
+  return {
+    primaryUci: node.bestUci,
+    primarySan: node.bestSan,
+    acceptedUcis: [...acceptedUcis],
+  };
+}
+
+export function buildOpeningDrillExpected(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+): OpeningDrillExpectedMove | null {
+  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+
+  if (!node) {
+    return null;
+  }
+
+  const accepted = resolveAcceptedTrainMoveUcis(tree, nodeId);
+
+  return {
+    nodeId,
+    uci: accepted.primaryUci,
+    san: accepted.primarySan,
+    acceptedUcis: accepted.acceptedUcis,
+  };
+}
+
+export function isAcceptedOpeningDrillMove(fenBefore: string, playedUci: string, acceptedUcis: string[]) {
+  return acceptedUcis.includes(playedUci);
+}
+
+export function classifyOpeningDrillMove(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+  fenBefore: string,
+  playedUci: string,
+  expected: Pick<AcceptedTrainMoves, 'primaryUci' | 'acceptedUcis'> | null,
+) {
+  const resolved = expected ?? resolveAcceptedTrainMoveUcis(tree, nodeId);
+  const primaryUci = resolved.primaryUci;
+
+  if (resolved.acceptedUcis.length === 0 && primaryUci == null) {
+    return { correct: false, exact: false };
+  }
+
+  if (!isAcceptedOpeningDrillMove(fenBefore, playedUci, resolved.acceptedUcis)) {
+    return { correct: false, exact: false };
+  }
+
+  return {
+    correct: true,
+    exact: primaryUci != null && playedUci === primaryUci,
+  };
 }
 
 export function normalizeOpeningFen(fen: string) {
@@ -593,6 +688,7 @@ function buildTreeForGroup(
     rootUci: rootMoves.map((move) => move.uci),
     sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
     targetDepth: options.targetDepth,
+    trainSide: first.input.trainSide,
     nodes: [...nodes.values()].sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id)),
     edges: [...edges.values()].sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id)),
   };

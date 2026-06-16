@@ -6,13 +6,19 @@ import type { StoredMove } from '@/lib/chess-analysis-client';
 import { formatBestMove, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
+import { isMoveInLocalOpeningBook } from '@/lib/opening-book';
 import {
   buildPendingDeckFeedback,
   type DeckCard,
   type DeckFeedback,
   finalizeDeckFeedback,
 } from '@/lib/opening-training';
-import { buildDrillPath, chooseWeightedOpponentEdge, type DrillPathStep } from '@/lib/opening-tree';
+import {
+  buildDrillPath,
+  chooseWeightedOpponentEdge,
+  classifyOpeningDrillMove,
+  type DrillPathStep,
+} from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 
 const DRILL_OPPONENT_DELAY_MS = 600;
@@ -47,7 +53,6 @@ export function useLabGame(
     openingDrillExpected,
     activeOpeningNodeId,
     activeOpeningTree,
-    positionAnalysis,
     trainAllSession,
     initialFen,
     setVariationBaseIndex,
@@ -130,28 +135,22 @@ export function useLabGame(
         return;
       }
 
-      if (modeRef.current === 'lines' && activeOpeningNodeId) {
-        let expectedUci = openingDrillExpected?.uci ?? positionAnalysis?.bestMove ?? null;
-        let expectedSan = openingDrillExpected?.san ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
-        let correct = expectedUci ? move.uci === expectedUci : true;
+      if (modeRef.current === 'lines' && activeOpeningNodeId && activeOpeningTree) {
         const nodeId = activeOpeningNodeId;
-        let isAlternativeValid = false;
-        let newActiveNodeId = nodeId;
-
-        if (activeOpeningTree && activeOpeningNodeId && !correct) {
-          const outgoing = activeOpeningTree.edges.filter((e) => e.fromNodeId === activeOpeningNodeId);
-          const altEdge = outgoing.find((e) => e.uci === move.uci);
-          if (altEdge) {
-            const targetNode = activeOpeningTree.nodes.find((n) => n.id === altEdge.toNodeId);
-            if (targetNode) {
-              isAlternativeValid = true;
-              correct = true;
-              expectedUci = move.uci;
-              expectedSan = move.san;
-              newActiveNodeId = targetNode.id;
-            }
-          }
-        }
+        const drillExpected = openingDrillExpected;
+        const acceptedMoves = drillExpected?.acceptedUcis ?? [];
+        const primaryUci = drillExpected?.uci ?? null;
+        const primarySan = drillExpected?.san ?? (primaryUci ? formatBestMove(currentFen, primaryUci) : null);
+        const classification = classifyOpeningDrillMove(activeOpeningTree, nodeId, currentFen, move.uci, {
+          primaryUci,
+          acceptedUcis: acceptedMoves,
+        });
+        const inLocalBook = isMoveInLocalOpeningBook(currentFen, move.uci);
+        const correct = classification.correct || inLocalBook;
+        const exact = correct && primaryUci != null && move.uci === primaryUci;
+        const matchingEdge = activeOpeningTree.edges.find(
+          (edge) => edge.fromNodeId === nodeId && edge.uci === move.uci,
+        );
 
         setMoveHistory((prev) => [...prev, move]);
         setHistoryIndex((prev) => prev + 1);
@@ -161,35 +160,36 @@ export function useLabGame(
         setServerError('');
         setSelectedSquare(null);
         setSquareStyles({});
-        setOpeningDrillExpected(null);
 
         if (correct) {
+          setOpeningDrillExpected(null);
           setDeckFeedback({
             correct: true,
-            exact: move.uci === (expectedUci ?? move.uci),
+            exact,
             playedSan: move.san,
             playedUci: move.uci,
-            expectedSan: expectedSan ?? move.san,
-            expectedUci: expectedUci ?? move.uci,
+            expectedSan: primarySan ?? move.san,
+            expectedUci: primaryUci ?? move.uci,
             validationMode: 'strict_best',
             pending: false,
           });
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
-        } else if (expectedSan && expectedUci) {
+        } else if (primarySan && primaryUci) {
           setDeckFeedback({
             correct: false,
             exact: false,
             playedSan: move.san,
             playedUci: move.uci,
-            expectedSan,
-            expectedUci,
+            expectedSan: primarySan,
+            expectedUci: primaryUci,
             validationMode: 'strict_best',
             pending: false,
           });
-          setDeckFeedbackArrowsVisible(true);
-          setShowArrow(true);
+          setDeckFeedbackArrowsVisible(false);
+          setShowArrow(false);
         }
+
         playSoundSequence(
           getMoveSoundSequence({
             move,
@@ -204,57 +204,66 @@ export function useLabGame(
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'attempt', nodeId, playedUci: move.uci, expectedUci, correct }),
+          body: JSON.stringify({
+            action: 'attempt',
+            nodeId,
+            playedUci: move.uci,
+            expectedUci: primaryUci,
+            correct,
+          }),
         });
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
-          let currentPathIndex = drillPathIndexRef.current;
-          let nextStepIndex = currentPathIndex + 1;
-
-          if (isAlternativeValid && activeOpeningTree) {
-            const newPath = buildDrillPath(activeOpeningTree, {
-              trainSide: state.activeTrainSide,
-              seed: Date.now(),
-              startNodeId: newActiveNodeId,
-            });
-            if (newPath.length > 0) {
-              drillPathRef.current = newPath;
-              drillPathIndexRef.current = 0;
-              currentPathIndex = 0;
-              nextStepIndex = 0;
-            }
-          }
-
           if (correct) {
-            setOpeningDrillStatus(isAlternativeValid ? 'Alternative valid.' : 'Correct.');
+            let nextStepIndex = drillPathIndexRef.current + 1;
 
-            window.setTimeout(() => {
-              advanceDrillToStepRef.current(nextStepIndex);
-            }, DRILL_OPPONENT_DELAY_MS);
+            if (matchingEdge) {
+              const targetNodeId = matchingEdge.toNodeId;
+              const nextStep = drillPathRef.current[nextStepIndex];
+
+              if (!nextStep || nextStep.nodeId !== targetNodeId) {
+                const newPath = buildDrillPath(activeOpeningTree, {
+                  trainSide: state.activeTrainSide,
+                  preferWeak: true,
+                  seed: Date.now(),
+                  startNodeId: targetNodeId,
+                });
+
+                if (newPath.length > 0) {
+                  drillPathRef.current = newPath;
+                  drillPathIndexRef.current = 0;
+                  nextStepIndex = 0;
+                }
+              }
+
+              setActiveOpeningNodeId(targetNodeId);
+              setOpeningDrillStatus(classification.exact ? 'Correct.' : 'Book move.');
+
+              window.setTimeout(() => {
+                advanceDrillToStepRef.current(nextStepIndex);
+              }, DRILL_OPPONENT_DELAY_MS);
+            } else {
+              setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
+            }
           } else {
             setOpeningDrillStatus(
-              `Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Use undo (left arrow) to retry.`,
+              `Miss. Best was ${primarySan ?? primaryUci ?? 'unknown'}. Use undo (left arrow) to retry.`,
             );
           }
-        } else {
-          const nextNodeEdge = activeOpeningTree?.edges.find(
-            (edge) => edge.fromNodeId === nodeId && edge.uci === move.uci,
-          );
-          const nextNode = nextNodeEdge
-            ? (activeOpeningTree?.nodes.find((node) => node.id === nextNodeEdge.toNodeId) ?? null)
-            : null;
+        } else if (correct && matchingEdge) {
+          const nextNode = activeOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
 
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
 
             if (nextNode.sideToMove !== state.activeTrainSide) {
-              const opponentEdges = activeOpeningTree?.edges.filter((edge) => edge.fromNodeId === nextNode.id) ?? [];
+              const opponentEdges = activeOpeningTree.edges.filter((edge) => edge.fromNodeId === nextNode.id);
               const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
               const afterOpponent = opponentEdge
-                ? (activeOpeningTree?.nodes.find((node) => node.id === opponentEdge.toNodeId) ?? null)
+                ? (activeOpeningTree.nodes.find((node) => node.id === opponentEdge.toNodeId) ?? null)
                 : null;
 
-              if (afterOpponent) {
+              if (afterOpponent && opponentEdge) {
                 window.setTimeout(() => {
                   setGame((prevGame) => {
                     const nextGame = new Chess(prevGame.fen());
@@ -383,7 +392,6 @@ export function useLabGame(
       openingDrillActive,
       openingDrillExpected,
       playSoundSequence,
-      positionAnalysis?.bestMove,
       saveTrainingAttempt,
       setActiveOpeningNodeId,
       setDeckFeedback,

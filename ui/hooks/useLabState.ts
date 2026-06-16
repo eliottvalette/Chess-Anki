@@ -6,7 +6,7 @@ import type { GameMetadata, ReviewSide, StoredMove } from '@/lib/chess-analysis-
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback, OpeningSeedLine } from '@/lib/opening-training';
-import type { DrillPathStep, OpeningTreeDetail } from '@/lib/opening-tree';
+import type { DrillPathStep, OpeningDrillExpectedMove, OpeningTreeDetail } from '@/lib/opening-tree';
 import type { TrainingDeckSummary, TrainSessionStats, WorkspaceMode } from '../components/chess-lab-panels';
 import type { TrainingProfile } from '../lib/analysis-types';
 
@@ -100,11 +100,7 @@ export function useLabState() {
   const [selectedOpeningTreeId, setSelectedOpeningTreeId] = useState<string | null>(null);
   const [activeOpeningNodeId, setActiveOpeningNodeId] = useState<string | null>(null);
   const [openingDrillStatus, setOpeningDrillStatus] = useState('');
-  const [openingDrillExpected, setOpeningDrillExpected] = useState<{
-    nodeId: string;
-    uci: string | null;
-    san: string | null;
-  } | null>(null);
+  const [openingDrillExpected, setOpeningDrillExpected] = useState<OpeningDrillExpectedMove | null>(null);
   const [openingDrillActive, setOpeningDrillActive] = useState(false);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);

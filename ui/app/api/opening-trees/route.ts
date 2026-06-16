@@ -247,7 +247,7 @@ async function _upsertTreeDraft(
 
 async function _enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
   await enrichEngineBestMoves(draft);
-  await enrichLichessOpponentMoves(draft);
+  await enrichLichessBookMoves(draft);
 }
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
@@ -279,10 +279,19 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
   }
 }
 
-async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
-  const opponentNodes = draft.nodes.sort((left, right) => left.ply - right.ply).slice(0, MAX_LICHESS_IMPORT_NODES);
+async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
+  const trainSide = draft.trainSide;
+  const trainNodes = draft.nodes
+    .filter((node) => node.sideToMove === trainSide)
+    .sort((left, right) => left.ply - right.ply)
+    .slice(0, MAX_LICHESS_IMPORT_NODES);
+  const opponentNodes = draft.nodes
+    .filter((node) => node.sideToMove !== trainSide)
+    .sort((left, right) => left.ply - right.ply)
+    .slice(0, MAX_LICHESS_IMPORT_NODES);
+  const nodes = [...new Map([...trainNodes, ...opponentNodes].map((node) => [node.id, node])).values()];
 
-  for (const node of opponentNodes) {
+  for (const node of nodes) {
     try {
       const explorer = await fetchLichessOpeningExplorer(node.fen);
       const moves = (explorer.moves ?? [])
