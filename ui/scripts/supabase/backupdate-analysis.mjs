@@ -1,12 +1,7 @@
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
-import { fileURLToPath } from 'node:url';
-
-import { fetchArchives, fetchRecentGames } from '../chesscom/api.mjs';
-import { dedupeTrainingCards } from '../chesscom/deck-mistake-filter.mjs';
-import { buildCardsForGame, buildLineRecord, scoreToCpForSide } from '../chesscom/build-recent-blitz-deck.mjs';
 import {
-  DEFAULT_ANALYZE_BASE_URL,
   analyzePositionsCached,
   analyzeSingleCached,
   analyzeTimelineForPgn,
@@ -14,12 +9,13 @@ import {
   buildCacheAnalysisPayload,
   buildPgnHash,
   buildStoredMovesFromSans,
+  DEFAULT_ANALYZE_BASE_URL,
   getDeterministicProfile,
 } from '../analysis/deterministic-runner.mjs';
-import {
-  buildCardMoveReviewsFromAnalyses,
-  buildTimelineAnalysesForMoves,
-} from './card-move-reviews-lib.mjs';
+import { fetchArchives, fetchRecentGames } from '../chesscom/api.mjs';
+import { buildCardsForGame, buildLineRecord, scoreToCpForSide } from '../chesscom/build-recent-blitz-deck.mjs';
+import { dedupeTrainingCards } from '../chesscom/deck-mistake-filter.mjs';
+import { buildCardMoveReviewsFromAnalyses, buildTimelineAnalysesForMoves } from './card-move-reviews-lib.mjs';
 import { loadLocalEnv, requireAdminKey, requireEnv } from './env.mjs';
 
 const DEFAULT_COUNT = 50;
@@ -27,7 +23,7 @@ const DEFAULT_TIME_CLASS = 'blitz';
 const DECK_ID = 'recent-blitz-trainer-v1';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
@@ -105,7 +101,7 @@ export async function main() {
 
   const cards = await attachMoveReviews({
     cards: await applyVerifiedCardAnswers({
-      cards: dedupeTrainingCards(rawCards).map(card => ({ ...card, deck_id: deckId })),
+      cards: dedupeTrainingCards(rawCards).map((card) => ({ ...card, deck_id: deckId })),
       baseUrl: options.baseUrl,
       profile,
       analysisCache,
@@ -152,7 +148,9 @@ export async function main() {
   }
 
   if (generatedAnswerAudit.mismatch_count > 0 || generatedAnswerAudit.missing_best_count > 0) {
-    throw new Error(`Refusing to apply: ${generatedAnswerAudit.mismatch_count} generated card answers do not match deterministic best move.`);
+    throw new Error(
+      `Refusing to apply: ${generatedAnswerAudit.mismatch_count} generated card answers do not match deterministic best move.`,
+    );
   }
 
   await upsertDeck(supabase, deck);
@@ -327,16 +325,28 @@ async function attachMoveReviews({ cards, baseUrl, profile, analysisCache }) {
     }
 
     const moves = buildStoredMovesFromSans(setupMoves, card.initial_fen ?? null);
-    const positions = moves.length > 0
-      ? await import('../../lib/chess-analysis-client.ts').then(module => module.buildTimelineSequencePositions(moves, card.initial_fen ?? null))
-      : [];
+    const positions =
+      moves.length > 0
+        ? await import('../../lib/chess-analysis-client.ts').then((module) =>
+            module.buildTimelineSequencePositions(moves, card.initial_fen ?? null),
+          )
+        : [];
     const analyses = await analyzePositionsCached(baseUrl, {
       positions,
       profile,
       cache: analysisCache,
     });
-    const { preMoveAnalyses, postMoveAnalyses } = buildTimelineAnalysesForMoves(moves, card.initial_fen ?? null, analyses);
-    const moveReviews = buildCardMoveReviewsFromAnalyses(moves, preMoveAnalyses, postMoveAnalyses, card.initial_fen ?? null);
+    const { preMoveAnalyses, postMoveAnalyses } = buildTimelineAnalysesForMoves(
+      moves,
+      card.initial_fen ?? null,
+      analyses,
+    );
+    const moveReviews = buildCardMoveReviewsFromAnalyses(
+      moves,
+      preMoveAnalyses,
+      postMoveAnalyses,
+      card.initial_fen ?? null,
+    );
 
     withReviews.push({ ...card, move_reviews: moveReviews });
   }
@@ -438,7 +448,7 @@ async function loadAccessibleDeckIds(supabase, profileId) {
     throw new Error(`decks: ${error.message}`);
   }
 
-  return (data ?? []).map(deck => String(deck.id));
+  return (data ?? []).map((deck) => String(deck.id));
 }
 
 async function loadExistingCards(supabase, deckIds) {
@@ -477,13 +487,13 @@ async function updateExistingCardAnswers(supabase, fixes) {
 }
 
 function diffDeck(existingCards, nextCards) {
-  const existingById = new Map(existingCards.map(card => [card.id, card]));
-  const nextById = new Map(nextCards.map(card => [card.id, card]));
-  const added = nextCards.filter(card => !existingById.has(card.id)).map(card => card.id);
+  const existingById = new Map(existingCards.map((card) => [card.id, card]));
+  const nextById = new Map(nextCards.map((card) => [card.id, card]));
+  const added = nextCards.filter((card) => !existingById.has(card.id)).map((card) => card.id);
   const staleRecentGame = existingCards
-    .filter(card => card.source_type === 'recent_game')
-    .filter(card => !nextById.has(card.id))
-    .map(card => card.id);
+    .filter((card) => card.source_type === 'recent_game')
+    .filter((card) => !nextById.has(card.id))
+    .map((card) => card.id);
   const changed = [];
 
   for (const card of nextCards) {

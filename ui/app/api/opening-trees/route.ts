@@ -1,33 +1,32 @@
+import { Chess } from 'chess.js';
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
-import { Chess } from 'chess.js';
 
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
-  DEFAULT_OPENING_TARGET_DEPTH,
   applyOpeningAttemptScore,
-  buildOpeningTrees,
+  type buildOpeningTrees,
   chooseWeightedOpponentEdge,
-  normalizeOpeningFen,
+  DEFAULT_OPENING_TARGET_DEPTH,
+  ensureDraftEdge,
   type OpeningLibrary,
-  type OpeningSide,
   type OpeningTreeBuildInput,
   type OpeningTreeDetail,
   type OpeningTreeDraft,
   type OpeningTreeEdge,
   type OpeningTreeNode,
   type OpeningTreeSummary,
-  ensureDraftEdge,
 } from '@/lib/opening-tree';
 import { getStockfishSession } from '@/lib/stockfish-session';
-import { TRAINING_SESSION_COOKIE, hashTrainingSessionToken, parseTrainingSessionCookie } from '@/lib/training-profile';
+import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 const TREE_SELECT = 'id,library,name,root_san,root_uci,source_count,target_depth,updated_at';
 const NODE_SELECT = 'id,tree_id,fen,fen_key,ply,side_to_move,best_uci,best_san,eval_cp,recent_games,card_count';
-const EDGE_SELECT = 'id,tree_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
-const CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
+const EDGE_SELECT =
+  'id,tree_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
+const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
 const MAX_ENGINE_IMPORT_NODES = 60;
 const MAX_LICHESS_IMPORT_NODES = 120;
 
@@ -49,7 +48,9 @@ export async function GET(request: Request) {
 
     if (treeId) {
       const detail = await fetchTreeDetail(supabase, profile.id, treeId);
-      return detail ? NextResponse.json({ tree: detail }) : NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
+      return detail
+        ? NextResponse.json({ tree: detail })
+        : NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
     }
 
     if (full) {
@@ -160,13 +161,17 @@ async function chooseNextStep(profile: TrainingProfileCookie, body: Record<strin
     return NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
   }
 
-  const outgoing = detail.edges.filter(edge => edge.fromNodeId === nodeId);
+  const outgoing = detail.edges.filter((edge) => edge.fromNodeId === nodeId);
   const selected = chooseWeightedOpponentEdge(outgoing, Date.now());
 
   return NextResponse.json({ edge: selected });
 }
 
-async function upsertTreeDraft(supabase: ReturnType<typeof createAdminClient>, profileId: string, draft: ReturnType<typeof buildOpeningTrees>[number]) {
+async function _upsertTreeDraft(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  draft: ReturnType<typeof buildOpeningTrees>[number],
+) {
   const now = new Date().toISOString();
   const { error: treeError } = await supabase.from('opening_trees').upsert(
     {
@@ -191,7 +196,7 @@ async function upsertTreeDraft(supabase: ReturnType<typeof createAdminClient>, p
 
   if (draft.nodes.length > 0) {
     const { error } = await supabase.from('opening_nodes').upsert(
-      draft.nodes.map(node => ({
+      draft.nodes.map((node) => ({
         id: node.id,
         tree_id: draft.id,
         fen: node.fen,
@@ -215,7 +220,7 @@ async function upsertTreeDraft(supabase: ReturnType<typeof createAdminClient>, p
 
   if (draft.edges.length > 0) {
     const { error } = await supabase.from('opening_edges').upsert(
-      draft.edges.map(edge => ({
+      draft.edges.map((edge) => ({
         id: edge.id,
         tree_id: draft.id,
         from_node_id: edge.fromNodeId,
@@ -240,15 +245,13 @@ async function upsertTreeDraft(supabase: ReturnType<typeof createAdminClient>, p
   }
 }
 
-async function enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
+async function _enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
   await enrichEngineBestMoves(draft);
   await enrichLichessOpponentMoves(draft);
 }
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
-  const trainNodes = draft.nodes
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_ENGINE_IMPORT_NODES);
+  const trainNodes = draft.nodes.sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
   const session = trainNodes.length > 0 ? await getStockfishSession() : null;
 
   if (!session) {
@@ -265,9 +268,7 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 
       node.bestUci = analysis.bestMove;
       node.bestSan = moveSanFromFen(node.fen, analysis.bestMove) ?? analysis.bestMove;
-      node.evalCp = analysis.whitePerspective?.type === 'cp'
-        ? analysis.whitePerspective.value
-        : null;
+      node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
       ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
         isEngineBest: true,
         priority: 40,
@@ -279,19 +280,17 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 }
 
 async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
-  const opponentNodes = draft.nodes
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_LICHESS_IMPORT_NODES);
+  const opponentNodes = draft.nodes.sort((left, right) => left.ply - right.ply).slice(0, MAX_LICHESS_IMPORT_NODES);
 
   for (const node of opponentNodes) {
     try {
       const explorer = await fetchLichessOpeningExplorer(node.fen);
       const moves = (explorer.moves ?? [])
-        .map(move => ({
+        .map((move) => ({
           uci: move.uci,
           games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0),
         }))
-        .filter(move => move.games > 0)
+        .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
         .slice(0, 6);
 
@@ -307,8 +306,10 @@ async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
   }
 }
 
-
-async function fetchTreeSummaries(supabase: ReturnType<typeof createAdminClient>, profileId: string): Promise<OpeningTreeSummary[]> {
+async function fetchTreeSummaries(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+): Promise<OpeningTreeSummary[]> {
   const { data: trees, error } = await supabase
     .from('opening_trees')
     .select(TREE_SELECT)
@@ -320,16 +321,23 @@ async function fetchTreeSummaries(supabase: ReturnType<typeof createAdminClient>
     throw new Error(error.message);
   }
 
-  const treeIds = (trees ?? []).map(tree => String(tree.id));
-  const [nodes, progress] = await Promise.all([
-    fetchNodes(supabase, treeIds),
-    fetchProgress(supabase, profileId),
-  ]);
+  const treeIds = (trees ?? []).map((tree) => String(tree.id));
+  const [nodes, progress] = await Promise.all([fetchNodes(supabase, treeIds), fetchProgress(supabase, profileId)]);
 
-  return (trees ?? []).map(tree => summarizeTree(tree, nodes.filter(node => node.tree_id === tree.id), progress));
+  return (trees ?? []).map((tree) =>
+    summarizeTree(
+      tree,
+      nodes.filter((node) => node.tree_id === tree.id),
+      progress,
+    ),
+  );
 }
 
-async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, profileId: string, treeId: string): Promise<OpeningTreeDetail | null> {
+async function fetchTreeDetail(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  treeId: string,
+): Promise<OpeningTreeDetail | null> {
   const { data: tree, error } = await supabase
     .from('opening_trees')
     .select(TREE_SELECT)
@@ -351,7 +359,7 @@ async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, p
     fetchProgress(supabase, profileId),
   ]);
   const summary = summarizeTree(tree, nodeRows, progress);
-  const nodes: OpeningTreeNode[] = nodeRows.map(row => {
+  const nodes: OpeningTreeNode[] = nodeRows.map((row) => {
     const entry = progress.get(String(row.id));
     return {
       id: String(row.id),
@@ -370,7 +378,7 @@ async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, p
       missCount: entry?.missCount ?? 0,
     };
   });
-  const edges: OpeningTreeEdge[] = edgeRows.map(row => ({
+  const edges: OpeningTreeEdge[] = edgeRows.map((row) => ({
     id: String(row.id),
     fromNodeId: String(row.from_node_id),
     toNodeId: String(row.to_node_id),
@@ -388,7 +396,10 @@ async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, p
   return { ...summary, nodes, edges };
 }
 
-async function fetchFullTrees(supabase: ReturnType<typeof createAdminClient>, profileId: string): Promise<OpeningTreeDetail[]> {
+async function fetchFullTrees(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+): Promise<OpeningTreeDetail[]> {
   const { data: trees, error } = await supabase
     .from('opening_trees')
     .select(TREE_SELECT)
@@ -404,20 +415,20 @@ async function fetchFullTrees(supabase: ReturnType<typeof createAdminClient>, pr
     return [];
   }
 
-  const treeIds = trees.map(tree => String(tree.id));
+  const treeIds = trees.map((tree) => String(tree.id));
   const [nodeRows, edgeRows, progress] = await Promise.all([
     fetchNodes(supabase, treeIds),
     fetchEdges(supabase, treeIds),
     fetchProgress(supabase, profileId),
   ]);
 
-  return trees.map(tree => {
+  return trees.map((tree) => {
     const treeId = String(tree.id);
-    const treeNodeRows = nodeRows.filter(row => String(row.tree_id) === treeId);
-    const treeEdgeRows = edgeRows.filter(row => String(row.tree_id) === treeId);
+    const treeNodeRows = nodeRows.filter((row) => String(row.tree_id) === treeId);
+    const treeEdgeRows = edgeRows.filter((row) => String(row.tree_id) === treeId);
     const summary = summarizeTree(tree, treeNodeRows, progress);
 
-    const nodes: OpeningTreeNode[] = treeNodeRows.map(row => {
+    const nodes: OpeningTreeNode[] = treeNodeRows.map((row) => {
       const entry = progress.get(String(row.id));
       return {
         id: String(row.id),
@@ -437,7 +448,7 @@ async function fetchFullTrees(supabase: ReturnType<typeof createAdminClient>, pr
       };
     });
 
-    const edges: OpeningTreeEdge[] = treeEdgeRows.map(row => ({
+    const edges: OpeningTreeEdge[] = treeEdgeRows.map((row) => ({
       id: String(row.id),
       fromNodeId: String(row.from_node_id),
       toNodeId: String(row.to_node_id),
@@ -456,11 +467,16 @@ async function fetchFullTrees(supabase: ReturnType<typeof createAdminClient>, pr
   });
 }
 
-function summarizeTree(tree: Record<string, unknown>, nodes: Record<string, unknown>[], progress: Map<string, ProgressEntry>): OpeningTreeSummary {
+function summarizeTree(
+  tree: Record<string, unknown>,
+  nodes: Record<string, unknown>[],
+  progress: Map<string, ProgressEntry>,
+): OpeningTreeSummary {
   const trainNodes = nodes;
-  const scores = trainNodes.map(node => progress.get(String(node.id))?.masteryScore ?? 0);
-  const masteryScore = scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
-  const dueCount = trainNodes.filter(node => (progress.get(String(node.id))?.masteryScore ?? 0) < 80).length;
+  const scores = trainNodes.map((node) => progress.get(String(node.id))?.masteryScore ?? 0);
+  const masteryScore =
+    scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
+  const dueCount = trainNodes.filter((node) => (progress.get(String(node.id))?.masteryScore ?? 0) < 80).length;
 
   return {
     id: String(tree.id),
@@ -477,24 +493,29 @@ function summarizeTree(tree: Record<string, unknown>, nodes: Record<string, unkn
   };
 }
 
-function buildInputsFromRows(lines: Record<string, unknown>[], cards: Record<string, unknown>[]): OpeningTreeBuildInput[] {
-  const lineInputs = lines.flatMap(line => {
+function _buildInputsFromRows(
+  lines: Record<string, unknown>[],
+  cards: Record<string, unknown>[],
+): OpeningTreeBuildInput[] {
+  const lineInputs = lines.flatMap((line) => {
     const moves = toStringArray(line.moves);
 
     if (moves.length === 0) {
       return [];
     }
 
-    return [{
-      id: String(line.id),
-      name: String(line.name ?? 'Opening'),
-      trainSide: (line.side === 'black' ? 'black' : 'white') as 'white' | 'black',
-      moves,
-      source: 'recent_game' as const,
-      count: 1,
-    }];
+    return [
+      {
+        id: String(line.id),
+        name: String(line.name ?? 'Opening'),
+        trainSide: (line.side === 'black' ? 'black' : 'white') as 'white' | 'black',
+        moves,
+        source: 'recent_game' as const,
+        count: 1,
+      },
+    ];
   });
-  const cardInputs = cards.flatMap(card => {
+  const cardInputs = cards.flatMap((card) => {
     const setupMoves = toStringArray(card.setup_moves);
     const answerSan = String(card.answer_san ?? '');
     const moves = [...setupMoves, answerSan].filter(Boolean);
@@ -503,15 +524,17 @@ function buildInputsFromRows(lines: Record<string, unknown>[], cards: Record<str
       return [];
     }
 
-    return [{
-      id: String(card.id),
-      name: String(card.line_name ?? 'Opening'),
-      trainSide: (card.side === 'black' ? 'black' : 'white') as 'white' | 'black',
-      moves,
-      source: 'card' as const,
-      count: 1,
-      scoreSwingCp: card.score_swing_cp == null ? null : Number(card.score_swing_cp),
-    }];
+    return [
+      {
+        id: String(card.id),
+        name: String(card.line_name ?? 'Opening'),
+        trainSide: (card.side === 'black' ? 'black' : 'white') as 'white' | 'black',
+        moves,
+        source: 'card' as const,
+        count: 1,
+        scoreSwingCp: card.score_swing_cp == null ? null : Number(card.score_swing_cp),
+      },
+    ];
   });
 
   return [...lineInputs, ...cardInputs];
@@ -555,12 +578,17 @@ async function fetchProgress(supabase: ReturnType<typeof createAdminClient>, pro
     throw new Error(error.message);
   }
 
-  return new Map((data ?? []).map(row => [String(row.node_id), {
-    seenCount: Number(row.seen_count ?? 0),
-    correctCount: Number(row.correct_count ?? 0),
-    missCount: Number(row.miss_count ?? 0),
-    masteryScore: Number(row.mastery_score ?? 0),
-  }]));
+  return new Map(
+    (data ?? []).map((row) => [
+      String(row.node_id),
+      {
+        seenCount: Number(row.seen_count ?? 0),
+        correctCount: Number(row.correct_count ?? 0),
+        missCount: Number(row.miss_count ?? 0),
+        masteryScore: Number(row.mastery_score ?? 0),
+      },
+    ]),
+  );
 }
 
 async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | null> {
@@ -588,34 +616,36 @@ async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | n
 }
 
 function normalizeLibrary(value: unknown): OpeningLibrary {
-  return value === 'e4' || value === 'd4' || value === 'c4' || value === 'nf3' || value === 'other'
-    ? value
-    : 'e4';
+  return value === 'e4' || value === 'd4' || value === 'c4' || value === 'nf3' || value === 'other' ? value : 'e4';
 }
 
 function normalizeEdgeSource(value: unknown) {
-  return value === 'card' || value === 'lichess_masters' || value === 'engine_best' || value === 'mixed' ? value : 'recent_game';
+  return value === 'card' || value === 'lichess_masters' || value === 'engine_best' || value === 'mixed'
+    ? value
+    : 'recent_game';
 }
 
 function toStringArray(value: unknown) {
-  return Array.isArray(value) ? value.map(item => String(item)) : [];
+  return Array.isArray(value) ? value.map((item) => String(item)) : [];
 }
 
 function moveSanFromFen(fen: string, uci: string) {
   const chess = new Chess(fen);
 
   try {
-    return chess.move({
-      from: uci.slice(0, 2),
-      to: uci.slice(2, 4),
-      ...(uci[4] ? { promotion: uci[4] } : {}),
-    })?.san ?? null;
+    return (
+      chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        ...(uci[4] ? { promotion: uci[4] } : {}),
+      })?.san ?? null
+    );
   } catch {
     return null;
   }
 }
 
-function shortHash(value: string) {
+function _shortHash(value: string) {
   let hash = 2166136261;
 
   for (let index = 0; index < value.length; index += 1) {

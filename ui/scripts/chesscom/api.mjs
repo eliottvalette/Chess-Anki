@@ -17,8 +17,8 @@ export async function fetchRecentGames({ username, archives, count, timeClass })
     const games = Array.isArray(response.games) ? response.games : [];
 
     const matchingGames = games
-      .filter(game => game?.time_class === timeClass)
-      .filter(game => isPlayerInGame(username, game))
+      .filter((game) => game?.time_class === timeClass)
+      .filter((game) => isPlayerInGame(username, game))
       .sort((left, right) => Number(right.end_time ?? 0) - Number(left.end_time ?? 0));
 
     selected.push(...matchingGames);
@@ -28,14 +28,14 @@ export async function fetchRecentGames({ username, archives, count, timeClass })
     }
   }
 
-  return selected
-    .sort((left, right) => Number(right.end_time ?? 0) - Number(left.end_time ?? 0))
-    .slice(0, count);
+  return selected.sort((left, right) => Number(right.end_time ?? 0) - Number(left.end_time ?? 0)).slice(0, count);
 }
 
 export function toGameSummary(game, username) {
   const playerColor =
-    game.white?.username?.toLowerCase() === game.black?.username?.toLowerCase() ? 'unknown' : inferPlayerColor(game, username);
+    game.white?.username?.toLowerCase() === game.black?.username?.toLowerCase()
+      ? 'unknown'
+      : inferPlayerColor(game, username);
   const player = playerColor === 'white' ? game.white : game.black;
   const opponent = playerColor === 'white' ? game.black : game.white;
 

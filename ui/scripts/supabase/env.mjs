@@ -47,10 +47,13 @@ export function requireEnv(env, key) {
 }
 
 export function requireAdminKey(env) {
-  const value = env.SUPABASE_ADMIN_KEY?.trim() || env.SUPABASE_SERVICE_ROLE_KEY?.trim() || env.SUPABASE_SECRET_KEY?.trim();
+  const value =
+    env.SUPABASE_ADMIN_KEY?.trim() || env.SUPABASE_SERVICE_ROLE_KEY?.trim() || env.SUPABASE_SECRET_KEY?.trim();
 
   if (!value) {
-    throw new Error('Missing SUPABASE_ADMIN_KEY. Add a project key with write access to .env.local or the shell environment.');
+    throw new Error(
+      'Missing SUPABASE_ADMIN_KEY. Add a project key with write access to .env.local or the shell environment.',
+    );
   }
 
   return value;

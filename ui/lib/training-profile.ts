@@ -15,7 +15,9 @@ export function normalizeTrainingUsername(value: unknown) {
 
 export function hashTrainingPassword(password: string) {
   const salt = randomBytes(16).toString('base64url');
-  const hash = pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, PASSWORD_KEY_LENGTH, PASSWORD_DIGEST).toString('base64url');
+  const hash = pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, PASSWORD_KEY_LENGTH, PASSWORD_DIGEST).toString(
+    'base64url',
+  );
   return `pbkdf2$${PASSWORD_ITERATIONS}$${salt}$${hash}`;
 }
 
@@ -32,7 +34,9 @@ export function verifyTrainingPassword(password: string, storedHash: string) {
     return false;
   }
 
-  const actual = Buffer.from(pbkdf2Sync(password, salt, iterations, PASSWORD_KEY_LENGTH, PASSWORD_DIGEST).toString('base64url'));
+  const actual = Buffer.from(
+    pbkdf2Sync(password, salt, iterations, PASSWORD_KEY_LENGTH, PASSWORD_DIGEST).toString('base64url'),
+  );
   const expected = Buffer.from(expectedHash);
 
   return actual.length === expected.length && timingSafeEqual(actual, expected);

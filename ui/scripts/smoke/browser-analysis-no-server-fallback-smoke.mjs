@@ -21,7 +21,7 @@ let fetchCalled = false;
 globalThis.window = { location: { hostname: 'production.example' } };
 globalThis.Worker = FailingStockfishWorker;
 globalThis.WebAssembly = WebAssembly;
-globalThis.fetch = async url => {
+globalThis.fetch = async (url) => {
   fetchCalled = true;
   throw new Error(`Unexpected server fetch: ${url}`);
 };
@@ -36,8 +36,14 @@ try {
     throw new Error('Server analysis fallback was called in production browser mode.');
   }
 
-  console.log(JSON.stringify({
-    server_fetch_called: fetchCalled,
-    error: error instanceof Error ? error.message : String(error),
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        server_fetch_called: fetchCalled,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      null,
+      2,
+    ),
+  );
 }

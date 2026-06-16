@@ -1,15 +1,24 @@
-import { useCallback, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
-import type { LabState } from '../useLabState';
+import { useCallback, useEffect, useRef } from 'react';
+import type { AnalysisResult } from '@/lib/analysis-types';
+import type { StoredMove } from '@/lib/chess-analysis-client';
+import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import {
+  type CachedTimelineAnalysis,
   CHESSCOM_TIME_CLASS_COOKIE,
   CHESSCOM_USERNAME_COOKIE,
+  formatRecentGameLogLabel,
+  GAME_ANALYSIS_CACHE_VERSION,
+  getRecentGameCacheKey,
+  loadCachedTimelineAnalysis,
+  logRecentGamePreload,
   RECENT_GAMES_PAGE_SIZE,
+  readCookie,
+  saveCachedTimelineAnalysis,
+  toStoredMove,
   writeCookie,
-  readCookie, CachedTimelineAnalysis, loadCachedTimelineAnalysis, saveCachedTimelineAnalysis, formatRecentGameLogLabel, getRecentGameCacheKey, logRecentGamePreload, toStoredMove } from '@/lib/lab-helpers';
-import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
-import type { AnalysisResult } from '@/lib/analysis-types';
-import { GAME_ANALYSIS_CACHE_VERSION } from '@/lib/lab-helpers';
+} from '@/lib/lab-helpers';
+import type { LabState } from '../useLabState';
 
 export const RECENT_GAMES_INTERACTION_IDLE_MS = 3000;
 export const RECENT_GAMES_AUTO_REFRESH_MS = 15000;
@@ -26,13 +35,13 @@ export function useRecentGames(
   },
   dependencies: {
     analyzeTimelineDeep: (
-      history: any[],
+      history: StoredMove[],
       initialFen: string | null,
-      onProgress?: ((progress: number) => void),
+      onProgress?: (progress: number) => void,
       logContext?: string,
-      signal?: AbortSignal
+      signal?: AbortSignal,
     ) => Promise<AnalysisResult[]>;
-  }
+  },
 ) {
   const recentFetchRequestIdRef = useRef(0);
   const recentPreloadBusyRef = useRef(false);
@@ -58,11 +67,16 @@ export function useRecentGames(
     timelineLoading,
     setRecentPreloadTick,
     setChesscomUsername,
-    setRecentGameTimeClass
+    setRecentGameTimeClass,
   } = state;
 
   const fetchRecentChessGames = useCallback(
-    async (usernameOverride?: string, timeClassOverride?: ChessComRecentGameTimeClass, append = false, quiet = false) => {
+    async (
+      usernameOverride?: string,
+      timeClassOverride?: ChessComRecentGameTimeClass,
+      append = false,
+      quiet = false,
+    ) => {
       const requestId = ++recentFetchRequestIdRef.current;
       const username = (usernameOverride ?? chesscomUsername).trim().toLowerCase();
       const timeClass = timeClassOverride ?? recentGameTimeClass;
@@ -117,15 +131,17 @@ export function useRecentGames(
         }
 
         const nextGames = Array.isArray(payload.games) ? payload.games : [];
-        setRecentChessGames(current => {
+        setRecentChessGames((current) => {
           const merged = append ? [...current, ...nextGames] : nextGames;
-          return [...new Map(merged.map(game => [game.link || game.url, game])).values()].sort(
+          return [...new Map(merged.map((game) => [game.link || game.url, game])).values()].sort(
             (left, right) => Number(right.endTime ?? 0) - Number(left.endTime ?? 0),
           );
         });
         setRecentChessGamesHasMore(Boolean(payload.hasMore));
         setRecentChessGamesNextCursor(payload.nextCursor ?? null);
-        setRecentChessGamesNextOffset(typeof payload.nextOffset === 'number' ? payload.nextOffset : offset + nextGames.length);
+        setRecentChessGamesNextOffset(
+          typeof payload.nextOffset === 'number' ? payload.nextOffset : offset + nextGames.length,
+        );
       } catch (error) {
         if (recentFetchRequestIdRef.current !== requestId) {
           return;
@@ -137,7 +153,18 @@ export function useRecentGames(
         }
       }
     },
-    [chesscomUsername, recentChessGamesNextCursor, recentChessGamesNextOffset, recentGameTimeClass, setRecentChessGames, setRecentChessGamesError, setRecentChessGamesHasMore, setRecentChessGamesLoading, setRecentChessGamesNextCursor, setRecentChessGamesNextOffset]
+    [
+      chesscomUsername,
+      recentChessGamesNextCursor,
+      recentChessGamesNextOffset,
+      recentGameTimeClass,
+      setRecentChessGames,
+      setRecentChessGamesError,
+      setRecentChessGamesHasMore,
+      setRecentChessGamesLoading,
+      setRecentChessGamesNextCursor,
+      setRecentChessGamesNextOffset,
+    ],
   );
 
   const preloadRecentGameAnalysis = useCallback(async () => {
@@ -158,7 +185,7 @@ export function useRecentGames(
 
     const nextGame = [...recentChessGames]
       .sort((left, right) => Number(right.endTime ?? 0) - Number(left.endTime ?? 0))
-      .find(game => {
+      .find((game) => {
         const cacheKey = getRecentGameCacheKey(game);
         return cacheKey !== activeRecentGameCacheKeyRef.current && !recentPreloadedKeysRef.current.has(cacheKey);
       });
@@ -177,7 +204,7 @@ export function useRecentGames(
       const cached = await loadCachedTimelineAnalysis(cacheKey);
       if (cached) {
         logRecentGamePreload('cache', `${formatRecentGameLogLabel(nextGame)} ${cached.timelineAnalyses.length} plies`);
-        setRecentPreloadTick(tick => tick + 1);
+        setRecentPreloadTick((tick) => tick + 1);
         return;
       }
 
@@ -233,11 +260,14 @@ export function useRecentGames(
       } else {
         logRecentGamePreload('skip', `${formatRecentGameLogLabel(nextGame)} stale`);
       }
-      setRecentPreloadTick(tick => tick + 1);
+      setRecentPreloadTick((tick) => tick + 1);
     } catch (error) {
       recentPreloadedKeysRef.current.delete(cacheKey);
       const message = error instanceof Error ? error.message : String(error);
-      logRecentGamePreload(message === 'Analysis aborted.' ? 'cancel' : 'fail', `${formatRecentGameLogLabel(nextGame)} ${message}`);
+      logRecentGamePreload(
+        message === 'Analysis aborted.' ? 'cancel' : 'fail',
+        `${formatRecentGameLogLabel(nextGame)} ${message}`,
+      );
     } finally {
       if (requestId === 0 || recentPreloadRequestIdRef.current === requestId) {
         recentPreloadBusyRef.current = false;
@@ -256,7 +286,7 @@ export function useRecentGames(
     }
     const hadPreload = recentPreloadBusyRef.current;
     recentPreloadBusyRef.current = false;
-    
+
     if (hadPreload) {
       logRecentGamePreload('cancel', reason);
     }
@@ -270,7 +300,12 @@ export function useRecentGames(
       setChesscomUsername(savedUsername);
     }
 
-    if (savedTimeClass === 'all' || savedTimeClass === 'bullet' || savedTimeClass === 'blitz' || savedTimeClass === 'rapid') {
+    if (
+      savedTimeClass === 'all' ||
+      savedTimeClass === 'bullet' ||
+      savedTimeClass === 'blitz' ||
+      savedTimeClass === 'rapid'
+    ) {
       setRecentGameTimeClass(savedTimeClass);
     }
   }, [setChesscomUsername, setRecentGameTimeClass]);
@@ -306,6 +341,6 @@ export function useRecentGames(
     fetchRecentChessGames,
     preloadRecentGameAnalysis,
     cancelRecentPreload,
-    activeRecentGameCacheKeyRef
+    activeRecentGameCacheKeyRef,
   };
 }

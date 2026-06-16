@@ -1,22 +1,17 @@
 'use client';
-import { getMoveSoundSequence } from '@/lib/chess-sounds';
-import type { ChessComRecentGameSummary } from '@/lib/chesscom';
-
-import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type CSSProperties } from 'react';
-import { Chess, type Square } from 'chess.js';
+import { Chess } from 'chess.js';
+import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { WorkspaceMode } from '@/components/chess-lab-panels';
+import { buildDeterministicAnalyzeRequest } from '@/lib/analysis-profile';
 
 import type { AnalysisResult } from '@/lib/analysis-types';
-import { buildDeterministicAnalyzeRequest } from '@/lib/analysis-profile';
 import {
-  PgnImportDialog,
-  LinesPanel,
-  ReviewPanel,
-  TrainPanel,
-  TrainingProfilePanel,
-  getModeLabel,
-  type WorkspaceMode,
-} from '@/components/chess-lab-panels';
+  buildLiveTrainMoveReview,
+  cardMoveReviewsFromTimeline,
+  resolveTrainBoardMoveReview,
+  resolveTrainReplayBestMoveUci,
+  shouldUseLiveTrainMoveReview,
+} from '@/lib/card-move-reviews';
 import {
   analyzeSinglePosition,
   buildGameReview,
@@ -26,56 +21,19 @@ import {
   formatBestMove,
   formatEvalCpLabel,
   formatScoreLabel,
+  type GameMetadata,
   getAdvantageMeter,
   getAdvantageMeterFromEvalCp,
   getBestMoveArrow,
-  reviewCategoryMeta,
-  restoreGameFromHistory,
-  toStoredMove,
-  type GameMetadata,
   type ReviewCategory,
+  restoreGameFromHistory,
+  reviewCategoryMeta,
   type StoredMove,
   type TimelineReview,
+  toStoredMove,
 } from '@/lib/chess-analysis-client';
-import {
-  buildLiveTrainMoveReview,
-  cardMoveReviewsFromTimeline,
-  resolveTrainBoardMoveReview,
-  resolveTrainReplayBestMoveUci,
-  shouldUseLiveTrainMoveReview,
-} from '@/lib/card-move-reviews';
-import { getPrimaryMoveSound } from '@/lib/chess-sounds';
-import { type DeckCard, type DeckFeedback } from '@/lib/opening-training';
-import { sliceOpeningForest } from '@/lib/opening-tree';
-
-import { useLabState } from '../../hooks/useLabState';
-import {
-  createEmptyTrainSessionStats,
-  createEmptyWorkspaceSnapshot,
-  normalizeWorkspaceSnapshot,
-  buildTimelineReviews,
-  getPositionCacheKey,
-  dedupeBoardArrows,
-  isOpponentTurnFromFen,
-  persistTrainingCredentials,
-  writeCookie,
-  deleteCookie,
-  type CachedTimelineAnalysis,
-  saveCachedTimelineAnalysis,
-  isUsableCachedTimelineAnalysis,
-  getRecentGameCacheKey,
-  recentGameAnalysisMemoryCache,
-  loadCachedTimelineAnalysis,
-  LAST_TRAINING_DECK_STORAGE_KEY,
-} from '../../lib/lab-helpers';
-import {
-  ImportIcon,
-  FlipIcon,
-  ArrowIcon,
-  RefreshIcon,
-  ResetIcon
-} from './lab-icons';
-import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
+import { getMoveSoundSequence, getPrimaryMoveSound } from '@/lib/chess-sounds';
+import type { ChessComRecentGameSummary } from '@/lib/chesscom';
 import {
   getDeckProgressEntry,
   getDeckStudyQueue,
@@ -83,17 +41,37 @@ import {
   summarizeDeckProgress,
   summarizeLineMastery,
 } from '@/lib/deck-progress';
-import styles from '../chess-analysis-lab.module.css';
-import { useRecentGames } from "../../hooks/lab/useRecentGames";
-import { useTrainingProfile } from "../../hooks/lab/useTrainingProfile";
+import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
+import { sliceOpeningForest } from '@/lib/opening-tree';
+import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
+import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
 import { useLabEngine } from '../../hooks/lab/useLabEngine';
 import { useLabGame } from '../../hooks/lab/useLabGame';
-import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
-import { useLabReview } from '../../hooks/lab/useLabReview';
 import { useLabLines } from '../../hooks/lab/useLabLines';
+import { useLabReview } from '../../hooks/lab/useLabReview';
 import { useLabTraining } from '../../hooks/lab/useLabTraining';
-
+import { useRecentGames } from '../../hooks/lab/useRecentGames';
+import { useTrainingProfile } from '../../hooks/lab/useTrainingProfile';
+import { useLabState } from '../../hooks/useLabState';
+import {
+  buildTimelineReviews,
+  type CachedTimelineAnalysis,
+  createEmptyTrainSessionStats,
+  createEmptyWorkspaceSnapshot,
+  dedupeBoardArrows,
+  getPositionCacheKey,
+  getRecentGameCacheKey,
+  isOpponentTurnFromFen,
+  isUsableCachedTimelineAnalysis,
+  LAST_TRAINING_DECK_STORAGE_KEY,
+  loadCachedTimelineAnalysis,
+  normalizeWorkspaceSnapshot,
+  persistTrainingCredentials,
+  recentGameAnalysisMemoryCache,
+  saveCachedTimelineAnalysis,
+} from '../../lib/lab-helpers';
+import styles from '../chess-analysis-lab.module.css';
 
 const TIMELINE_CACHE_PROGRESS = 4;
 const TIMELINE_ENGINE_PROGRESS_OFFSET = 8;
@@ -102,8 +80,6 @@ const LAST_MOVE_STYLE = {
   backgroundColor: 'rgba(84, 173, 255, 0.26)',
   boxShadow: 'inset 0 0 0 2px rgba(181, 222, 255, 0.42)',
 } satisfies CSSProperties;
-const CHESSCOM_USERNAME_COOKIE = 'chesscom_username';
-const CHESSCOM_TIME_CLASS_COOKIE = 'chesscom_time_class';
 const RECENT_GAMES_PRELOAD_SCAN_MS = 1_000;
 
 function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
@@ -141,15 +117,6 @@ function getBoardSquareCenter(square: string, orientation: 'white' | 'black', bo
     squareSize,
   };
 }
-
-type BoardPlayerSummary = {
-  color: 'white' | 'black';
-  name: string;
-  elo: string;
-  avatarUrl: string | null;
-  captured: string[];
-  materialAdvantage: number;
-};
 
 const CAPTURED_PIECE_ORDER = ['q', 'r', 'b', 'n', 'p'] as const;
 const CAPTURED_PIECE_VALUES: Record<string, number> = {
@@ -189,9 +156,9 @@ function buildCapturedPieces(moves: StoredMove[], playerColor: 'white' | 'black'
     counts.set(move.captured, (counts.get(move.captured) ?? 0) + 1);
   }
 
-  return CAPTURED_PIECE_ORDER.flatMap(piece => (
-    Array.from({ length: counts.get(piece) ?? 0 }, () => CAPTURED_PIECE_ICONS[capturedColor][piece] ?? '')
-  )).filter(Boolean);
+  return CAPTURED_PIECE_ORDER.flatMap((piece) =>
+    Array.from({ length: counts.get(piece) ?? 0 }, () => CAPTURED_PIECE_ICONS[capturedColor][piece] ?? ''),
+  ).filter(Boolean);
 }
 
 function getCapturedMaterialValue(moves: StoredMove[], playerColor: 'white' | 'black') {
@@ -206,22 +173,10 @@ function getCapturedMaterialValue(moves: StoredMove[], playerColor: 'white' | 'b
   }, 0);
 }
 
-
-function getPgnHash(pgn: string) {
-  let hash = 5381;
-
-  for (let index = 0; index < pgn.length; index += 1) {
-    hash = (hash * 33) ^ pgn.charCodeAt(index);
-  }
-
-  return `pgn:${(hash >>> 0).toString(16)}`;
-}
-
 export type TrainingProfile = {
   id: string;
   username: string;
 };
-
 
 type TrainSessionStats = {
   completed: number;
@@ -259,43 +214,120 @@ type WorkspaceSnapshot = {
 export function useLabOrchestrator() {
   const labState = useLabState();
   const {
-    game, setGame, initialFen, setInitialFen, moveHistory, setMoveHistory,
-    historyIndex, setHistoryIndex, variationBaseIndex, setVariationBaseIndex,
-    variationMoves, setVariationMoves, selectedSquare, setSelectedSquare,
-    squareStyles, setSquareStyles, orientation, setOrientation, showArrow, setShowArrow,
-    mode, setMode, reviewSide, setReviewSide, reviewIndex, setReviewIndex, metadata, setMetadata,
-    whiteAvatarUrl, setWhiteAvatarUrl, blackAvatarUrl, setBlackAvatarUrl,
-    fileName, setFileName, pgnDraft, setPgnDraft, pgnDialogOpen, setPgnDialogOpen,
-    positionAnalysis, setPositionAnalysis, preMoveAnalyses, setPreMoveAnalyses,
-    timelineAnalyses, setTimelineAnalyses, positionLoading, setPositionLoading,
-    timelineLoading, setTimelineLoading, timelineProgress, setTimelineProgress,
-    serverError, setServerError, timelineError, setTimelineError, boardWidth, deckIndex, setDeckIndex, trainAllSession, setTrainAllSession, trainAllQueue, setTrainAllQueue,
-    trainSessionIndex, setTrainSessionIndex, trainSessionStats, setTrainSessionStats,
-    activeDeckCard, setActiveDeckCard, deckFeedback, setDeckFeedback,
-    deckFeedbackArrowsVisible, setDeckFeedbackArrowsVisible, openingLines, deckCards, setDeckCards, deckSummaries, selectedDeckId, setSelectedDeckId,
-    deckLibraryLoading, deckCardsLoading, deckLoadError, deckActionLoading, setDeckActionLoading,
-    deckActionError, setDeckActionError, openingTrees, setOpeningTrees,
-    activeOpeningTree, setActiveOpeningTree, openingTreesLoading, openingTreeActionLoading, openingTreeActionError, selectedOpeningTreeId, setSelectedOpeningTreeId, activeOpeningNodeId, setActiveOpeningNodeId,
-    openingDrillStatus, openingDrillExpected, openingDrillActive, drillPathRef, drillPathIndexRef,
-    newDeckTitle, setNewDeckTitle, reviewDeckSaveStatus, setReviewDeckSaveStatus,
-    deckProgress, setDeckProgress, chesscomUsername, setChesscomUsername,
-    recentGameTimeClass, setRecentGameTimeClass, recentChessGames, setRecentChessGames,
-    recentChessGamesLoading, recentChessGamesHasMore, setRecentChessGamesHasMore,
-    setRecentChessGamesNextOffset, setRecentChessGamesNextCursor,
-    recentChessGamesError, setRecentChessGamesError, recentPreloadTick, trainingProfile, setTrainingProfile, trainingProfileBootstrapping, trainingProfileSubmitting, setTrainingProfileSubmitting, trainingProfileError, setTrainingProfileError,
-    trainingUsername, setTrainingUsername, trainingPassword, setTrainingPassword,
-    trainingCredentialsHydratedRef, focusTrainCreateDeck, setFocusTrainCreateDeck,
-    saveReplayFromStart, deckPlaybackBusy, setDeckPlaybackBusy, trainAnalysisTick, boardStageRef, evalRailRef, positionRequestIdRef, timelineRequestIdRef,
-    timelineRefineRequestIdRef, reviewPlaybackRequestIdRef, deckPlaybackRequestIdRef,
-    deckReplayMovesRef, deckReplayInitialFenRef
+    game,
+    setGame,
+    initialFen,
+    setInitialFen,
+    moveHistory,
+    setMoveHistory,
+    historyIndex,
+    setHistoryIndex,
+    variationBaseIndex,
+    setVariationBaseIndex,
+    variationMoves,
+    setVariationMoves,
+    setSelectedSquare,
+    squareStyles,
+    setSquareStyles,
+    orientation,
+    setOrientation,
+    showArrow,
+    setShowArrow,
+    mode,
+    setMode,
+    reviewSide,
+    reviewIndex,
+    setReviewIndex,
+    metadata,
+    setMetadata,
+    whiteAvatarUrl,
+    setWhiteAvatarUrl,
+    blackAvatarUrl,
+    setBlackAvatarUrl,
+    fileName,
+    setFileName,
+    pgnDraft,
+    pgnDialogOpen,
+    setPgnDialogOpen,
+    positionAnalysis,
+    setPositionAnalysis,
+    preMoveAnalyses,
+    setPreMoveAnalyses,
+    timelineAnalyses,
+    setTimelineAnalyses,
+    positionLoading,
+    setPositionLoading,
+    setTimelineLoading,
+    setTimelineProgress,
+    serverError,
+    setServerError,
+    timelineError,
+    setTimelineError,
+    boardWidth,
+    deckIndex,
+    setDeckIndex,
+    trainAllSession,
+    setTrainAllSession,
+    trainAllQueue,
+    setTrainAllQueue,
+    trainSessionIndex,
+    setTrainSessionIndex,
+    trainSessionStats,
+    setTrainSessionStats,
+    activeDeckCard,
+    setActiveDeckCard,
+    deckFeedback,
+    setDeckFeedback,
+    deckFeedbackArrowsVisible,
+    setDeckFeedbackArrowsVisible,
+    openingLines,
+    deckCards,
+    setDeckCards,
+    deckSummaries,
+    selectedDeckId,
+    setSelectedDeckId,
+    deckLibraryLoading,
+    deckCardsLoading,
+    setDeckActionLoading,
+    setDeckActionError,
+    setOpeningTrees,
+    setActiveOpeningTree,
+    setSelectedOpeningTreeId,
+    setActiveOpeningNodeId,
+    openingDrillActive,
+    drillPathRef,
+    drillPathIndexRef,
+    setReviewDeckSaveStatus,
+    deckProgress,
+    setDeckProgress,
+    chesscomUsername,
+    recentChessGames,
+    trainingProfile,
+    setTrainingProfile,
+    trainingProfileBootstrapping,
+    setTrainingProfileSubmitting,
+    setTrainingProfileError,
+    trainingUsername,
+    setTrainingUsername,
+    trainingPassword,
+    setTrainingPassword,
+    trainingCredentialsHydratedRef,
+    setFocusTrainCreateDeck,
+    saveReplayFromStart,
+    deckPlaybackBusy,
+    setDeckPlaybackBusy,
+    trainAnalysisTick,
+    boardStageRef,
+    evalRailRef,
+    positionRequestIdRef,
+    timelineRequestIdRef,
+    timelineRefineRequestIdRef,
+    reviewPlaybackRequestIdRef,
+    deckPlaybackRequestIdRef,
+    deckReplayMovesRef,
+    deckReplayInitialFenRef,
   } = labState;
-  
-  const recentFetchRequestIdRef = useRef(0);
-  const recentAutoFetchStartedRef = useRef(false);
-  const recentPreloadBusyRef = useRef(false);
-  const recentPreloadRequestIdRef = useRef(0);
-  const recentPreloadAbortRef = useRef<AbortController | null>(null);
-  const recentPreloadedKeysRef = useRef(new Set<string>());
+
   const activeRecentGameCacheKeyRef = useRef<string | null>(null);
   const activeRecentGameLinkRef = useRef<string | null>(null);
   const activeRecentGamePgnRef = useRef<string | null>(null);
@@ -320,49 +352,52 @@ export function useLabOrchestrator() {
   }, [historyIndex, moveHistory, variationBaseIndex, variationMoves]);
 
   const currentMoveList = useMemo(() => buildMoveUciHistory(currentMoves), [currentMoves]);
-  const currentLineKey = useMemo(() => getPositionCacheKey(initialFen, currentMoveList, activeDeckCard ? 'training' : 'review'), [activeDeckCard, currentMoveList, initialFen]);
+  const currentLineKey = useMemo(
+    () => getPositionCacheKey(initialFen, currentMoveList, activeDeckCard ? 'training' : 'review'),
+    [activeDeckCard, currentMoveList, initialFen],
+  );
 
-  const engineContext = useMemo(() => ({
-    currentFen,
-    currentMoveList,
-    currentLineKey,
-  }), [currentFen, currentLineKey, currentMoveList]);
+  const engineContext = useMemo(
+    () => ({
+      currentFen,
+      currentMoveList,
+      currentLineKey,
+    }),
+    [currentFen, currentLineKey, currentMoveList],
+  );
 
-  const {
-    analyzeTimelineDeep,
-    clearEngineCache,
-    positionCacheRef,
-    positionInFlightRef,
-    timelineBatchInFlightRef,
-  } = useLabEngine(labState, engineContext);
+  const { analyzeTimelineDeep, clearEngineCache, positionCacheRef, positionInFlightRef, timelineBatchInFlightRef } =
+    useLabEngine(labState, engineContext);
 
-  const recentGamesRefs = useMemo(() => ({
-    modeRef,
-    positionInFlightRef,
-    lastReviewInteractionAtRef,
-  }), [positionInFlightRef]);
+  const recentGamesRefs = useMemo(
+    () => ({
+      modeRef,
+      positionInFlightRef,
+      lastReviewInteractionAtRef,
+    }),
+    [positionInFlightRef],
+  );
 
-  const {
-    fetchRecentChessGames,
-    preloadRecentGameAnalysis,
-    cancelRecentPreload,
-  } = useRecentGames(labState, recentGamesRefs, {
-    analyzeTimelineDeep: (...args) => analyzeTimelineDeep(...args),
-  });
+  const { fetchRecentChessGames, preloadRecentGameAnalysis, cancelRecentPreload } = useRecentGames(
+    labState,
+    recentGamesRefs,
+    {
+      analyzeTimelineDeep: (...args) => analyzeTimelineDeep(...args),
+    },
+  );
 
-      const trainingProfileRefs = useMemo(() => ({
-        progressHydratedRef,
-        progressSyncTimerRef,
-        trainingCredentialsHydratedRef,
-      }), []);
+  const trainingProfileRefs = useMemo(
+    () => ({
+      progressHydratedRef,
+      progressSyncTimerRef,
+      trainingCredentialsHydratedRef,
+    }),
+    [trainingCredentialsHydratedRef],
+  );
 
-      const {
-        saveTrainingAttempt,
-        hydrateTrainingProgressRef,
-      } = useTrainingProfile(labState, trainingProfileRefs);
+  const { saveTrainingAttempt, hydrateTrainingProgressRef } = useTrainingProfile(labState, trainingProfileRefs);
 
-      const { playSound, playSoundSequence } = useLabAudio();
-
+  const { playSound, playSoundSequence } = useLabAudio();
 
   const trainAnswerFeedback = useMemo(
     () =>
@@ -375,6 +410,7 @@ export function useLabOrchestrator() {
         : null,
     [deckFeedback],
   );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: trainAnalysisTick invalidates cache reads from positionCacheRef
   const trainPositionAnalyses = useMemo(() => {
     const analyses: Array<AnalysisResult | null> = [];
 
@@ -401,13 +437,7 @@ export function useLabOrchestrator() {
       return buildLiveTrainMoveReview(moveIndex, currentMoves, trainPositionAnalyses, initialFen);
     }
 
-    return resolveTrainBoardMoveReview(
-      activeDeckCard,
-      moveIndex,
-      currentMoves,
-      initialFen,
-      trainAnswerFeedback,
-    );
+    return resolveTrainBoardMoveReview(activeDeckCard, moveIndex, currentMoves, initialFen, trainAnswerFeedback);
   }, [activeDeckCard, currentMoves, historyIndex, initialFen, trainAnswerFeedback, trainPositionAnalyses]);
   const trainUsesLivePositionEval = useMemo(() => {
     if (!activeDeckCard || historyIndex <= 0) {
@@ -486,11 +516,11 @@ export function useLabOrchestrator() {
     );
   }, [activeDeckCard, historyIndex, isTrainCardFinished, moveHistory, positionAnalysis, trainPositionAnalyses]);
   const reviewBestMoveArrow = showArrow && !activeDeckCard ? getBestMoveArrow(displayAnalysis?.bestMove ?? null) : [];
-  const deckAnswerArrow = isAtDeckFailureFeedbackView ? getBestMoveArrow(deckFeedback?.expectedUci ?? activeDeckCard?.answerUci ?? null) : [];
+  const deckAnswerArrow = isAtDeckFailureFeedbackView
+    ? getBestMoveArrow(deckFeedback?.expectedUci ?? activeDeckCard?.answerUci ?? null)
+    : [];
   const trainBestMoveArrow =
-    isTrainCardFinished && !isAtDeckFailureFeedbackView
-      ? getBestMoveArrow(trainReplayBestMoveUci)
-      : [];
+    isTrainCardFinished && !isAtDeckFailureFeedbackView ? getBestMoveArrow(trainReplayBestMoveUci) : [];
   const deckOpponentArrow =
     isViewingDeckFailurePosition && !positionLoading && positionAnalysis?.bestMove
       ? getBestMoveArrow(positionAnalysis?.bestMove ?? null, '#ff456f')
@@ -499,11 +529,12 @@ export function useLabOrchestrator() {
     isViewingDeckFailurePosition && !positionLoading && positionAnalysis?.bestMove
       ? formatBestMove(currentFen, positionAnalysis.bestMove)
       : null;
-  const boardArrows = mode === 'lines'
-    ? []
-    : activeDeckCard
-      ? dedupeBoardArrows([...trainBestMoveArrow, ...deckAnswerArrow, ...deckOpponentArrow])
-      : reviewBestMoveArrow;
+  const boardArrows =
+    mode === 'lines'
+      ? []
+      : activeDeckCard
+        ? dedupeBoardArrows([...trainBestMoveArrow, ...deckAnswerArrow, ...deckOpponentArrow])
+        : reviewBestMoveArrow;
   const whiteReviewName = metadata?.whitePlayer ?? 'White';
   const blackReviewName = metadata?.blackPlayer ?? 'Black';
   const whiteBoardPlayer = useMemo(
@@ -513,7 +544,10 @@ export function useLabOrchestrator() {
       elo: metadata?.whiteElo ?? '',
       avatarUrl: whiteAvatarUrl,
       captured: buildCapturedPieces(currentMoves, 'white'),
-      materialAdvantage: Math.max(0, getCapturedMaterialValue(currentMoves, 'white') - getCapturedMaterialValue(currentMoves, 'black')),
+      materialAdvantage: Math.max(
+        0,
+        getCapturedMaterialValue(currentMoves, 'white') - getCapturedMaterialValue(currentMoves, 'black'),
+      ),
     }),
     [currentMoves, metadata?.whiteElo, whiteAvatarUrl, whiteReviewName],
   );
@@ -524,43 +558,43 @@ export function useLabOrchestrator() {
       elo: metadata?.blackElo ?? '',
       avatarUrl: blackAvatarUrl,
       captured: buildCapturedPieces(currentMoves, 'black'),
-      materialAdvantage: Math.max(0, getCapturedMaterialValue(currentMoves, 'black') - getCapturedMaterialValue(currentMoves, 'white')),
+      materialAdvantage: Math.max(
+        0,
+        getCapturedMaterialValue(currentMoves, 'black') - getCapturedMaterialValue(currentMoves, 'white'),
+      ),
     }),
     [blackAvatarUrl, blackReviewName, currentMoves, metadata?.blackElo],
   );
   const topBoardPlayer = orientation === 'white' ? blackBoardPlayer : whiteBoardPlayer;
   const bottomBoardPlayer = orientation === 'white' ? whiteBoardPlayer : blackBoardPlayer;
-  const sortedDeckCards = useMemo(
-    () => sortCardsForReview(deckCards, deckProgress),
-    [deckCards, deckProgress],
-  );
+  const sortedDeckCards = useMemo(() => sortCardsForReview(deckCards, deckProgress), [deckCards, deckProgress]);
   const availableDeckCards = useMemo(
     () => getDeckStudyQueue(sortedDeckCards, deckProgress),
     [deckProgress, sortedDeckCards],
   );
   const trainStatsCards = trainAllSession ? trainAllQueue : deckCards;
-  const deckStats = useMemo(() => summarizeDeckProgress(trainStatsCards, deckProgress), [deckProgress, trainStatsCards]);
+  const deckStats = useMemo(
+    () => summarizeDeckProgress(trainStatsCards, deckProgress),
+    [deckProgress, trainStatsCards],
+  );
   const trainSessionCardTotal = trainAllSession ? trainAllQueue.length : availableDeckCards.length;
   const trainSessionCardCurrent = trainAllSession
     ? trainSessionIndex + 1
     : Math.max(
         1,
-        (activeDeckCard ? availableDeckCards.findIndex(card => card.id === activeDeckCard.id) : deckIndex) + 1,
+        (activeDeckCard ? availableDeckCards.findIndex((card) => card.id === activeDeckCard.id) : deckIndex) + 1,
       );
   const nextDeckCard = availableDeckCards[deckIndex % Math.max(1, availableDeckCards.length)] ?? null;
   const viewedDeckCard = activeDeckCard ?? nextDeckCard;
-  const selectedDeck = useMemo(
-    () => deckSummaries.find(deck => deck.id === selectedDeckId) ?? null,
+  const _selectedDeck = useMemo(
+    () => deckSummaries.find((deck) => deck.id === selectedDeckId) ?? null,
     [deckSummaries, selectedDeckId],
   );
   const activeDeckProgress = useMemo(
     () => (viewedDeckCard ? getDeckProgressEntry(deckProgress, viewedDeckCard.id) : null),
     [deckProgress, viewedDeckCard],
   );
-  const deckLineMastery = useMemo(
-    () => summarizeLineMastery(deckCards, deckProgress),
-    [deckCards, deckProgress],
-  );
+  const deckLineMastery = useMemo(() => summarizeLineMastery(deckCards, deckProgress), [deckCards, deckProgress]);
   const reviewPlayerSide = useMemo(() => {
     if (!metadata) {
       return null;
@@ -595,12 +629,22 @@ export function useLabOrchestrator() {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
     const reviewCategory = activeDeckCard
-      ? activeTrainMoveReview?.category ?? null
-      : mode === 'lines' && historyIndex > 0
-        ? (historyIndex === moveHistory.length && deckFeedback != null ? (deckFeedback.correct ? 'excellent' : 'mistake') : 'book')
-        : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
-          ? timelineReviews[historyIndex - 1]?.category
-          : null;
+      ? (activeTrainMoveReview?.category ?? null)
+      : mode === 'lines' && openingDrillActive
+        ? historyIndex === moveHistory.length && deckFeedback != null
+          ? deckFeedback.correct
+            ? 'best'
+            : 'miss'
+          : null
+        : mode === 'lines' && historyIndex > 0
+          ? historyIndex === moveHistory.length && deckFeedback != null
+            ? deckFeedback.correct
+              ? 'excellent'
+              : 'mistake'
+            : 'book'
+          : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
+            ? timelineReviews[historyIndex - 1]?.category
+            : null;
     const lastMoveStyle = getReviewMoveStyle(reviewCategory);
 
     if (lastMove) {
@@ -612,7 +656,20 @@ export function useLabOrchestrator() {
       ...nextStyles,
       ...squareStyles,
     };
-  }, [activeDeckCard, activeTrainMoveReview, currentMoves, hasLoadedGame, historyIndex, squareStyles, timelineReviews, variationBaseIndex]);
+  }, [
+    activeDeckCard,
+    activeTrainMoveReview,
+    currentMoves,
+    deckFeedback,
+    hasLoadedGame,
+    historyIndex,
+    mode,
+    moveHistory.length,
+    openingDrillActive,
+    squareStyles,
+    timelineReviews,
+    variationBaseIndex,
+  ]);
   const boardReviewBadge = useMemo(() => {
     if (historyIndex <= 0 || variationBaseIndex != null) {
       return null;
@@ -620,12 +677,22 @@ export function useLabOrchestrator() {
 
     const lastMove = currentMoves[currentMoves.length - 1];
     const category = activeDeckCard
-      ? activeTrainMoveReview?.category ?? null
-      : mode === 'lines' && historyIndex > 0
-        ? (historyIndex === moveHistory.length && deckFeedback != null ? (deckFeedback.correct ? 'excellent' : 'mistake') : 'book')
-        : hasLoadedGame
-          ? timelineReviews[historyIndex - 1]?.category
-          : null;
+      ? (activeTrainMoveReview?.category ?? null)
+      : mode === 'lines' && openingDrillActive
+        ? historyIndex === moveHistory.length && deckFeedback != null
+          ? deckFeedback.correct
+            ? 'best'
+            : 'miss'
+          : null
+        : mode === 'lines' && historyIndex > 0
+          ? historyIndex === moveHistory.length && deckFeedback != null
+            ? deckFeedback.correct
+              ? 'excellent'
+              : 'mistake'
+            : 'book'
+          : hasLoadedGame
+            ? timelineReviews[historyIndex - 1]?.category
+            : null;
 
     if (!lastMove || !category) {
       return null;
@@ -643,7 +710,21 @@ export function useLabOrchestrator() {
       color: meta.color,
       ...placement,
     };
-  }, [activeDeckCard, activeTrainMoveReview, boardWidth, currentMoves, hasLoadedGame, historyIndex, orientation, timelineReviews, variationBaseIndex]);
+  }, [
+    activeDeckCard,
+    activeTrainMoveReview,
+    boardWidth,
+    currentMoves,
+    deckFeedback,
+    hasLoadedGame,
+    historyIndex,
+    mode,
+    moveHistory.length,
+    openingDrillActive,
+    orientation,
+    timelineReviews,
+    variationBaseIndex,
+  ]);
 
   const movePairs = useMemo(() => {
     const pairs: Array<{
@@ -666,9 +747,6 @@ export function useLabOrchestrator() {
 
     return pairs;
   }, [moveHistory]);
-
-
-
 
   useEffect(() => {
     const markInteraction = () => {
@@ -693,123 +771,175 @@ export function useLabOrchestrator() {
     }, RECENT_GAMES_PRELOAD_SCAN_MS);
 
     return () => window.clearInterval(timer);
-  }, [preloadRecentGameAnalysis, recentChessGames, recentPreloadTick, timelineAnalyses, timelineLoading, positionLoading]);
-
-
+  }, [preloadRecentGameAnalysis, recentChessGames]);
 
   const suppressSpaceKeyUpRef = useRef(false);
-  const loadTrainingDeckRef = useRef<(deckId?: string | null, options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean }) => Promise<void>>(async () => undefined);
+  const loadTrainingDeckRef = useRef<
+    (
+      deckId?: string | null,
+      options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean },
+    ) => Promise<void>
+  >(async () => undefined);
   const deckCardPromptStartedAtRef = useRef<number | null>(null);
-  const advanceDrillToStepRef = useRef<(stepIndex: number) => void>(() => {});
+  const advanceDrillToStepRef = useRef<
+    (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
+  >(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
 
-  const gameContext = useMemo(() => ({
-    advanceDrillToStepRef,
-    cancelDrillOpponentMoveRef,
-    playSoundSequence,
-    playSound,
-    saveTrainingAttempt,
-    timelineRefineRequestIdRef,
-    deckCardPromptStartedAtRef,
-    modeRef,
-    drillPathRef,
-    drillPathIndexRef,
-  }), [advanceDrillToStepRef, cancelDrillOpponentMoveRef, playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, deckCardPromptStartedAtRef, modeRef, drillPathRef, drillPathIndexRef]);
+  const gameContext = useMemo(
+    () => ({
+      advanceDrillToStepRef,
+      cancelDrillOpponentMoveRef,
+      playSoundSequence,
+      playSound,
+      saveTrainingAttempt,
+      timelineRefineRequestIdRef,
+      deckCardPromptStartedAtRef,
+      modeRef,
+      drillPathRef,
+      drillPathIndexRef,
+    }),
+    [playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, drillPathRef, drillPathIndexRef],
+  );
 
-  const {
-    clearSelection,
-    clearVariation,
-    highlightMoves,
-    tryMove,
-    jumpToIndex,
-    undoMove,
-  } = useLabGame(labState, gameContext);
-  const applyWorkspaceSnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
-    positionRequestIdRef.current += 1;
-    timelineRequestIdRef.current += 1;
-    timelineRefineRequestIdRef.current += 1;
-    const nextGame = restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
+  const { clearSelection, clearVariation, highlightMoves, tryMove, jumpToIndex, undoMove } = useLabGame(
+    labState,
+    gameContext,
+  );
+  const applyWorkspaceSnapshot = useCallback(
+    (snapshot: WorkspaceSnapshot) => {
+      positionRequestIdRef.current += 1;
+      timelineRequestIdRef.current += 1;
+      timelineRefineRequestIdRef.current += 1;
+      const nextGame = restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
 
-    setInitialFen(snapshot.initialFen);
-    setMoveHistory(snapshot.moveHistory);
-    setHistoryIndex(snapshot.historyIndex);
-    setVariationBaseIndex(snapshot.variationBaseIndex);
-    setVariationMoves(snapshot.variationMoves);
-    setGame(nextGame);
-    setMetadata(snapshot.metadata);
-    setWhiteAvatarUrl(snapshot.whiteAvatarUrl);
-    setBlackAvatarUrl(snapshot.blackAvatarUrl);
-    setFileName(snapshot.fileName);
-    setOrientation(snapshot.orientation);
-    setShowArrow(snapshot.showArrow);
-    setReviewIndex(snapshot.reviewIndex);
-    setActiveDeckCard(snapshot.activeDeckCard);
-    setDeckFeedback(snapshot.deckFeedback);
-    setDeckFeedbackArrowsVisible(false);
-    setDeckIndex(snapshot.deckIndex);
-    setTrainAllSession(snapshot.trainAllSession);
-    setTrainAllQueue([...(snapshot.trainAllQueue ?? [])]);
-    setTrainSessionIndex(snapshot.trainSessionIndex ?? 0);
-    setTrainSessionStats({ ...(snapshot.trainSessionStats ?? createEmptyTrainSessionStats()) });
-    setPositionAnalysis(snapshot.positionAnalysis);
-    setPreMoveAnalyses(snapshot.preMoveAnalyses);
-    setTimelineAnalyses(snapshot.timelineAnalyses);
-    setTimelineReviews(
-      buildTimelineReviews(
-        snapshot.moveHistory,
-        snapshot.preMoveAnalyses,
-        snapshot.timelineAnalyses,
-        snapshot.initialFen,
-        snapshot.metadata,
-      ),
-    );
-    setPositionLoading(false);
-    setTimelineLoading(false);
-    setServerError(snapshot.serverError);
-    setTimelineError(snapshot.timelineError);
-    setSelectedSquare(null);
-    setSquareStyles({});
-  }, [clearSelection, clearVariation, setActiveDeckCard, setBlackAvatarUrl, setDeckFeedback, setDeckFeedbackArrowsVisible, setDeckIndex, setFileName, setGame, setHistoryIndex, setInitialFen, setMetadata, setMoveHistory, setOrientation, setPositionAnalysis, setPreMoveAnalyses, setReviewIndex, setServerError, setShowArrow, setTimelineAnalyses, setTimelineError, setTimelineReviews, setTrainAllQueue, setTrainAllSession, setTrainSessionIndex, setTrainSessionStats, setVariationBaseIndex, setVariationMoves, setWhiteAvatarUrl, setPositionLoading, setTimelineLoading, setSelectedSquare, setSquareStyles]);
+      setInitialFen(snapshot.initialFen);
+      setMoveHistory(snapshot.moveHistory);
+      setHistoryIndex(snapshot.historyIndex);
+      setVariationBaseIndex(snapshot.variationBaseIndex);
+      setVariationMoves(snapshot.variationMoves);
+      setGame(nextGame);
+      setMetadata(snapshot.metadata);
+      setWhiteAvatarUrl(snapshot.whiteAvatarUrl);
+      setBlackAvatarUrl(snapshot.blackAvatarUrl);
+      setFileName(snapshot.fileName);
+      setOrientation(snapshot.orientation);
+      setShowArrow(snapshot.showArrow);
+      setReviewIndex(snapshot.reviewIndex);
+      setActiveDeckCard(snapshot.activeDeckCard);
+      setDeckFeedback(snapshot.deckFeedback);
+      setDeckFeedbackArrowsVisible(false);
+      setDeckIndex(snapshot.deckIndex);
+      setTrainAllSession(snapshot.trainAllSession);
+      setTrainAllQueue([...(snapshot.trainAllQueue ?? [])]);
+      setTrainSessionIndex(snapshot.trainSessionIndex ?? 0);
+      setTrainSessionStats({ ...(snapshot.trainSessionStats ?? createEmptyTrainSessionStats()) });
+      setPositionAnalysis(snapshot.positionAnalysis);
+      setPreMoveAnalyses(snapshot.preMoveAnalyses);
+      setTimelineAnalyses(snapshot.timelineAnalyses);
+      setTimelineReviews(
+        buildTimelineReviews(
+          snapshot.moveHistory,
+          snapshot.preMoveAnalyses,
+          snapshot.timelineAnalyses,
+          snapshot.initialFen,
+          snapshot.metadata,
+        ),
+      );
+      setPositionLoading(false);
+      setTimelineLoading(false);
+      setServerError(snapshot.serverError);
+      setTimelineError(snapshot.timelineError);
+      setSelectedSquare(null);
+      setSquareStyles({});
+    },
+    [
+      setActiveDeckCard,
+      setBlackAvatarUrl,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setDeckIndex,
+      setFileName,
+      setGame,
+      setHistoryIndex,
+      setInitialFen,
+      setMetadata,
+      setMoveHistory,
+      setOrientation,
+      setPositionAnalysis,
+      setPreMoveAnalyses,
+      setReviewIndex,
+      setServerError,
+      setShowArrow,
+      setTimelineAnalyses,
+      setTimelineError,
+      setTrainAllQueue,
+      setTrainAllSession,
+      setTrainSessionIndex,
+      setTrainSessionStats,
+      setVariationBaseIndex,
+      setVariationMoves,
+      setWhiteAvatarUrl,
+      setPositionLoading,
+      setTimelineLoading,
+      setSelectedSquare,
+      setSquareStyles,
+      timelineRefineRequestIdRef,
+      timelineRequestIdRef,
+      positionRequestIdRef,
+    ],
+  );
 
-  function persistReviewWorkspaceSnapshot() {
+  const persistReviewWorkspaceSnapshot = useCallback(() => {
     if (modeRef.current !== 'review' || workspaceStateRef.current.metadata == null) {
       return;
     }
 
     reviewWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
-  }
+  }, []);
 
-  function persistTrainWorkspaceSnapshot() {
+  const persistTrainWorkspaceSnapshot = useCallback(() => {
     if (modeRef.current !== 'train') {
       return;
     }
 
     trainWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
-  }
+  }, []);
 
-  const switchWorkspaceMode = useCallback((nextMode: WorkspaceMode) => {
-    if (modeRef.current === nextMode) {
-      return;
-    }
+  const switchWorkspaceMode = useCallback(
+    (nextMode: WorkspaceMode) => {
+      if (modeRef.current === nextMode) {
+        return;
+      }
 
-    if (modeRef.current === 'review') {
-      persistReviewWorkspaceSnapshot();
-    } else if (modeRef.current === 'train') {
-      persistTrainWorkspaceSnapshot();
-    }
+      if (modeRef.current === 'review') {
+        persistReviewWorkspaceSnapshot();
+      } else if (modeRef.current === 'train') {
+        persistTrainWorkspaceSnapshot();
+      }
 
-    if (nextMode === 'review' && reviewWorkspaceSnapshotRef.current) {
-      applyWorkspaceSnapshot(reviewWorkspaceSnapshotRef.current);
-    } else if (nextMode === 'train' && trainWorkspaceSnapshotRef.current) {
-      applyWorkspaceSnapshot(trainWorkspaceSnapshotRef.current);
-    } else if (nextMode !== 'review' && nextMode !== 'train') {
-      setActiveDeckCard(null);
-      setDeckFeedback(null);
-      setDeckFeedbackArrowsVisible(false);
-    }
+      if (nextMode === 'review' && reviewWorkspaceSnapshotRef.current) {
+        applyWorkspaceSnapshot(reviewWorkspaceSnapshotRef.current);
+      } else if (nextMode === 'train' && trainWorkspaceSnapshotRef.current) {
+        applyWorkspaceSnapshot(trainWorkspaceSnapshotRef.current);
+      } else if (nextMode !== 'review' && nextMode !== 'train') {
+        setActiveDeckCard(null);
+        setDeckFeedback(null);
+        setDeckFeedbackArrowsVisible(false);
+      }
 
-    setMode(nextMode);
-  }, [applyWorkspaceSnapshot, setActiveDeckCard, setDeckFeedback, setDeckFeedbackArrowsVisible, setMode]);
+      setMode(nextMode);
+    },
+    [
+      applyWorkspaceSnapshot,
+      setActiveDeckCard,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setMode,
+      persistTrainWorkspaceSnapshot,
+      persistReviewWorkspaceSnapshot,
+    ],
+  );
 
   const openTrainCreateDeck = useCallback(() => {
     if (!trainingProfile) {
@@ -819,46 +949,69 @@ export function useLabOrchestrator() {
 
     switchWorkspaceMode('train');
     setFocusTrainCreateDeck(true);
-  }, [switchWorkspaceMode, trainingProfile]);
+  }, [switchWorkspaceMode, trainingProfile, setFocusTrainCreateDeck]);
 
-  const handleCreateDeckFocusHandled = useCallback(() => {
+  const _handleCreateDeckFocusHandled = useCallback(() => {
     setFocusTrainCreateDeck(false);
-  }, []);
-  const trainingContext = useMemo(() => ({
-    playSound,
-    playSoundSequence,
-    clearVariation,
-    clearSelection,
-    persistReviewWorkspaceSnapshot,
-    deckCardPromptStartedAtRef,
-    deckReplayInitialFenRef,
-    deckReplayMovesRef,
-    timelineRefineRequestIdRef,
-    modeRef,
-  }), [clearSelection, clearVariation, modeRef, persistReviewWorkspaceSnapshot, playSound, playSoundSequence, timelineRefineRequestIdRef, deckCardPromptStartedAtRef]);
+  }, [setFocusTrainCreateDeck]);
+  const trainingContext = useMemo(
+    () => ({
+      playSound,
+      playSoundSequence,
+      clearVariation,
+      clearSelection,
+      persistReviewWorkspaceSnapshot,
+      deckCardPromptStartedAtRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
+      timelineRefineRequestIdRef,
+      modeRef,
+    }),
+    [
+      clearSelection,
+      clearVariation,
+      persistReviewWorkspaceSnapshot,
+      playSound,
+      playSoundSequence,
+      timelineRefineRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
+    ],
+  );
 
-  const {
-    playDeckReplayToIndex,
-    startDeckCardWithReplay,
-    loadTrainingDeck,
-    selectedDeckIdRef,
-  } = useLabTraining(labState, trainingContext);
+  const { playDeckReplayToIndex, startDeckCardWithReplay, loadTrainingDeck, selectedDeckIdRef } = useLabTraining(
+    labState,
+    trainingContext,
+  );
 
   const deckProgressRef = useRef(deckProgress);
   const deckFeedbackRef = useRef(deckFeedback);
 
-  const linesContext = useMemo(() => ({
-    playSound,
-    playSoundSequence,
-    playDeckReplayToIndex,
-    clearSelection,
-    clearVariation,
-    positionRequestIdRef,
-    timelineRequestIdRef,
-    deckReplayInitialFenRef,
-    deckReplayMovesRef,
-    modeRef,
-  }), [clearSelection, clearVariation, modeRef, playDeckReplayToIndex, playSound, playSoundSequence, positionRequestIdRef, timelineRequestIdRef]);
+  const linesContext = useMemo(
+    () => ({
+      playSound,
+      playSoundSequence,
+      playDeckReplayToIndex,
+      clearSelection,
+      clearVariation,
+      positionRequestIdRef,
+      timelineRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
+      modeRef,
+    }),
+    [
+      clearSelection,
+      clearVariation,
+      playDeckReplayToIndex,
+      playSound,
+      playSoundSequence,
+      positionRequestIdRef,
+      timelineRequestIdRef,
+      deckReplayMovesRef,
+      deckReplayInitialFenRef,
+    ],
+  );
 
   const {
     loadOpeningTrees,
@@ -879,16 +1032,12 @@ export function useLabOrchestrator() {
     advanceDrillToStepRef.current = advanceDrillToStep;
   }, [advanceDrillToStep]);
 
-  const {
-    createTrainingDeck,
-    generateRecentTrainingDeck,
-    renameTrainingDeck,
-    deleteTrainingDeck,
-  } = useLabDeckManager(labState, { loadTrainingDeck });
+  const { createTrainingDeck, generateRecentTrainingDeck, renameTrainingDeck, deleteTrainingDeck } = useLabDeckManager(
+    labState,
+    { loadTrainingDeck },
+  );
 
-  const {
-    goToReviewMoment,
-  } = useLabReview(labState, {
+  const { goToReviewMoment } = useLabReview(labState, {
     reviewPlaybackRequestIdRef,
     playSoundSequence,
     jumpToIndex,
@@ -897,9 +1046,12 @@ export function useLabOrchestrator() {
     orientation,
   });
 
-  const handleGoToReviewMoment = useCallback((index: number) => {
-    goToReviewMoment(index, reviewMoments, { clearVariation, clearSelection });
-  }, [clearSelection, clearVariation, goToReviewMoment, reviewMoments]);
+  const handleGoToReviewMoment = useCallback(
+    (index: number) => {
+      goToReviewMoment(index, reviewMoments, { clearVariation, clearSelection });
+    },
+    [clearSelection, clearVariation, goToReviewMoment, reviewMoments],
+  );
 
   loadTrainingDeckRef.current = loadTrainingDeck;
 
@@ -913,7 +1065,7 @@ export function useLabOrchestrator() {
 
   useEffect(() => {
     selectedDeckIdRef.current = selectedDeckId;
-  }, [selectedDeckId]);
+  }, [selectedDeckId, selectedDeckIdRef]);
 
   useEffect(() => {
     if (!trainingProfile?.id || trainingProfileBootstrapping || trainAllSession) {
@@ -929,7 +1081,8 @@ export function useLabOrchestrator() {
     }
 
     lastDeckLibraryProfileIdRef.current = trainingProfile.id;
-    const storedDeckId = typeof window === 'undefined' ? null : window.localStorage.getItem(LAST_TRAINING_DECK_STORAGE_KEY);
+    const storedDeckId =
+      typeof window === 'undefined' ? null : window.localStorage.getItem(LAST_TRAINING_DECK_STORAGE_KEY);
 
     void loadTrainingDeckRef.current(storedDeckId, { libraryLoading: true });
   }, [trainingProfile?.id, trainingProfileBootstrapping, trainAllSession]);
@@ -944,20 +1097,30 @@ export function useLabOrchestrator() {
     }
 
     void loadOpeningTrees();
-  }, [loadOpeningTrees, trainingProfile?.id, trainingProfileBootstrapping]);
+  }, [
+    loadOpeningTrees,
+    trainingProfile?.id,
+    trainingProfileBootstrapping,
+    setOpeningTrees,
+    setSelectedOpeningTreeId,
+    setActiveOpeningTree,
+    setActiveOpeningNodeId,
+  ]);
 
   useEffect(() => {
-    setReviewIndex(value => Math.max(0, Math.min(value, Math.max(0, reviewMoments.length - 1))));
-  }, [reviewMoments.length]);
+    setReviewIndex((value) => Math.max(0, Math.min(value, Math.max(0, reviewMoments.length - 1))));
+  }, [reviewMoments.length, setReviewIndex]);
 
+  const loadDeckCard = useCallback(
+    async (card: DeckCard | null) => {
+      if (!card) {
+        return;
+      }
 
-  const loadDeckCard = useCallback(async (card: DeckCard | null) => {
-    if (!card) {
-      return;
-    }
-
-    await startDeckCardWithReplay(card, openingLines);
-  }, [openingLines, startDeckCardWithReplay]);
+      await startDeckCardWithReplay(card, openingLines);
+    },
+    [openingLines, startDeckCardWithReplay],
+  );
 
   const finishDeckTrainingSession = useCallback(() => {
     const wasTrainAllSession = trainAllSession;
@@ -994,37 +1157,86 @@ export function useLabOrchestrator() {
     if (wasTrainAllSession) {
       void loadTrainingDeck(restoreDeckId, { autoStart: false, libraryLoading: false });
     }
-  }, [loadTrainingDeck, selectedDeckId, trainAllSession]);
+  }, [
+    loadTrainingDeck,
+    selectedDeckId,
+    trainAllSession,
+    setTrainAllQueue,
+    setDeckFeedback,
+    positionRequestIdRef,
+    setMoveHistory,
+    setTrainAllSession,
+    setFileName,
+    setTimelineLoading,
+    setTimelineError,
+    clearSelection,
+    setTrainSessionIndex,
+    setWhiteAvatarUrl,
+    setTimelineAnalyses,
+    setHistoryIndex,
+    setActiveDeckCard,
+    setGame,
+    setDeckFeedbackArrowsVisible,
+    setPositionLoading,
+    setTrainSessionStats,
+    setPositionAnalysis,
+    setPreMoveAnalyses,
+    setBlackAvatarUrl,
+    setServerError,
+    setMetadata,
+    setInitialFen,
+    clearVariation,
+  ]);
 
   const deckBusy = deckLibraryLoading || deckCardsLoading;
 
-  const trainDeckFromLibrary = useCallback(async (deckId: string) => {
-    setTrainAllSession(false);
-    setTrainAllQueue([]);
-    setTrainSessionIndex(0);
-    setTrainSessionStats(createEmptyTrainSessionStats());
-    setActiveDeckCard(null);
-    setDeckFeedback(null);
-    setDeckFeedbackArrowsVisible(false);
-    setSelectedDeckId(deckId);
+  const trainDeckFromLibrary = useCallback(
+    async (deckId: string) => {
+      setTrainAllSession(false);
+      setTrainAllQueue([]);
+      setTrainSessionIndex(0);
+      setTrainSessionStats(createEmptyTrainSessionStats());
+      setActiveDeckCard(null);
+      setDeckFeedback(null);
+      setDeckFeedbackArrowsVisible(false);
+      setSelectedDeckId(deckId);
 
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(LAST_TRAINING_DECK_STORAGE_KEY, deckId);
-    }
-
-    if (deckId === selectedDeckId && deckCards.length > 0 && !deckBusy) {
-      const nextCard = getDeckStudyQueue(deckCards, deckProgress)[0] ?? null;
-
-      if (nextCard) {
-        setDeckIndex(0);
-        await startDeckCardWithReplay(nextCard, openingLines);
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(LAST_TRAINING_DECK_STORAGE_KEY, deckId);
       }
 
-      return;
-    }
+      if (deckId === selectedDeckId && deckCards.length > 0 && !deckBusy) {
+        const nextCard = getDeckStudyQueue(deckCards, deckProgress)[0] ?? null;
 
-    await loadTrainingDeck(deckId, { autoStart: true, libraryLoading: false });
-  }, [deckBusy, deckCards, deckProgress, loadTrainingDeck, openingLines, selectedDeckId, startDeckCardWithReplay]);
+        if (nextCard) {
+          setDeckIndex(0);
+          await startDeckCardWithReplay(nextCard, openingLines);
+        }
+
+        return;
+      }
+
+      await loadTrainingDeck(deckId, { autoStart: true, libraryLoading: false });
+    },
+    [
+      deckBusy,
+      deckCards,
+      deckProgress,
+      loadTrainingDeck,
+      openingLines,
+      selectedDeckId,
+      startDeckCardWithReplay,
+      setTrainAllQueue,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setTrainSessionStats,
+      setSelectedDeckId,
+      setDeckIndex,
+      setTrainSessionIndex,
+      setTrainAllSession,
+      setActiveDeckCard,
+    ],
+  );
 
   const trainAllDecks = useCallback(async () => {
     setTrainAllSession(true);
@@ -1032,7 +1244,7 @@ export function useLabOrchestrator() {
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
     await loadTrainingDeck(undefined, { autoStart: true, allDecks: true });
-  }, [loadTrainingDeck]);
+  }, [loadTrainingDeck, setActiveDeckCard, setDeckFeedbackArrowsVisible, setTrainAllSession, setDeckFeedback]);
 
   function selectSaveDeck(deckId: string) {
     setSelectedDeckId(deckId);
@@ -1048,7 +1260,7 @@ export function useLabOrchestrator() {
     const feedback = deckFeedbackRef.current;
 
     if (feedback && !feedback.pending) {
-      setTrainSessionStats(previous => ({
+      setTrainSessionStats((previous) => ({
         completed: previous.completed + 1,
         hits: previous.hits + (feedback.correct ? 1 : 0),
         misses: previous.misses + (feedback.correct ? 0 : 1),
@@ -1078,12 +1290,25 @@ export function useLabOrchestrator() {
     }
 
     const currentCardId = activeDeckCard?.id ?? null;
-    const nextPriorityCard = sessionCards.find(card => card.id !== currentCardId) ?? sessionCards[0];
-    const nextIndex = sessionCards.findIndex(card => card.id === nextPriorityCard.id);
+    const nextPriorityCard = sessionCards.find((card) => card.id !== currentCardId) ?? sessionCards[0];
+    const nextIndex = sessionCards.findIndex((card) => card.id === nextPriorityCard.id);
 
     setDeckIndex(nextIndex);
     loadDeckCard(nextPriorityCard);
-  }, [activeDeckCard, availableDeckCards, finishDeckTrainingSession, loadDeckCard, trainAllQueue, trainAllSession, trainSessionIndex]);
+  }, [
+    activeDeckCard,
+    availableDeckCards,
+    finishDeckTrainingSession,
+    loadDeckCard,
+    trainAllQueue,
+    trainAllSession,
+    trainSessionIndex,
+    setTrainSessionIndex,
+    setTrainSessionStats,
+    setDeckPlaybackBusy,
+    setDeckIndex,
+    deckPlaybackRequestIdRef,
+  ]);
 
   const deleteActiveDeckCard = useCallback(async () => {
     const card = activeDeckCard ?? nextDeckCard;
@@ -1112,7 +1337,7 @@ export function useLabOrchestrator() {
         throw new Error(payload.error ?? 'Unable to delete card.');
       }
 
-      const remainingCards = deckCards.filter(entry => entry.id !== card.id);
+      const remainingCards = deckCards.filter((entry) => entry.id !== card.id);
       const nextProgress = { ...deckProgress };
       delete nextProgress[card.id];
 
@@ -1155,6 +1380,25 @@ export function useLabOrchestrator() {
     loadTrainingDeck,
     nextDeckCard,
     selectedDeckId,
+    setPositionAnalysis,
+    setDeckActionError,
+    setMetadata,
+    setTimelineAnalyses,
+    setGame,
+    setDeckFeedbackArrowsVisible,
+    setActiveDeckCard,
+    setDeckActionLoading,
+    setMoveHistory,
+    setFileName,
+    setPreMoveAnalyses,
+    setInitialFen,
+    setDeckFeedback,
+    setDeckCards,
+    setDeckProgress,
+    clearVariation,
+    positionRequestIdRef,
+    setHistoryIndex,
+    clearSelection,
   ]);
 
   useEffect(() => {
@@ -1200,6 +1444,11 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (openingDrillActive) {
+          jumpToIndex(historyIndex - 1);
+          return;
+        }
+
         const boundedIndex = Math.max(0, Math.min(historyIndex - 1, moveHistory.length));
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
 
@@ -1211,7 +1460,8 @@ export function useLabOrchestrator() {
             const isSelfMove =
               playerSide == null
                 ? orientation === 'white'
-                : (playerSide === 'white' && replayedMove.color === 'w') || (playerSide === 'black' && replayedMove.color === 'b');
+                : (playerSide === 'white' && replayedMove.color === 'w') ||
+                  (playerSide === 'black' && replayedMove.color === 'b');
 
             playSoundSequence([getPrimaryMoveSound(replayedMove, isSelfMove)]);
           }
@@ -1231,6 +1481,11 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (openingDrillActive) {
+          jumpToIndex(historyIndex + 1);
+          return;
+        }
+
         const boundedIndex = Math.max(0, Math.min(historyIndex + 1, moveHistory.length));
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
 
@@ -1242,7 +1497,8 @@ export function useLabOrchestrator() {
             const isSelfMove =
               playerSide == null
                 ? orientation === 'white'
-                : (playerSide === 'white' && replayedMove.color === 'w') || (playerSide === 'black' && replayedMove.color === 'b');
+                : (playerSide === 'white' && replayedMove.color === 'w') ||
+                  (playerSide === 'black' && replayedMove.color === 'b');
 
             playSoundSequence(
               getMoveSoundSequence({
@@ -1269,6 +1525,11 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (openingDrillActive) {
+          jumpToIndex(moveHistory.length);
+          return;
+        }
+
         const boundedIndex = moveHistory.length;
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
 
@@ -1284,6 +1545,11 @@ export function useLabOrchestrator() {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         event.stopPropagation();
+
+        if (openingDrillActive) {
+          jumpToIndex(moveHistory.length > 0 ? 1 : 0);
+          return;
+        }
 
         const boundedIndex = moveHistory.length > 0 ? 1 : 0;
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
@@ -1314,9 +1580,30 @@ export function useLabOrchestrator() {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
     };
-  }, [activeDeckCard, advanceDeckCard, deckFeedback, historyIndex, initialFen, mode, moveHistory, orientation, pgnDialogOpen, playSoundSequence, positionAnalysis?.bestMove, reviewPlayerSide, tryMove]);
-
-
+  }, [
+    activeDeckCard,
+    advanceDeckCard,
+    clearSelection,
+    clearVariation,
+    deckFeedback,
+    deckPlaybackBusy,
+    historyIndex,
+    initialFen,
+    jumpToIndex,
+    mode,
+    moveHistory,
+    openingDrillActive,
+    orientation,
+    pgnDialogOpen,
+    playSoundSequence,
+    positionAnalysis?.bestMove,
+    reviewPlayerSide,
+    setDeckFeedback,
+    setDeckFeedbackArrowsVisible,
+    setGame,
+    setHistoryIndex,
+    tryMove,
+  ]);
 
   async function runTimelineAnalysis(
     nextMoves = moveHistory,
@@ -1342,11 +1629,16 @@ export function useLabOrchestrator() {
     setTimelineError('');
 
     try {
-      const sequence = await analyzeTimelineDeep(nextMoves, nextInitialFen, progress => {
-        if (timelineRequestIdRef.current === requestId) {
-          setTimelineProgress(TIMELINE_ENGINE_PROGRESS_OFFSET + progress * TIMELINE_ENGINE_PROGRESS_WEIGHT);
-        }
-      }, 'review');
+      const sequence = await analyzeTimelineDeep(
+        nextMoves,
+        nextInitialFen,
+        (progress) => {
+          if (timelineRequestIdRef.current === requestId) {
+            setTimelineProgress(TIMELINE_ENGINE_PROGRESS_OFFSET + progress * TIMELINE_ENGINE_PROGRESS_WEIGHT);
+          }
+        },
+        'review',
+      );
 
       if (timelineRequestIdRef.current !== requestId) {
         return;
@@ -1424,8 +1716,9 @@ export function useLabOrchestrator() {
       const nextHistory = loadedGame.history({ verbose: true }).map(toStoredMove);
       const nextGame = restoreGameFromHistory(nextHistory, nextInitialFen, 0);
       const requestedCachedAnalysis = options?.cachedAnalysis ?? null;
-      const cachedAnalysis =
-        isUsableCachedTimelineAnalysis(requestedCachedAnalysis, nextHistory.length) ? requestedCachedAnalysis : null;
+      const cachedAnalysis = isUsableCachedTimelineAnalysis(requestedCachedAnalysis, nextHistory.length)
+        ? requestedCachedAnalysis
+        : null;
 
       const nextMetadata = extractMetadataFromGame(loadedGame);
 
@@ -1492,7 +1785,7 @@ export function useLabOrchestrator() {
     }
 
     const reader = new FileReader();
-    reader.onload = async loadEvent => {
+    reader.onload = async (loadEvent) => {
       await loadPgnText(file.name, String(loadEvent.target?.result ?? ''));
     };
 
@@ -1519,19 +1812,14 @@ export function useLabOrchestrator() {
     const nextHistory = parsedGame.history({ verbose: true }).map(toStoredMove);
     const nextMetadata = extractMetadataFromGame(parsedGame);
 
-    await loadPgnText(
-      gameSummary.link,
-      gameSummary.pgn,
-      gameSummary.playerColor === 'black' ? 'black' : 'white',
-      {
-        cachedAnalysis: memoryCachedAnalysis,
-        cacheKey,
-        gameLink: gameSummary.link || gameSummary.url,
-        skipAnalysis: !memoryCachedAnalysis,
-        whiteAvatarUrl: gameSummary.whiteAvatar,
-        blackAvatarUrl: gameSummary.blackAvatar,
-      },
-    );
+    await loadPgnText(gameSummary.link, gameSummary.pgn, gameSummary.playerColor === 'black' ? 'black' : 'white', {
+      cachedAnalysis: memoryCachedAnalysis,
+      cacheKey,
+      gameLink: gameSummary.link || gameSummary.url,
+      skipAnalysis: !memoryCachedAnalysis,
+      whiteAvatarUrl: gameSummary.whiteAvatar,
+      blackAvatarUrl: gameSummary.blackAvatar,
+    });
 
     if (!memoryCachedAnalysis) {
       void (async () => {
@@ -1561,11 +1849,11 @@ export function useLabOrchestrator() {
 
         await runTimelineAnalysis(nextHistory, nextInitialFen, nextMetadata);
       })().finally(() => {
-          if (activeRecentGameCacheKeyRef.current === cacheKey) {
-            setTimelineLoading(false);
-            setTimelineProgress(null);
-          }
-        });
+        if (activeRecentGameCacheKeyRef.current === cacheKey) {
+          setTimelineLoading(false);
+          setTimelineProgress(null);
+        }
+      });
     }
   }
 
@@ -1599,7 +1887,6 @@ export function useLabOrchestrator() {
     }
   }
 
-
   async function saveReviewPositionToDeck() {
     setReviewDeckSaveStatus('Saving');
     setDeckActionError('');
@@ -1622,9 +1909,9 @@ export function useLabOrchestrator() {
         fen: currentFen,
         side,
         rootAnalysis: verifiedRootAnalysis,
-        analyzePosition: request => analyzeSinglePosition(request),
+        analyzePosition: (request) => analyzeSinglePosition(request),
       });
-      const setupMoves = saveReplayFromStart ? currentMoves.map(move => move.san) : [];
+      const setupMoves = saveReplayFromStart ? currentMoves.map((move) => move.san) : [];
       const replayFromStart = saveReplayFromStart && setupMoves.length > 0;
       const moveReviews = replayFromStart ? cardMoveReviewsFromTimeline(timelineReviews, setupMoves.length) : [];
 
@@ -1644,7 +1931,7 @@ export function useLabOrchestrator() {
             answerUci: verifiedAnswer.answerUci,
             answerSan: verifiedAnswer.answerSan,
             prompt: `${side === 'white' ? 'White' : 'Black'} to move: find the best response.`,
-            context: currentMoves.length > 0 ? currentMoves.map(move => move.san).join(' ') : 'Starting position',
+            context: currentMoves.length > 0 ? currentMoves.map((move) => move.san).join(' ') : 'Starting position',
             referenceEvalCp: verifiedAnswer.referenceEvalCp,
             replayFromStart,
             initialFen: replayFromStart ? initialFen : null,
@@ -1733,46 +2020,104 @@ export function useLabOrchestrator() {
     styles.page,
     mode === 'train' ? styles.trainMode : '',
     mode === 'train' && activeDeckCard ? styles.trainSessionMode : '',
-  ].filter(Boolean).join(' ');
-
+  ]
+    .filter(Boolean)
+    .join(' ');
 
   const slicedTrees = useMemo(
     () => sliceOpeningForest(labState.openingTrees, labState.minForcedPlies),
-    [labState.openingTrees, labState.minForcedPlies]
+    [labState.openingTrees, labState.minForcedPlies],
   );
 
-  const overriddenLabState = useMemo(() => ({
-    ...labState,
-    openingTrees: slicedTrees,
-    activeOpeningTree: slicedTrees.find(t => t.id === labState.selectedOpeningTreeId) ?? null,
-  }), [labState, slicedTrees]);
+  const overriddenLabState = useMemo(
+    () => ({
+      ...labState,
+      openingTrees: slicedTrees,
+      activeOpeningTree: slicedTrees.find((t) => t.id === labState.selectedOpeningTreeId) ?? null,
+    }),
+    [labState, slicedTrees],
+  );
 
-  const handleSelectOpeningTree = useCallback((treeId: string) => {
-    const treeObj = slicedTrees.find(t => t.id === treeId);
-    return selectOpeningTree(treeId, treeObj);
-  }, [selectOpeningTree, slicedTrees]);
+  const handleSelectOpeningTree = useCallback(
+    (treeId: string) => {
+      const treeObj = slicedTrees.find((t) => t.id === treeId);
+      return selectOpeningTree(treeId, treeObj);
+    },
+    [selectOpeningTree, slicedTrees],
+  );
 
   return {
     labState: overriddenLabState,
     gameContext,
     linesContext,
     trainingContext,
-    tryMove, jumpToIndex, undoMove, highlightMoves, clearSelection, clearVariation,
-    createTrainingDeck, generateRecentTrainingDeck, renameTrainingDeck, deleteTrainingDeck,
-     goToReviewMoment, handleGoToReviewMoment,
-    advanceDeckCard, trainDeckFromLibrary, trainAllDecks, finishDeckTrainingSession, loadTrainingDeck,     selectOpeningTree: handleSelectOpeningTree, selectOpeningNode, startOpeningDrill, stopOpeningDrill, importRecentOpeningTrees,
-    currentFen, currentMoves, hasLoadedGame, isTrainCardFinished, displayAnalysis, reviewMoments, activeReviewMoment, timelineReviews,
-    boardSquareStyles, boardArrows, boardReviewBadge, movePairs,
-    topBoardPlayer, bottomBoardPlayer, boardScoreLabel, whiteAdvantage, deckOpponentBestSan,
-    deckBusy, deckStats, deckLineMastery, trainSessionCardCurrent, trainSessionCardTotal,
-    nextDeckCard, activeDeckProgress,
-    whiteReviewName, blackReviewName,
+    tryMove,
+    jumpToIndex,
+    undoMove,
+    highlightMoves,
+    clearSelection,
+    clearVariation,
+    createTrainingDeck,
+    generateRecentTrainingDeck,
+    renameTrainingDeck,
+    deleteTrainingDeck,
+    goToReviewMoment,
+    handleGoToReviewMoment,
+    advanceDeckCard,
+    trainDeckFromLibrary,
+    trainAllDecks,
+    finishDeckTrainingSession,
+    loadTrainingDeck,
+    selectOpeningTree: handleSelectOpeningTree,
+    selectOpeningNode,
+    startOpeningDrill,
+    stopOpeningDrill,
+    importRecentOpeningTrees,
+    currentFen,
+    currentMoves,
+    hasLoadedGame,
+    isTrainCardFinished,
+    displayAnalysis,
+    reviewMoments,
+    activeReviewMoment,
+    timelineReviews,
+    boardSquareStyles,
+    boardArrows,
+    boardReviewBadge,
+    movePairs,
+    topBoardPlayer,
+    bottomBoardPlayer,
+    boardScoreLabel,
+    whiteAdvantage,
+    deckOpponentBestSan,
+    deckBusy,
+    deckStats,
+    deckLineMastery,
+    trainSessionCardCurrent,
+    trainSessionCardTotal,
+    nextDeckCard,
+    activeDeckProgress,
+    whiteReviewName,
+    blackReviewName,
     pageClassName,
-    applyWorkspaceSnapshot, persistReviewWorkspaceSnapshot, persistTrainWorkspaceSnapshot, switchWorkspaceMode,
-    openTrainCreateDeck, resetWorkspace, runTimelineAnalysis, loadPgnText, handleUpload, handlePgnPaste,
-    loadRecentChessGame, openTrainingProfile, saveReviewPositionToDeck, selectSaveDeck, fetchRecentChessGames,
+    applyWorkspaceSnapshot,
+    persistReviewWorkspaceSnapshot,
+    persistTrainWorkspaceSnapshot,
+    switchWorkspaceMode,
+    openTrainCreateDeck,
+    resetWorkspace,
+    runTimelineAnalysis,
+    loadPgnText,
+    handleUpload,
+    handlePgnPaste,
+    loadRecentChessGame,
+    openTrainingProfile,
+    saveReviewPositionToDeck,
+    selectSaveDeck,
+    fetchRecentChessGames,
     deleteActiveDeckCard,
     // Refs needed by JSX
-    boardStageRef, evalRailRef
+    boardStageRef,
+    evalRailRef,
   };
 }

@@ -1,38 +1,38 @@
-import { useCallback } from 'react';
-import type { LabState } from '../useLabState';
 import { Chess, type Square } from 'chess.js';
 import type { CSSProperties } from 'react';
+import { useCallback } from 'react';
+import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
-import {
-  toStoredMove,
-  restoreGameFromHistory,
-  formatBestMove,
-} from '@/lib/chess-analysis-client';
-import { getMoveSoundSequence } from '@/lib/chess-sounds';
+import { formatBestMove, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
+import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
+import { applyDeckAttempt } from '@/lib/deck-progress';
 import {
   buildPendingDeckFeedback,
+  type DeckCard,
+  type DeckFeedback,
   finalizeDeckFeedback,
 } from '@/lib/opening-training';
-import { applyDeckAttempt } from '@/lib/deck-progress';
-import { chooseWeightedOpponentEdge, buildDrillPath } from '@/lib/opening-tree';
+import { buildDrillPath, chooseWeightedOpponentEdge, type DrillPathStep } from '@/lib/opening-tree';
+import type { LabState } from '../useLabState';
 
 const DRILL_OPPONENT_DELAY_MS = 600;
-const TRAINING_REPLAY_MOVE_MS = 300;
 
 export function useLabGame(
   state: LabState,
   context: {
-    advanceDrillToStepRef: React.MutableRefObject<(stepIndex: number) => void>;
+    advanceDrillToStepRef: React.MutableRefObject<
+      (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
+    >;
     cancelDrillOpponentMoveRef?: React.MutableRefObject<() => void>;
-    playSoundSequence: (keys: any[]) => void;
-    playSound: (key: any) => void;
-    saveTrainingAttempt: (card: any, feedback: any) => Promise<void>;
+    playSoundSequence: (keys: ChessSoundKey[]) => void;
+    playSound: (key: ChessSoundKey) => void;
+    saveTrainingAttempt: (card: DeckCard, feedback: DeckFeedback) => Promise<void>;
     timelineRefineRequestIdRef: React.MutableRefObject<number>;
     deckCardPromptStartedAtRef: React.MutableRefObject<number | null>;
-    modeRef: React.MutableRefObject<any>;
-    drillPathRef: React.MutableRefObject<any[]>;
+    modeRef: React.MutableRefObject<WorkspaceMode>;
+    drillPathRef: React.MutableRefObject<DrillPathStep[]>;
     drillPathIndexRef: React.MutableRefObject<number>;
-  }
+  },
 ) {
   const {
     game,
@@ -66,9 +66,7 @@ export function useLabGame(
     setDeckFeedback,
     setShowArrow,
     setOpeningDrillStatus,
-    setInitialFen,
     setActiveOpeningNodeId,
-    setDeckProgress,
   } = state;
 
   const {
@@ -97,31 +95,34 @@ export function useLabGame(
     setVariationMoves([]);
   }, [setVariationBaseIndex, setVariationMoves]);
 
-  const highlightMoves = useCallback((square: string) => {
-    const nextStyles: Record<string, CSSProperties> = {
-      [square]: {
-        boxShadow: 'inset 0 0 0 3px rgba(152, 184, 255, 0.9)',
-        backgroundColor: 'rgba(152, 184, 255, 0.18)',
-      },
-    };
+  const highlightMoves = useCallback(
+    (square: string) => {
+      const nextStyles: Record<string, CSSProperties> = {
+        [square]: {
+          boxShadow: 'inset 0 0 0 3px rgba(152, 184, 255, 0.9)',
+          backgroundColor: 'rgba(152, 184, 255, 0.18)',
+        },
+      };
 
-    const moves = game.moves({ square: square as Square, verbose: true });
+      const moves = game.moves({ square: square as Square, verbose: true });
 
-    for (const move of moves) {
-      nextStyles[move.to] = game.get(move.to as Square)
-        ? {
-            boxShadow: 'inset 0 0 0 2px rgba(242, 243, 245, 0.34)',
-            background:
-              'radial-gradient(circle, rgba(152, 184, 255, 0.28) 0%, rgba(152, 184, 255, 0.08) 54%, transparent 56%)',
-          }
-        : {
-            background:
-              'radial-gradient(circle, rgba(242, 243, 245, 0.5) 0%, rgba(242, 243, 245, 0.32) 16%, transparent 18%)',
-          };
-    }
+      for (const move of moves) {
+        nextStyles[move.to] = game.get(move.to as Square)
+          ? {
+              boxShadow: 'inset 0 0 0 2px rgba(242, 243, 245, 0.34)',
+              background:
+                'radial-gradient(circle, rgba(152, 184, 255, 0.28) 0%, rgba(152, 184, 255, 0.08) 54%, transparent 56%)',
+            }
+          : {
+              background:
+                'radial-gradient(circle, rgba(242, 243, 245, 0.5) 0%, rgba(242, 243, 245, 0.32) 16%, transparent 18%)',
+            };
+      }
 
-    setSquareStyles(nextStyles);
-  }, [game, setSquareStyles]);
+      setSquareStyles(nextStyles);
+    },
+    [game, setSquareStyles],
+  );
 
   const commitMove = useCallback(
     (nextGame: Chess, move: StoredMove) => {
@@ -138,10 +139,10 @@ export function useLabGame(
         let newActiveNodeId = nodeId;
 
         if (activeOpeningTree && activeOpeningNodeId && !correct) {
-          const outgoing = activeOpeningTree.edges.filter(e => e.fromNodeId === activeOpeningNodeId);
-          const altEdge = outgoing.find(e => e.uci === move.uci);
+          const outgoing = activeOpeningTree.edges.filter((e) => e.fromNodeId === activeOpeningNodeId);
+          const altEdge = outgoing.find((e) => e.uci === move.uci);
           if (altEdge) {
-            const targetNode = activeOpeningTree.nodes.find(n => n.id === altEdge.toNodeId);
+            const targetNode = activeOpeningTree.nodes.find((n) => n.id === altEdge.toNodeId);
             if (targetNode) {
               isAlternativeValid = true;
               correct = true;
@@ -152,8 +153,8 @@ export function useLabGame(
           }
         }
 
-        setMoveHistory(prev => [...prev, move]);
-        setHistoryIndex(prev => prev + 1);
+        setMoveHistory((prev) => [...prev, move]);
+        setHistoryIndex((prev) => prev + 1);
         clearVariation();
         setGame(nextGame);
         setPositionAnalysis(null);
@@ -202,7 +203,11 @@ export function useLabGame(
           let nextStepIndex = currentPathIndex + 1;
 
           if (isAlternativeValid && activeOpeningTree) {
-            const newPath = buildDrillPath(activeOpeningTree, { trainSide: state.activeTrainSide, seed: Date.now(), startNodeId: newActiveNodeId });
+            const newPath = buildDrillPath(activeOpeningTree, {
+              trainSide: state.activeTrainSide,
+              seed: Date.now(),
+              startNodeId: newActiveNodeId,
+            });
             if (newPath.length > 0) {
               drillPathRef.current = newPath;
               drillPathIndexRef.current = 0;
@@ -218,36 +223,52 @@ export function useLabGame(
               advanceDrillToStepRef.current(nextStepIndex);
             }, DRILL_OPPONENT_DELAY_MS);
           } else {
-            setOpeningDrillStatus(`Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Use undo (left arrow) to retry.`);
+            setOpeningDrillStatus(
+              `Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Use undo (left arrow) to retry.`,
+            );
           }
         } else {
-          const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === move.uci);
-          const nextNode = nextNodeEdge ? activeOpeningTree?.nodes.find(node => node.id === nextNodeEdge.toNodeId) ?? null : null;
+          const nextNodeEdge = activeOpeningTree?.edges.find(
+            (edge) => edge.fromNodeId === nodeId && edge.uci === move.uci,
+          );
+          const nextNode = nextNodeEdge
+            ? (activeOpeningTree?.nodes.find((node) => node.id === nextNodeEdge.toNodeId) ?? null)
+            : null;
 
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
 
             if (nextNode.sideToMove !== state.activeTrainSide) {
-              const opponentEdges = activeOpeningTree?.edges.filter(edge => edge.fromNodeId === nextNode.id) ?? [];
+              const opponentEdges = activeOpeningTree?.edges.filter((edge) => edge.fromNodeId === nextNode.id) ?? [];
               const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
-              const afterOpponent = opponentEdge ? activeOpeningTree?.nodes.find(node => node.id === opponentEdge.toNodeId) ?? null : null;
+              const afterOpponent = opponentEdge
+                ? (activeOpeningTree?.nodes.find((node) => node.id === opponentEdge.toNodeId) ?? null)
+                : null;
 
               if (afterOpponent) {
                 window.setTimeout(() => {
-                  setGame(prevGame => {
+                  setGame((prevGame) => {
                     const nextGame = new Chess(prevGame.fen());
                     try {
                       const oppMove = nextGame.move({
                         from: opponentEdge.uci.substring(0, 2),
                         to: opponentEdge.uci.substring(2, 4),
-                        promotion: opponentEdge.uci.length === 5 ? opponentEdge.uci[4] : undefined
+                        promotion: opponentEdge.uci.length === 5 ? opponentEdge.uci[4] : undefined,
                       });
                       if (oppMove) {
-                        setMoveHistory(prev => [...prev, toStoredMove(oppMove)]);
-                        setHistoryIndex(prev => prev + 1);
-                        playSoundSequence(getMoveSoundSequence({ move: toStoredMove(oppMove), isSelfMove: false, isCheck: nextGame.isCheck(), isCheckmate: nextGame.isCheckmate(), isGameOver: nextGame.isGameOver() }));
+                        setMoveHistory((prev) => [...prev, toStoredMove(oppMove)]);
+                        setHistoryIndex((prev) => prev + 1);
+                        playSoundSequence(
+                          getMoveSoundSequence({
+                            move: toStoredMove(oppMove),
+                            isSelfMove: false,
+                            isCheck: nextGame.isCheck(),
+                            isCheckmate: nextGame.isCheckmate(),
+                            isGameOver: nextGame.isGameOver(),
+                          }),
+                        );
                       }
-                    } catch (e) {
+                    } catch {
                       // Fallback
                     }
                     return nextGame;
@@ -327,12 +348,57 @@ export function useLabGame(
           };
           const seenAt = new Date().toISOString();
           // Assuming setDeckProgress takes a callback in the actual LabState, but here we just leave it for now.
-          state.setDeckProgress(progress => applyDeckAttempt(progress, activeDeckCard.id, gradedFeedback.correct, seenAt, attemptQuality));
+          state.setDeckProgress((progress) =>
+            applyDeckAttempt(progress, activeDeckCard.id, gradedFeedback.correct, seenAt, attemptQuality),
+          );
         }
         void saveTrainingAttempt(activeDeckCard, gradedFeedback);
       }
     },
-    [activeDeckCard, activeOpeningNodeId, activeOpeningTree, advanceDrillToStepRef, clearVariation, currentFen, deckCardPromptStartedAtRef, deckFeedback, deckPlaybackBusy, drillPathIndexRef, drillPathRef, hasLoadedGame, historyIndex, modeRef, moveHistory, openingDrillActive, openingDrillExpected, playSoundSequence, positionAnalysis?.bestMove, saveTrainingAttempt, setActiveOpeningNodeId, setDeckFeedback, setDeckFeedbackArrowsVisible, setGame, setHistoryIndex, setInitialFen, setMoveHistory, setOpeningDrillExpected, setOpeningDrillStatus, setPositionAnalysis, setServerError, setSelectedSquare, setSquareStyles, setShowArrow, setTimelineAnalyses, setTimelineError, setVariationBaseIndex, setVariationMoves, state, timelineRefineRequestIdRef, trainAllSession, variationBaseIndex, variationMoves]
+    [
+      activeDeckCard,
+      activeOpeningNodeId,
+      activeOpeningTree,
+      advanceDrillToStepRef,
+      clearVariation,
+      currentFen,
+      deckCardPromptStartedAtRef,
+      deckFeedback,
+      deckPlaybackBusy,
+      drillPathIndexRef,
+      drillPathRef,
+      hasLoadedGame,
+      historyIndex,
+      modeRef,
+      moveHistory,
+      openingDrillActive,
+      openingDrillExpected,
+      playSoundSequence,
+      positionAnalysis?.bestMove,
+      saveTrainingAttempt,
+      setActiveOpeningNodeId,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setGame,
+      setHistoryIndex,
+      setMoveHistory,
+      setOpeningDrillExpected,
+      setOpeningDrillStatus,
+      setPositionAnalysis,
+      setServerError,
+      setSelectedSquare,
+      setSquareStyles,
+      setShowArrow,
+      setTimelineAnalyses,
+      setTimelineError,
+      setVariationBaseIndex,
+      setVariationMoves,
+      state,
+      timelineRefineRequestIdRef,
+      trainAllSession,
+      variationBaseIndex,
+      variationMoves,
+    ],
   );
 
   const tryMove = useCallback(
@@ -342,6 +408,10 @@ export function useLabGame(
       }
 
       if (openingDrillActive && historyIndex < moveHistory.length) {
+        return false;
+      }
+
+      if (openingDrillActive && openingDrillExpected == null && deckFeedback == null) {
         return false;
       }
 
@@ -362,61 +432,111 @@ export function useLabGame(
       commitMove(nextGame, toStoredMove(move));
       return true;
     },
-    [commitMove, currentFen, deckPlaybackBusy, historyIndex, moveHistory.length, openingDrillActive, playSound],
+    [
+      commitMove,
+      currentFen,
+      deckFeedback,
+      deckPlaybackBusy,
+      historyIndex,
+      moveHistory.length,
+      openingDrillActive,
+      openingDrillExpected,
+      playSound,
+    ],
   );
 
-  const jumpToIndex = useCallback((index: number) => {
-    const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
-    const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+  const jumpToIndex = useCallback(
+    (index: number) => {
+      cancelDrillOpponentMoveRef?.current?.();
 
-    cancelDrillOpponentMoveRef?.current?.();
+      let boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
+      let nextMoveHistory = moveHistory;
 
-    setHistoryIndex(boundedIndex);
-    if (activeDeckCard) {
-      setDeckFeedbackArrowsVisible(false);
-    }
-    clearVariation();
-    setGame(nextGame);
-    clearSelection();
-
-    if (openingDrillActive && drillPathRef.current.length > 0) {
-      const activeTree = activeOpeningTree;
-      const rootLength = activeTree?.rootSan.length ?? 0;
-      if (boundedIndex >= rootLength) {
-        const stepIndex = boundedIndex - rootLength;
-        advanceDrillToStepRef.current(stepIndex);
+      if (openingDrillActive) {
+        nextMoveHistory = moveHistory.slice(0, boundedIndex);
+        setMoveHistory(nextMoveHistory);
+        boundedIndex = nextMoveHistory.length;
       }
-    }
-  }, [activeDeckCard, clearSelection, clearVariation, initialFen, moveHistory, setDeckFeedbackArrowsVisible, setGame, setHistoryIndex, cancelDrillOpponentMoveRef, openingDrillActive, drillPathRef, activeOpeningTree, advanceDrillToStepRef]);
+      const nextGame = restoreGameFromHistory(nextMoveHistory, initialFen, boundedIndex);
+
+      setHistoryIndex(boundedIndex);
+      setDeckFeedback(null);
+      setDeckFeedbackArrowsVisible(false);
+      setShowArrow(false);
+      clearVariation();
+      setGame(nextGame);
+      clearSelection();
+
+      if (openingDrillActive && drillPathRef.current.length > 0) {
+        const rootLength = activeOpeningTree?.rootSan.length ?? 0;
+        if (boundedIndex >= rootLength) {
+          const stepIndex = boundedIndex - rootLength;
+          advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
+        }
+      }
+    },
+    [
+      activeOpeningTree?.rootSan.length,
+      clearSelection,
+      clearVariation,
+      initialFen,
+      moveHistory,
+      openingDrillActive,
+      advanceDrillToStepRef,
+      cancelDrillOpponentMoveRef,
+      drillPathRef,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setGame,
+      setHistoryIndex,
+      setMoveHistory,
+      setShowArrow,
+    ],
+  );
 
   const undoMove = useCallback(() => {
     if (moveHistory.length === 0) {
       return;
     }
-    
+
     cancelDrillOpponentMoveRef?.current?.();
 
     const newHistory = moveHistory.slice(0, -1);
     const nextGame = restoreGameFromHistory(newHistory, initialFen, newHistory.length);
-    
+
     setMoveHistory(newHistory);
     setHistoryIndex(newHistory.length);
-    if (activeDeckCard) {
-      setDeckFeedbackArrowsVisible(false);
-    }
+    setDeckFeedback(null);
+    setDeckFeedbackArrowsVisible(false);
+    setShowArrow(false);
     clearVariation();
     setGame(nextGame);
     clearSelection();
 
     if (openingDrillActive && drillPathRef.current.length > 0) {
-      const activeTree = activeOpeningTree;
-      const rootLength = activeTree?.rootSan.length ?? 0;
+      const rootLength = activeOpeningTree?.rootSan.length ?? 0;
       if (newHistory.length >= rootLength) {
         const stepIndex = newHistory.length - rootLength;
-        advanceDrillToStepRef.current(stepIndex);
+        advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
       }
     }
-  }, [moveHistory, initialFen, activeDeckCard, setMoveHistory, setHistoryIndex, setDeckFeedbackArrowsVisible, clearVariation, setGame, clearSelection, cancelDrillOpponentMoveRef, openingDrillActive, drillPathRef, activeOpeningTree, advanceDrillToStepRef]);
+  }, [
+    moveHistory,
+    initialFen,
+    setMoveHistory,
+    setHistoryIndex,
+    setDeckFeedback,
+    setDeckFeedbackArrowsVisible,
+    setShowArrow,
+    clearVariation,
+    setGame,
+    clearSelection,
+    cancelDrillOpponentMoveRef,
+    openingDrillActive,
+    drillPathRef,
+    activeOpeningTree?.rootSan.length,
+    advanceDrillToStepRef,
+  ]);
 
   return {
     clearSelection,

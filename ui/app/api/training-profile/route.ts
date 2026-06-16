@@ -2,12 +2,12 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import {
-  TRAINING_SESSION_COOKIE,
   createTrainingSessionToken,
   hashTrainingPassword,
   hashTrainingSessionToken,
   normalizeTrainingUsername,
   parseTrainingSessionCookie,
+  TRAINING_SESSION_COOKIE,
   verifyTrainingPassword,
 } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';

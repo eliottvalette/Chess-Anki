@@ -14,7 +14,7 @@ test('buildTrainingCandidates includes opening contexts for both white and black
 
   assert.ok(candidates.length > 0);
   assert.deepEqual(
-    candidates.find(candidate => candidate.id === 'italian-main-candidate-2'),
+    candidates.find((candidate) => candidate.id === 'italian-main-candidate-2'),
     {
       id: 'italian-main-candidate-2',
       lineId: 'italian-main',
@@ -27,7 +27,7 @@ test('buildTrainingCandidates includes opening contexts for both white and black
     },
   );
   assert.equal(
-    candidates.find(candidate => candidate.id === 'sicilian-najdorf-candidate-1')?.context,
+    candidates.find((candidate) => candidate.id === 'sicilian-najdorf-candidate-1')?.context,
     'Starting position',
   );
 });

@@ -1,16 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-
 import {
-  buildAnalysisPayload,
-  getDeterministicProfile,
-} from './deterministic-runner.mjs';
-import {
-  DETERMINISTIC_ANALYSIS_PROFILE,
-  REVIEW_ANALYSIS_PROFILE,
   buildReviewAnalyzeRequest,
+  DETERMINISTIC_ANALYSIS_PROFILE,
   getDeterministicAnalysisCacheKey,
+  REVIEW_ANALYSIS_PROFILE,
 } from '../../lib/analysis-profile.ts';
+import { buildAnalysisPayload, getDeterministicProfile } from './deterministic-runner.mjs';
 
 test('deterministic profile defaults to fixed depth without movetime', () => {
   const profile = getDeterministicProfile({});

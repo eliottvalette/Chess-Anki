@@ -1,16 +1,10 @@
-import { useLab } from '../LabContext';
-import { BoardPlayerBar } from './BoardPlayerBar';
-import {
-  ImportIcon,
-  FlipIcon,
-  ArrowIcon,
-  RefreshIcon,
-  ResetIcon
-} from '../lab-icons';
-import styles from '../../chess-analysis-lab.module.css';
-import dynamic from 'next/dynamic';
 import type { Square } from 'chess.js';
+import dynamic from 'next/dynamic';
 import type { CSSProperties } from 'react';
+import styles from '../../chess-analysis-lab.module.css';
+import { useLab } from '../LabContext';
+import { ArrowIcon, FlipIcon, ImportIcon, RefreshIcon, ResetIcon } from '../lab-icons';
+import { BoardPlayerBar } from './BoardPlayerBar';
 
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ssr: false,
@@ -35,22 +29,32 @@ export function LabBoardArea() {
     boardArrows,
     runTimelineAnalysis,
     resetWorkspace,
-    isTrainCardFinished
+    isTrainCardFinished,
   } = useLab();
-  
+
   return (
     <section className={`${styles.panel} ${styles.boardPanel}`}>
       <div className={styles.boardWorkspace}>
-        <div className={styles.boardTools} aria-label="Board tools">
-          <button className={styles.iconButton} onClick={() => labState.setPgnDialogOpen(true)} title="Import PGN">
+        <div className={styles.boardTools} role="toolbar" aria-label="Board tools">
+          <button
+            className={styles.iconButton}
+            onClick={() => labState.setPgnDialogOpen(true)}
+            title="Import PGN"
+            type="button"
+          >
             <ImportIcon />
           </button>
-          <button className={styles.iconButton} onClick={() => labState.setOrientation(value => (value === 'white' ? 'black' : 'white'))} title="Flip board">
+          <button
+            className={styles.iconButton}
+            onClick={() => labState.setOrientation((value) => (value === 'white' ? 'black' : 'white'))}
+            title="Flip board"
+            type="button"
+          >
             <FlipIcon />
           </button>
           <button
             className={styles.iconButton}
-            onClick={() => labState.setShowArrow(value => !value)}
+            onClick={() => labState.setShowArrow((value) => !value)}
             disabled={Boolean(labState.activeDeckCard && !isTrainCardFinished)}
             title={
               labState.activeDeckCard && !isTrainCardFinished
@@ -59,13 +63,20 @@ export function LabBoardArea() {
                   ? 'Hide best arrow'
                   : 'Show best arrow'
             }
+            type="button"
           >
             <ArrowIcon off={!labState.showArrow || Boolean(labState.activeDeckCard && !isTrainCardFinished)} />
           </button>
-          <button className={styles.iconButton} onClick={() => void runTimelineAnalysis()} disabled={labState.timelineLoading || labState.moveHistory.length === 0} title="Refresh analysis">
+          <button
+            className={styles.iconButton}
+            onClick={() => void runTimelineAnalysis()}
+            disabled={labState.timelineLoading || labState.moveHistory.length === 0}
+            title="Refresh analysis"
+            type="button"
+          >
             <RefreshIcon />
           </button>
-          <button className={styles.iconButton} onClick={resetWorkspace} title="Reset board">
+          <button className={styles.iconButton} onClick={resetWorkspace} title="Reset board" type="button">
             <ResetIcon />
           </button>
         </div>
@@ -87,7 +98,10 @@ export function LabBoardArea() {
 
           <div className={styles.boardStack} style={{ width: `${labState.boardWidth}px` }}>
             <BoardPlayerBar player={topBoardPlayer} />
-            <div className={styles.boardFrame} style={{ width: `${labState.boardWidth}px`, height: `${labState.boardWidth}px` }}>
+            <div
+              className={styles.boardFrame}
+              style={{ width: `${labState.boardWidth}px`, height: `${labState.boardWidth}px` }}
+            >
               <Chessboard
                 options={{
                   id: 'analysis-board',

@@ -31,8 +31,14 @@ class FakeStockfishWorker {
     }
 
     if (String(command).startsWith('go ')) {
-      this.emit('message', 'info depth 17 seldepth 19 multipv 1 score cp 31 wdl 85 910 5 nodes 12345 nps 411500 time 30 pv g1f3 b8c6');
-      this.emit('message', 'info depth 17 seldepth 18 multipv 2 score cp 18 wdl 70 920 10 nodes 12345 nps 411500 time 30 pv b1c3 g8f6');
+      this.emit(
+        'message',
+        'info depth 17 seldepth 19 multipv 1 score cp 31 wdl 85 910 5 nodes 12345 nps 411500 time 30 pv g1f3 b8c6',
+      );
+      this.emit(
+        'message',
+        'info depth 17 seldepth 18 multipv 2 score cp 18 wdl 70 920 10 nodes 12345 nps 411500 time 30 pv b1c3 g8f6',
+      );
       this.emit('message', 'bestmove g1f3 ponder b8c6');
     }
   }
@@ -53,7 +59,7 @@ Object.defineProperty(globalThis, 'navigator', {
   configurable: true,
   value: { hardwareConcurrency: 8 },
 });
-globalThis.fetch = async url => {
+globalThis.fetch = async (url) => {
   throw new Error(`Unexpected server fetch: ${url}`);
 };
 
@@ -77,13 +83,19 @@ const batch = await analyzeGamePositions({
   depth: 17,
 });
 
-if (batch.analyses.length !== 2 || batch.analyses.some(analysis => analysis.bestMove !== 'g1f3')) {
+if (batch.analyses.length !== 2 || batch.analyses.some((analysis) => analysis.bestMove !== 'g1f3')) {
   throw new Error(`Unexpected batch analysis: ${JSON.stringify(batch)}`);
 }
 
-console.log(JSON.stringify({
-  worker_urls: FakeStockfishWorker.urls,
-  workers_created: FakeStockfishWorker.created,
-  single_best: single.bestMove,
-  batch_results: batch.analyses.length,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      worker_urls: FakeStockfishWorker.urls,
+      workers_created: FakeStockfishWorker.created,
+      single_best: single.bestMove,
+      batch_results: batch.analyses.length,
+    },
+    null,
+    2,
+  ),
+);

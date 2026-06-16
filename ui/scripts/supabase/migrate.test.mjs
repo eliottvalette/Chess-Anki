@@ -44,10 +44,7 @@ test('getPgConfig leaves non-pooler URIs untouched', () => {
     SUPABASE_DB_URL: 'postgresql://postgres:test@db.rdehwurjccisorhyqonc.supabase.co:5432/postgres',
   });
 
-  assert.equal(
-    config.connectionString,
-    'postgresql://postgres:test@db.rdehwurjccisorhyqonc.supabase.co:5432/postgres',
-  );
+  assert.equal(config.connectionString, 'postgresql://postgres:test@db.rdehwurjccisorhyqonc.supabase.co:5432/postgres');
 });
 
 test('buildCanonicalResetSql drops deck tables before applying the schema', () => {

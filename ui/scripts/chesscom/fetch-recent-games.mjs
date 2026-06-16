@@ -4,7 +4,7 @@ const DEFAULT_COUNT = 5;
 const DEFAULT_TIME_CLASS = 'blitz';
 const DEFAULT_FORMAT = 'json';
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
@@ -14,7 +14,9 @@ async function main() {
   const username = options.username;
 
   if (!username) {
-    throw new Error('Usage: node scripts/chesscom/fetch-recent-games.mjs --username <chesscom-username> [--count 5] [--time-class blitz] [--format json|pgn]');
+    throw new Error(
+      'Usage: node scripts/chesscom/fetch-recent-games.mjs --username <chesscom-username> [--count 5] [--time-class blitz] [--format json|pgn]',
+    );
   }
 
   const archives = await fetchArchives(username);
@@ -26,7 +28,7 @@ async function main() {
   });
 
   if (options.format === 'pgn') {
-    console.log(games.map(game => game.pgn).join('\n\n'));
+    console.log(games.map((game) => game.pgn).join('\n\n'));
     return;
   }
 
@@ -37,7 +39,7 @@ async function main() {
         requested_count: options.count,
         fetched_count: games.length,
         time_class: options.timeClass,
-        games: games.map(game => toGameSummary(game, username)),
+        games: games.map((game) => toGameSummary(game, username)),
       },
       null,
       2,
@@ -84,7 +86,6 @@ function parseArgs(args) {
 
       options.format = format;
       index += 1;
-      continue;
     }
   }
 

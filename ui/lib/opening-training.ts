@@ -2,7 +2,12 @@ import { Chess } from 'chess.js';
 
 import type { AnalysisLine, AnalysisResult, PerspectiveScore } from './analysis-types';
 import type { CardMoveReview } from './card-move-reviews';
-import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove, type StoredMove } from './chess-analysis-client';
+import {
+  buildStoredMovesFromSanList,
+  restoreGameFromHistory,
+  type StoredMove,
+  toStoredMove,
+} from './chess-analysis-client';
 
 export type TrainingSide = 'white' | 'black';
 export type DeckCardKind = 'punish_mistake' | 'repertoire_choice';
@@ -87,14 +92,62 @@ export type DeckFeedback = {
 };
 
 export const OPENING_REPERTOIRE: OpeningSeedLine[] = [
-  { id: 'italian-main', name: 'Italian Game', eco: 'C50', side: 'white', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd4'] },
-  { id: 'ruy-lopez', name: 'Ruy Lopez', eco: 'C60', side: 'white', moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7'] },
-  { id: 'queens-gambit', name: "Queen's Gambit Declined", eco: 'D30', side: 'white', moves: ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'Bg5', 'Be7', 'e3'] },
-  { id: 'london', name: 'London System', eco: 'D02', side: 'white', moves: ['d4', 'Nf6', 'Bf4', 'd5', 'e3', 'e6', 'Nf3', 'c5', 'c3'] },
-  { id: 'sicilian-najdorf', name: 'Sicilian Najdorf', eco: 'B90', side: 'black', moves: ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6'] },
-  { id: 'french-advance', name: 'French Advance', eco: 'C02', side: 'black', moves: ['e4', 'e6', 'd4', 'd5', 'e5', 'c5', 'c3', 'Nc6', 'Nf3'] },
-  { id: 'caro-kann', name: 'Caro-Kann Classical', eco: 'B18', side: 'black', moves: ['e4', 'c6', 'd4', 'd5', 'Nc3', 'dxe4', 'Nxe4', 'Bf5', 'Ng3'] },
-  { id: 'kings-indian', name: "King's Indian Defense", eco: 'E60', side: 'black', moves: ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6', 'Nf3', 'O-O'] },
+  {
+    id: 'italian-main',
+    name: 'Italian Game',
+    eco: 'C50',
+    side: 'white',
+    moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4', 'Bc5', 'c3', 'Nf6', 'd4'],
+  },
+  {
+    id: 'ruy-lopez',
+    name: 'Ruy Lopez',
+    eco: 'C60',
+    side: 'white',
+    moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'a6', 'Ba4', 'Nf6', 'O-O', 'Be7'],
+  },
+  {
+    id: 'queens-gambit',
+    name: "Queen's Gambit Declined",
+    eco: 'D30',
+    side: 'white',
+    moves: ['d4', 'd5', 'c4', 'e6', 'Nc3', 'Nf6', 'Bg5', 'Be7', 'e3'],
+  },
+  {
+    id: 'london',
+    name: 'London System',
+    eco: 'D02',
+    side: 'white',
+    moves: ['d4', 'Nf6', 'Bf4', 'd5', 'e3', 'e6', 'Nf3', 'c5', 'c3'],
+  },
+  {
+    id: 'sicilian-najdorf',
+    name: 'Sicilian Najdorf',
+    eco: 'B90',
+    side: 'black',
+    moves: ['e4', 'c5', 'Nf3', 'd6', 'd4', 'cxd4', 'Nxd4', 'Nf6', 'Nc3', 'a6'],
+  },
+  {
+    id: 'french-advance',
+    name: 'French Advance',
+    eco: 'C02',
+    side: 'black',
+    moves: ['e4', 'e6', 'd4', 'd5', 'e5', 'c5', 'c3', 'Nc6', 'Nf3'],
+  },
+  {
+    id: 'caro-kann',
+    name: 'Caro-Kann Classical',
+    eco: 'B18',
+    side: 'black',
+    moves: ['e4', 'c6', 'd4', 'd5', 'Nc3', 'dxe4', 'Nxe4', 'Bf5', 'Ng3'],
+  },
+  {
+    id: 'kings-indian',
+    name: "King's Indian Defense",
+    eco: 'E60',
+    side: 'black',
+    moves: ['d4', 'Nf6', 'c4', 'g6', 'Nc3', 'Bg7', 'e4', 'd6', 'Nf3', 'O-O'],
+  },
 ];
 
 export function buildDeckCards(lines: OpeningSeedLine[]) {
@@ -256,7 +309,10 @@ export function buildPunishCardsFromAnalysis(
 }
 
 export function buildLegitOptions(position: TrainingCandidate, analysis: AnalysisResult | null, maxScoreGapCp = 60) {
-  const bestScore = scoreToCpForSide(analysis?.lines?.[0]?.whitePerspective ?? analysis?.whitePerspective ?? null, position.side);
+  const bestScore = scoreToCpForSide(
+    analysis?.lines?.[0]?.whitePerspective ?? analysis?.whitePerspective ?? null,
+    position.side,
+  );
 
   if (bestScore == null) {
     return [];
@@ -365,7 +421,7 @@ export function buildDeckCardStartState(card: DeckCard, openingLines: OpeningSee
     };
   }
 
-  const line = openingLines.find(candidate => candidate.id === card.lineId);
+  const line = openingLines.find((candidate) => candidate.id === card.lineId);
 
   if (line && card.opponentMoveUci) {
     try {

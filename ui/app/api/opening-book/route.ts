@@ -1,12 +1,8 @@
-import { NextResponse } from 'next/server';
 import { Chess } from 'chess.js';
+import { NextResponse } from 'next/server';
 
 import { toStoredMove } from '@/lib/chess-analysis-client';
-import {
-  buildOpeningBookPositions,
-  resolveOpeningBookBatch,
-  type OpeningBookBatchResult,
-} from '@/lib/opening-book';
+import { buildOpeningBookPositions, type OpeningBookBatchResult, resolveOpeningBookBatch } from '@/lib/opening-book';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +16,7 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as OpeningBookRequestBody;
     let positions = Array.isArray(body.positions)
-      ? body.positions.flatMap(position => {
+      ? body.positions.flatMap((position) => {
           const fenBefore = String(position.fenBefore ?? '').trim();
           const playedUci = String(position.playedUci ?? '').trim();
 
@@ -33,7 +29,10 @@ export async function POST(request: Request) {
       : [];
 
     if (positions.length === 0 && Array.isArray(body.moves) && body.moves.length > 0) {
-      const storedMoves = buildStoredMovesFromRequest(body.moves, typeof body.initialFen === 'string' ? body.initialFen : null);
+      const storedMoves = buildStoredMovesFromRequest(
+        body.moves,
+        typeof body.initialFen === 'string' ? body.initialFen : null,
+      );
       positions = buildOpeningBookPositions(storedMoves, typeof body.initialFen === 'string' ? body.initialFen : null);
     }
 
@@ -53,10 +52,7 @@ export async function POST(request: Request) {
   }
 }
 
-function buildStoredMovesFromRequest(
-  moves: NonNullable<OpeningBookRequestBody['moves']>,
-  initialFen: string | null,
-) {
+function buildStoredMovesFromRequest(moves: NonNullable<OpeningBookRequestBody['moves']>, initialFen: string | null) {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
   const storedMoves = [];
 

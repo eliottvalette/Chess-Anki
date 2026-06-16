@@ -173,12 +173,12 @@ export function tokenizePgnMoves(text: string) {
     .replace(/\{[^}]*}/g, ' ')
     .replace(/\([^)]*\)/g, ' ')
     .split(/\s+/)
-    .map(token => token.trim())
+    .map((token) => token.trim())
     .filter(Boolean)
-    .filter(token => !/^\d+\.(\.\.)?$/.test(token))
-    .filter(token => !/^\d+\.\.\.$/.test(token))
-    .filter(token => !/^(1-0|0-1|1\/2-1\/2|\*)$/.test(token))
-    .map(token => token.replace(/^\d+\.+/, ''))
+    .filter((token) => !/^\d+\.(\.\.)?$/.test(token))
+    .filter((token) => !/^\d+\.\.\.$/.test(token))
+    .filter((token) => !/^(1-0|0-1|1\/2-1\/2|\*)$/.test(token))
+    .map((token) => token.replace(/^\d+\.+/, ''))
     .filter(Boolean);
 }
 
@@ -204,10 +204,16 @@ export function resolveOpeningLibrary(parsedMoves: OpeningMove[]): OpeningLibrar
   return 'other';
 }
 
-export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ownerProfileId: string; targetDepth?: number; rootPly?: number }) {
+export function buildOpeningTrees(
+  inputs: OpeningTreeBuildInput[],
+  options: { ownerProfileId: string; targetDepth?: number; rootPly?: number },
+) {
   const rootPly = options.rootPly ?? DEFAULT_OPENING_ROOT_PLY;
   const targetDepth = options.targetDepth ?? DEFAULT_OPENING_TARGET_DEPTH;
-  const groups = new Map<string, { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[]>();
+  const groups = new Map<
+    string,
+    { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[]
+  >();
 
   for (const input of inputs) {
     const parsed = parseSanMoves(input.moves);
@@ -230,15 +236,17 @@ export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ow
     groups.set(key, bucket);
   }
 
-  return [...groups.values()].map(group => buildTreeForGroup(group, {
-    ownerProfileId: options.ownerProfileId,
-    rootPly,
-    targetDepth,
-  }));
+  return [...groups.values()].map((group) =>
+    buildTreeForGroup(group, {
+      ownerProfileId: options.ownerProfileId,
+      rootPly,
+      targetDepth,
+    }),
+  );
 }
 
 export function chooseWeightedOpponentEdge(edges: OpeningTreeEdge[], seed = Date.now()) {
-  const weighted = edges.map(edge => ({
+  const weighted = edges.map((edge) => ({
     edge,
     weight: Math.max(1, edge.priority + edge.recentCount * 3 + edge.cardCount * 6 + (edge.isEngineBest ? 4 : 0)),
   }));
@@ -278,9 +286,9 @@ export function buildDrillPath(
   options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
 ): DrillPathStep[] {
   const rootPly = tree.rootSan.length;
-  const rootNode = options.startNodeId 
-    ? tree.nodes.find(node => node.id === options.startNodeId)
-    : (tree.nodes.find(node => node.ply === rootPly) ?? tree.nodes[0]);
+  const rootNode = options.startNodeId
+    ? tree.nodes.find((node) => node.id === options.startNodeId)
+    : (tree.nodes.find((node) => node.ply === rootPly) ?? tree.nodes[0]);
 
   if (!rootNode) {
     return [];
@@ -293,7 +301,7 @@ export function buildDrillPath(
 
   while (currentNodeId && !visited.has(currentNodeId)) {
     visited.add(currentNodeId);
-    const node = tree.nodes.find(candidate => candidate.id === currentNodeId);
+    const node = tree.nodes.find((candidate) => candidate.id === currentNodeId);
 
     if (!node) {
       break;
@@ -313,7 +321,7 @@ export function buildDrillPath(
       edgeUciFromParent: null,
     });
 
-    const outgoing = tree.edges.filter(edge => edge.fromNodeId === currentNodeId);
+    const outgoing = tree.edges.filter((edge) => edge.fromNodeId === currentNodeId);
 
     if (outgoing.length === 0) {
       break;
@@ -322,9 +330,9 @@ export function buildDrillPath(
     let chosenEdge: OpeningTreeEdge | null = null;
 
     if (isTrainTurn) {
-      const validMoves = outgoing.filter(edge => {
+      const validMoves = outgoing.filter((edge) => {
         if (edge.isEngineBest || edge.mastersGames > 0) return true;
-        const target = tree.nodes.find(n => n.id === edge.toNodeId);
+        const target = tree.nodes.find((n) => n.id === edge.toNodeId);
         if (!target || node.evalCp == null || target.evalCp == null) return true;
         const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
         return swing > -30;
@@ -334,7 +342,7 @@ export function buildDrillPath(
         const sorted = [...validMoves].sort((a, b) => b.recentCount - a.recentCount);
         chosenEdge = sorted[0] ?? null;
       } else {
-        chosenEdge = outgoing.find(edge => edge.isEngineBest) ?? null;
+        chosenEdge = outgoing.find((edge) => edge.isEngineBest) ?? null;
       }
     } else {
       const roll = seededUnit(currentSeed) * 100;
@@ -346,8 +354,8 @@ export function buildDrillPath(
         chosenEdge = theoryEdges[0] ?? null;
       } else {
         if (options.preferWeak) {
-          const weakTargets = outgoing.filter(edge => {
-            const target = tree.nodes.find(candidate => candidate.id === edge.toNodeId);
+          const weakTargets = outgoing.filter((edge) => {
+            const target = tree.nodes.find((candidate) => candidate.id === edge.toNodeId);
             return target && target.sideToMove === options.trainSide && target.masteryScore < 80;
           });
 
@@ -374,7 +382,7 @@ export function buildDrillPath(
       }
     }
 
-    const nextStep = tree.nodes.find(candidate => candidate.id === chosenEdge!.toNodeId);
+    const nextStep = tree.nodes.find((candidate) => candidate.id === chosenEdge!.toNodeId);
 
     if (nextStep) {
       currentNodeId = nextStep.id;
@@ -388,7 +396,7 @@ export function buildDrillPath(
     const step = path[index]!;
     const parentStep = path[index - 1]!;
     const connectingEdge = tree.edges.find(
-      edge => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
+      (edge) => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
     );
     step.edgeSanFromParent = connectingEdge?.san ?? null;
     step.edgeUciFromParent = connectingEdge?.uci ?? null;
@@ -399,24 +407,26 @@ export function buildDrillPath(
 
 export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): DrillPathStep[] {
   const rootPly = tree.rootSan.length;
-  const rootNodes = tree.nodes.filter(n => n.ply === rootPly);
+  const rootNodes = tree.nodes.filter((n) => n.ply === rootPly);
   const queue: { nodeId: string; path: string[] }[] = [];
   const visited = new Set<string>();
 
   for (const root of rootNodes) {
     if (root.id === targetNodeId) {
-      return [{ 
-        nodeId: root.id, 
-        fen: root.fen, 
-        isTrainTurn: false, 
-        edgeSanFromParent: null, 
-        edgeUciFromParent: null, 
-        trainSide: 'white',
-        sideToMove: root.sideToMove,
-        bestUci: root.bestUci,
-        bestSan: root.bestSan,
-        masteryScore: root.masteryScore,
-      }];
+      return [
+        {
+          nodeId: root.id,
+          fen: root.fen,
+          isTrainTurn: false,
+          edgeSanFromParent: null,
+          edgeUciFromParent: null,
+          trainSide: 'white',
+          sideToMove: root.sideToMove,
+          bestUci: root.bestUci,
+          bestSan: root.bestSan,
+          masteryScore: root.masteryScore,
+        },
+      ];
     }
     queue.push({ nodeId: root.id, path: [root.id] });
     visited.add(root.id);
@@ -426,13 +436,13 @@ export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): D
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    
+
     if (current.nodeId === targetNodeId) {
       finalPathIds = current.path;
       break;
     }
 
-    const outgoing = tree.edges.filter(e => e.fromNodeId === current.nodeId);
+    const outgoing = tree.edges.filter((e) => e.fromNodeId === current.nodeId);
     for (const edge of outgoing) {
       if (!visited.has(edge.toNodeId)) {
         visited.add(edge.toNodeId);
@@ -447,9 +457,9 @@ export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): D
 
   const path: DrillPathStep[] = [];
   for (let i = 0; i < finalPathIds.length; i++) {
-    const stepNode = tree.nodes.find(n => n.id === finalPathIds![i]);
+    const stepNode = tree.nodes.find((n) => n.id === finalPathIds![i]);
     if (!stepNode) continue;
-    
+
     path.push({
       nodeId: stepNode.id,
       fen: stepNode.fen,
@@ -468,7 +478,7 @@ export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): D
     const step = path[index]!;
     const parentStep = path[index - 1]!;
     const connectingEdge = tree.edges.find(
-      edge => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
+      (edge) => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
     );
     step.edgeSanFromParent = connectingEdge?.san ?? null;
     step.edgeUciFromParent = connectingEdge?.uci ?? null;
@@ -476,7 +486,6 @@ export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): D
 
   return path;
 }
-
 
 function buildTreeForGroup(
   group: { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[],
@@ -565,8 +574,8 @@ function buildTreeForGroup(
     library: first.library,
     rootFenKey: first.rootFenKey,
     rootPly: options.rootPly,
-    rootSan: rootMoves.map(move => move.san),
-    rootUci: rootMoves.map(move => move.uci),
+    rootSan: rootMoves.map((move) => move.san),
+    rootUci: rootMoves.map((move) => move.uci),
     sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
     targetDepth: options.targetDepth,
     nodes: [...nodes.values()].sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id)),
@@ -575,13 +584,20 @@ function buildTreeForGroup(
 }
 
 function deriveOpeningName(name: string, rootMoves: OpeningMove[]) {
-  const cleanName = String(name ?? '').replace(/\s+/g, ' ').trim();
+  const cleanName = String(name ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
 
   if (cleanName && cleanName !== 'Opening') {
     return cleanName.slice(0, 96);
   }
 
-  return rootMoves.map(move => move.san).join(' ').slice(0, 96) || 'Opening';
+  return (
+    rootMoves
+      .map((move) => move.san)
+      .join(' ')
+      .slice(0, 96) || 'Opening'
+  );
 }
 
 function getSideToMove(fen: string): OpeningSide {
@@ -608,7 +624,7 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
   const sliced: OpeningTreeDetail[] = [];
 
   for (const tree of forest) {
-    const rootNodes = tree.nodes.filter(node => node.ply === minForcedPlies);
+    const rootNodes = tree.nodes.filter((node) => node.ply === minForcedPlies);
 
     for (const rootNode of rootNodes) {
       const rootSan: string[] = [];
@@ -616,7 +632,7 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
       let currentId = rootNode.id;
 
       for (let i = 0; i < minForcedPlies; i++) {
-        const edge = tree.edges.find(e => e.toNodeId === currentId);
+        const edge = tree.edges.find((e) => e.toNodeId === currentId);
         if (!edge) {
           break;
         }
@@ -635,7 +651,7 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
 
       while (queue.length > 0) {
         const currId = queue.shift()!;
-        const outgoingEdges = tree.edges.filter(e => e.fromNodeId === currId);
+        const outgoingEdges = tree.edges.filter((e) => e.fromNodeId === currId);
         for (const edge of outgoingEdges) {
           reachableEdgeIds.add(edge.id);
           if (!reachableNodeIds.has(edge.toNodeId)) {
@@ -645,8 +661,8 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
         }
       }
 
-      const nodes = tree.nodes.filter(n => reachableNodeIds.has(n.id));
-      const edges = tree.edges.filter(e => reachableEdgeIds.has(e.id));
+      const nodes = tree.nodes.filter((n) => reachableNodeIds.has(n.id));
+      const edges = tree.edges.filter((e) => reachableEdgeIds.has(e.id));
 
       if (nodes.length === 0) {
         continue;
@@ -657,10 +673,9 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
         continue;
       }
 
-      const trainNodes = nodes.filter(n => n.masteryScore > 0 || n.seenCount > 0);
-      const masteryScore = trainNodes.length > 0
-        ? trainNodes.reduce((sum, n) => sum + n.masteryScore, 0) / trainNodes.length
-        : 0;
+      const trainNodes = nodes.filter((n) => n.masteryScore > 0 || n.seenCount > 0);
+      const masteryScore =
+        trainNodes.length > 0 ? trainNodes.reduce((sum, n) => sum + n.masteryScore, 0) / trainNodes.length : 0;
 
       sliced.push({
         id: `sliced-${rootNode.id}`,
@@ -671,7 +686,7 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
         sourceCount,
         targetDepth: tree.targetDepth,
         nodeCount: nodes.length,
-        dueCount: 0, 
+        dueCount: 0,
         masteryScore,
         updatedAt: tree.updatedAt,
         nodes,
@@ -709,7 +724,7 @@ export function ensureDraftEdge(
 
   const toFen = chess.fen();
   const toFenKey = normalizeOpeningFen(toFen);
-  let toNode = draft.nodes.find(node => node.fenKey === toFenKey);
+  let toNode = draft.nodes.find((node) => node.fenKey === toFenKey);
 
   if (!toNode) {
     toNode = {
@@ -724,7 +739,7 @@ export function ensureDraftEdge(
     draft.nodes.push(toNode);
   }
 
-  let edge = draft.edges.find(candidate => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
+  let edge = draft.edges.find((candidate) => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
 
   if (!edge) {
     edge = {
@@ -744,7 +759,8 @@ export function ensureDraftEdge(
     draft.edges.push(edge);
   }
 
-  edge.source = edge.source === source ? source : edge.source === 'recent_game' || edge.source === 'card' ? 'mixed' : edge.source;
+  edge.source =
+    edge.source === source ? source : edge.source === 'recent_game' || edge.source === 'card' ? 'mixed' : edge.source;
   edge.mastersGames += options.mastersGames ?? 0;
   edge.priority += options.priority ?? 0;
   edge.isEngineBest ||= Boolean(options.isEngineBest);

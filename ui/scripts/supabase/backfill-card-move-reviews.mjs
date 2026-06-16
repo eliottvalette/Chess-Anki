@@ -1,22 +1,21 @@
-import { createClient } from '@supabase/supabase-js';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-
+import { createClient } from '@supabase/supabase-js';
+import { DETERMINISTIC_ANALYSIS_PROFILE } from '../../lib/analysis-profile.ts';
+import { buildTimelineSequencePositions } from '../../lib/chess-analysis-client.ts';
 import {
   buildCardMoveReviewsFromAnalyses,
   buildDeckCardReplayHistory,
   buildTimelineAnalysesForMoves,
   parseCardMoveReviews,
 } from './card-move-reviews-lib.mjs';
-import { buildTimelineSequencePositions } from '../../lib/chess-analysis-client.ts';
-import { DETERMINISTIC_ANALYSIS_PROFILE } from '../../lib/analysis-profile.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from './env.mjs';
 
 const execFileAsync = promisify(execFile);
 const DEFAULT_DEPTH = DETERMINISTIC_ANALYSIS_PROFILE.depth;
 const DEFAULT_BATCH_SIZE = 4;
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
@@ -36,7 +35,9 @@ async function main() {
   logProgress(`checking analyze API at ${analyzeBaseUrl}`);
   await assertAnalyzeApi(analyzeBaseUrl);
 
-  const { data: lines, error: linesError } = await supabase.from('opening_lines').select('id,deck_id,name,eco,side,moves');
+  const { data: lines, error: linesError } = await supabase
+    .from('opening_lines')
+    .select('id,deck_id,name,eco,side,moves');
 
   if (linesError) {
     throw new Error(linesError.message);
@@ -52,7 +53,7 @@ async function main() {
       name: String(line.name),
       eco: String(line.eco),
       side: line.side === 'black' ? 'black' : 'white',
-      moves: Array.isArray(line.moves) ? line.moves.map(move => String(move)) : [],
+      moves: Array.isArray(line.moves) ? line.moves.map((move) => String(move)) : [],
     });
     linesByDeckId.set(deckId, deckLines);
   }
@@ -74,7 +75,7 @@ async function main() {
     throw new Error(cardsError.message);
   }
 
-  const pendingCards = (cards ?? []).filter(card => {
+  const pendingCards = (cards ?? []).filter((card) => {
     if (options.force) {
       return true;
     }
@@ -111,7 +112,7 @@ async function main() {
     for (let start = 0; start < positions.length; start += DEFAULT_BATCH_SIZE) {
       const batch = positions.slice(start, start + DEFAULT_BATCH_SIZE);
       const batchAnalyses = await analyzePositions(analyzeBaseUrl, {
-        positions: batch.map(position => ({
+        positions: batch.map((position) => ({
           fen: position.fen,
           initialFen: position.initialFen,
           moves: position.moves,
@@ -167,7 +168,7 @@ function mapDeckCardRow(row) {
     scoreSwingCp: typeof row.score_swing_cp === 'number' ? row.score_swing_cp : undefined,
     replayFromStart: Boolean(row.replay_from_start),
     initialFen: row.initial_fen ? String(row.initial_fen) : null,
-    setupMoves: Array.isArray(row.setup_moves) ? row.setup_moves.map(move => String(move)) : [],
+    setupMoves: Array.isArray(row.setup_moves) ? row.setup_moves.map((move) => String(move)) : [],
     moveReviews: parseCardMoveReviews(row.move_reviews),
   };
 }

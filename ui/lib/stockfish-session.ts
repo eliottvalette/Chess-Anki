@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { type ChildProcessWithoutNullStreams, spawn } from 'node:child_process';
 import path from 'node:path';
 
 import type { AnalysisResult, AnalyzeRequest } from './analysis-types.ts';
@@ -47,8 +47,8 @@ class NativeStockfishEngine implements StockfishEngine {
   private constructor(private readonly process: ChildProcessWithoutNullStreams) {
     this.process.stdout.setEncoding('utf8');
     this.process.stderr.setEncoding('utf8');
-    this.process.stdout.on('data', chunk => this.handleOutput(String(chunk)));
-    this.process.stderr.on('data', chunk => this.handleOutput(String(chunk)));
+    this.process.stdout.on('data', (chunk) => this.handleOutput(String(chunk)));
+    this.process.stderr.on('data', (chunk) => this.handleOutput(String(chunk)));
   }
 
   static async create() {
@@ -75,7 +75,7 @@ class NativeStockfishEngine implements StockfishEngine {
 
       child.once('spawn', () => resolve(new NativeStockfishEngine(child)));
       child.once('error', reject);
-      child.once('exit', code => {
+      child.once('exit', (code) => {
         if (code !== null) {
           reject(new Error(`exited with code ${code}`));
         }
@@ -125,7 +125,7 @@ class StockfishSession {
 
   constructor(engine: StockfishEngine) {
     this.engine = engine;
-    this.engine.addMessageListener(line => this.handleLine(line));
+    this.engine.addMessageListener((line) => this.handleLine(line));
   }
 
   private handleLine(rawLine: string) {
@@ -187,7 +187,7 @@ class StockfishSession {
   }
 
   async initialize() {
-    await this.run(['uci'], line => line === 'uciok');
+    await this.run(['uci'], (line) => line === 'uciok');
     await this.run(
       [
         'setoption name Threads value 1',
@@ -196,7 +196,7 @@ class StockfishSession {
         'setoption name UCI_ShowWDL value true',
         'isready',
       ],
-      line => line === 'readyok',
+      (line) => line === 'readyok',
     );
   }
 
@@ -217,7 +217,7 @@ class StockfishSession {
 
       const lines = await this.run(
         ['setoption name Clear Hash', `setoption name MultiPV value ${multipv}`, positionCommand, searchCommand],
-        line => line.startsWith('bestmove '),
+        (line) => line.startsWith('bestmove '),
         movetimeMs == null ? 30_000 : Math.max(ENGINE_TIMEOUT_MS, movetimeMs + 5_000),
       );
 
@@ -252,12 +252,12 @@ export function getStockfishSession(slot?: number) {
 
   if (!globalThis.__chessAnalysisStockfishSessions[requestedSlot]) {
     const sessionPromise = NativeStockfishEngine.create()
-      .then(async engine => {
+      .then(async (engine) => {
         const session = new StockfishSession(engine);
         await session.initialize();
         return session;
       })
-      .catch(error => {
+      .catch((error) => {
         if (globalThis.__chessAnalysisStockfishSessions) {
           globalThis.__chessAnalysisStockfishSessions[requestedSlot] = undefined;
         }

@@ -24,7 +24,9 @@ const panels = [
 const project = new Project();
 
 // 1. Create shared.tsx
-const sharedFile = project.createSourceFile(path.join(outDir, 'shared.tsx'), fs.readFileSync(srcPath, 'utf8'), { overwrite: true });
+const sharedFile = project.createSourceFile(path.join(outDir, 'shared.tsx'), fs.readFileSync(srcPath, 'utf8'), {
+  overwrite: true,
+});
 for (const p of panels) {
   const fn = sharedFile.getFunction(p);
   if (fn) fn.remove();
@@ -33,7 +35,7 @@ for (const p of panels) {
 // Actually, if we just keep the helpers in each file, it's duplicate code but avoids import hell.
 // Let's do it properly: `shared.tsx` will have the helpers EXPORTED.
 const helperNames = [];
-sharedFile.getFunctions().forEach(fn => {
+sharedFile.getFunctions().forEach((fn) => {
   if (!fn.hasExportKeyword() && fn.getName()) {
     fn.setIsExported(true);
     helperNames.push(fn.getName());
@@ -47,10 +49,10 @@ let barrel = `export * from './shared';\n`;
 for (const panel of panels) {
   const fileName = panel.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() + '.tsx';
   const destPath = path.join(outDir, fileName);
-  
+
   // Start with the raw original file
   const sf = project.createSourceFile(destPath, fs.readFileSync(srcPath, 'utf8'), { overwrite: true });
-  
+
   // Remove all OTHER major panels
   for (const otherPanel of panels) {
     if (otherPanel !== panel) {
@@ -58,7 +60,7 @@ for (const panel of panels) {
       if (fn) fn.remove();
     }
   }
-  
+
   // Remove all the helper functions because they are now in shared.tsx!
   // Wait, if we remove them, we must import them from shared.tsx!
   // Let's just import them.
@@ -66,14 +68,14 @@ for (const panel of panels) {
     const fn = sf.getFunction(h);
     if (fn) fn.remove();
   }
-  
+
   sf.addImportDeclaration({
     namedImports: helperNames,
-    moduleSpecifier: './shared'
+    moduleSpecifier: './shared',
   });
-  
+
   sf.saveSync();
-  
+
   barrel += `export * from './${fileName.replace('.tsx', '')}';\n`;
 }
 

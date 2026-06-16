@@ -6,8 +6,8 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { parseCardMoveReviews } from '@/lib/card-move-reviews';
-import { getDeckCardState, type DeckProgressEntry } from '@/lib/deck-progress';
-import { TRAINING_SESSION_COOKIE, hashTrainingSessionToken, parseTrainingSessionCookie } from '@/lib/training-profile';
+import { type DeckProgressEntry, getDeckCardState } from '@/lib/deck-progress';
+import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 const execFileAsync = promisify(execFile);
@@ -29,12 +29,14 @@ export async function GET(request: Request) {
     }
 
     const accessibleDecks = decks ?? [];
-    const accessibleIds = accessibleDecks.map(deck => String(deck.id));
+    const accessibleIds = accessibleDecks.map((deck) => String(deck.id));
     const [deckCounts, progressByCardId] = await Promise.all([
       fetchDeckCounts(supabase, accessibleIds),
       profile ? fetchProgressByCardId(supabase, profile.id) : Promise.resolve(new Map<string, ProgressRow>()),
     ]);
-    const summaries = accessibleDecks.map(deck => summarizeDeck(deck, deckCounts.get(deck.id) ?? [], progressByCardId, profile?.id ?? null));
+    const summaries = accessibleDecks.map((deck) =>
+      summarizeDeck(deck, deckCounts.get(deck.id) ?? [], progressByCardId, profile?.id ?? null),
+    );
 
     if (scope === 'all') {
       if (accessibleIds.length === 0) {
@@ -68,8 +70,8 @@ export async function GET(request: Request) {
     }
 
     const selectedDeck =
-      (selectedDeckId && accessibleDecks.find(deck => deck.id === selectedDeckId)) ||
-      (profile ? accessibleDecks.find(deck => deck.owner_profile_id === profile.id) : null) ||
+      (selectedDeckId && accessibleDecks.find((deck) => deck.id === selectedDeckId)) ||
+      (profile ? accessibleDecks.find((deck) => deck.owner_profile_id === profile.id) : null) ||
       accessibleDecks[0] ||
       null;
 
@@ -173,7 +175,11 @@ async function createDeck(profile: TrainingProfileCookie, body: Record<string, u
   return NextResponse.json({ deck: summarizeDeck(data, [], new Map(), profile.id) });
 }
 
-async function generateRecentDeck(profile: TrainingProfileCookie, body: Record<string, unknown>, requestOrigin: string) {
+async function generateRecentDeck(
+  profile: TrainingProfileCookie,
+  body: Record<string, unknown>,
+  requestOrigin: string,
+) {
   const username = clampText(String(body.username ?? profile.username), 40).toLowerCase();
   const timeClass = normalizeTimeClass(body.timeClass);
   const count = Math.max(1, Math.min(100, Number.parseInt(String(body.count ?? 50), 10) || 50));
@@ -211,7 +217,11 @@ async function generateRecentDeck(profile: TrainingProfileCookie, body: Record<s
       },
     );
 
-    return NextResponse.json({ deckId: `recent-blitz-trainer-v1-${profile.username}`, generated: parseJson(stdout), logs: stderr });
+    return NextResponse.json({
+      deckId: `recent-blitz-trainer-v1-${profile.username}`,
+      generated: parseJson(stdout),
+      logs: stderr,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Deck generation failed.';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -401,7 +411,7 @@ async function deleteDeck(profile: TrainingProfileCookie, body: Record<string, u
     return NextResponse.json({ error: cardsError.message }, { status: 500 });
   }
 
-  const cardIds = (cards ?? []).map(card => String(card.id));
+  const cardIds = (cards ?? []).map((card) => String(card.id));
 
   if (cardIds.length > 0) {
     const { error: progressError } = await supabase
@@ -448,20 +458,16 @@ async function getManageableDeck(profile: TrainingProfileCookie, deckId: string)
     throw new Error(error.message);
   }
 
-  if (!data || !data.is_active || !isDeckAccessibleToProfile(data.owner_profile_id, profile.id)) {
+  if (!data?.is_active || !isDeckAccessibleToProfile(data.owner_profile_id, profile.id)) {
     return null;
   }
 
   return data;
 }
 
-async function getOwnedDeck(profile: TrainingProfileCookie, deckId: string) {
+async function _getOwnedDeck(profile: TrainingProfileCookie, deckId: string) {
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('decks')
-    .select('id,owner_profile_id')
-    .eq('id', deckId)
-    .maybeSingle();
+  const { data, error } = await supabase.from('decks').select('id,owner_profile_id').eq('id', deckId).maybeSingle();
 
   if (error) {
     throw new Error(error.message);
@@ -475,9 +481,15 @@ async function getOwnedDeck(profile: TrainingProfileCookie, deckId: string) {
 }
 
 async function fetchAccessibleDecks(supabase: ReturnType<typeof createAdminClient>, profileId: string | null) {
-  const query = supabase.from('decks').select(DECK_SELECT).eq('is_active', true).order('created_at', { ascending: false });
+  const query = supabase
+    .from('decks')
+    .select(DECK_SELECT)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
 
-  return profileId ? query.or(`owner_profile_id.eq.${profileId},owner_profile_id.is.null`) : query.is('owner_profile_id', null);
+  return profileId
+    ? query.or(`owner_profile_id.eq.${profileId},owner_profile_id.is.null`)
+    : query.is('owner_profile_id', null);
 }
 
 async function fetchDeckCounts(supabase: ReturnType<typeof createAdminClient>, deckIds: string[]) {
@@ -502,7 +514,9 @@ async function fetchDeckCounts(supabase: ReturnType<typeof createAdminClient>, d
 async function fetchProgressByCardId(supabase: ReturnType<typeof createAdminClient>, profileId: string) {
   const { data } = await supabase
     .from('training_card_progress')
-    .select('card_id,seen_count,ignored,due_at,interval_days,learning_step,mastery_score,last_response_ms,last_rating,stability,difficulty,retrievability,last_seen_at')
+    .select(
+      'card_id,seen_count,ignored,due_at,interval_days,learning_step,mastery_score,last_response_ms,last_rating,stability,difficulty,retrievability,last_seen_at',
+    )
     .eq('profile_id', profileId);
   const result = new Map<string, ProgressRow>();
 
@@ -515,7 +529,13 @@ async function fetchProgressByCardId(supabase: ReturnType<typeof createAdminClie
       learningStep: Number(row.learning_step ?? 0),
       masteryScore: Number(row.mastery_score ?? 0),
       lastResponseMs: row.last_response_ms == null ? null : Number(row.last_response_ms),
-      lastRating: row.last_rating === 'fail' || row.last_rating === 'hard' || row.last_rating === 'good' || row.last_rating === 'easy' ? row.last_rating : null,
+      lastRating:
+        row.last_rating === 'fail' ||
+        row.last_rating === 'hard' ||
+        row.last_rating === 'good' ||
+        row.last_rating === 'easy'
+          ? row.last_rating
+          : null,
       stability: Number(row.stability ?? 0),
       difficulty: Number(row.difficulty ?? 5),
       retrievability: Number(row.retrievability ?? 0),
@@ -569,7 +589,9 @@ function summarizeDeck(
     dueCount,
     ignoredCount,
     isOwned: Boolean(profileId && deck.owner_profile_id === profileId),
-    canManage: Boolean(profileId && isDeckAccessibleToProfile(deck.owner_profile_id ? String(deck.owner_profile_id) : null, profileId)),
+    canManage: Boolean(
+      profileId && isDeckAccessibleToProfile(deck.owner_profile_id ? String(deck.owner_profile_id) : null, profileId),
+    ),
   };
 }
 
@@ -625,7 +647,9 @@ function sanitizeReviewCard(value: unknown) {
     fen: clampText(String(card.fen ?? ''), 120),
     answerUci: clampText(answerUci, 8),
     answerSan: clampText(String(card.answerSan ?? answerUci), 40) || answerUci,
-    prompt: clampText(String(card.prompt ?? ''), 180) || `${side === 'white' ? 'White' : 'Black'} to move: find the best response.`,
+    prompt:
+      clampText(String(card.prompt ?? ''), 180) ||
+      `${side === 'white' ? 'White' : 'Black'} to move: find the best response.`,
     context: clampText(String(card.context ?? 'Review position'), 500) || 'Review position',
     referenceEvalCp: Number.isFinite(Number(card.referenceEvalCp)) ? Math.trunc(Number(card.referenceEvalCp)) : null,
     replayFromStart,
@@ -641,8 +665,8 @@ function sanitizeSetupMoves(value: unknown) {
   }
 
   return value
-    .map(move => clampText(String(move ?? ''), 12))
-    .filter(move => move.length > 0)
+    .map((move) => clampText(String(move ?? ''), 12))
+    .filter((move) => move.length > 0)
     .slice(0, 500);
 }
 
@@ -692,11 +716,13 @@ function clampInt(value: unknown, min: number, max: number) {
 }
 
 function slugify(value: string) {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 36) || 'deck';
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 36) || 'deck'
+  );
 }
 
 function createShortHash(value: string) {

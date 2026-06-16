@@ -1,14 +1,9 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 :root {
   --background: #0f1014;
   --foreground: #f2f3f5;
-  --font-sans:
-    'Avenir Next',
-    'Helvetica Neue',
-    'Segoe UI Variable Text',
-    'Segoe UI',
-    sans-serif;
+  --font-sans: "Avenir Next", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 
 @theme inline {
@@ -47,7 +42,7 @@ button {
 }
 
 code {
-  font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+  font-family: "SF Mono", "JetBrains Mono", "Menlo", monospace;
   color: rgba(255, 255, 255, 0.88);
 }
 

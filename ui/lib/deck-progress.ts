@@ -160,7 +160,11 @@ export function toggleDeckIgnored(progress: DeckProgressMap, cardId: string): De
   };
 }
 
-export function summarizeDeckProgress(cards: DeckCard[], progress: DeckProgressMap, nowIso = new Date().toISOString()): DeckProgressSummary {
+export function summarizeDeckProgress(
+  cards: DeckCard[],
+  progress: DeckProgressMap,
+  nowIso = new Date().toISOString(),
+): DeckProgressSummary {
   let reviews = 0;
   let reviewedCards = 0;
   let correct = 0;
@@ -226,12 +230,14 @@ export function shuffleDeckCards(cards: DeckCard[]): DeckCard[] {
 }
 
 export function buildMixedTrainingQueue(cards: DeckCard[], progress: DeckProgressMap): DeckCard[] {
-  const activeCards = cards.filter(card => !getDeckProgressEntry(progress, card.id).ignored);
+  const activeCards = cards.filter((card) => !getDeckProgressEntry(progress, card.id).ignored);
   return shuffleDeckCards(activeCards);
 }
 
 export function getDeckStudyQueue(cards: DeckCard[], progress: DeckProgressMap, nowIso = new Date().toISOString()) {
-  return sortCardsForReview(cards, progress, nowIso).filter(card => isDeckCardStudyable(getDeckProgressEntry(progress, card.id), nowIso));
+  return sortCardsForReview(cards, progress, nowIso).filter((card) =>
+    isDeckCardStudyable(getDeckProgressEntry(progress, card.id), nowIso),
+  );
 }
 
 export function isDeckCardStudyable(entry: DeckProgressEntry, nowIso = new Date().toISOString()) {
@@ -241,7 +247,7 @@ export function isDeckCardStudyable(entry: DeckProgressEntry, nowIso = new Date(
 
 export function sortCardsForReview(cards: DeckCard[], progress: DeckProgressMap, nowIso = new Date().toISOString()) {
   const now = Date.parse(nowIso);
-  const openingMastery = new Map(summarizeLineMastery(cards, progress, nowIso).map(line => [line.id, line]));
+  const openingMastery = new Map(summarizeLineMastery(cards, progress, nowIso).map((line) => [line.id, line]));
 
   return [...cards].sort((left, right) => {
     const leftProgress = getDeckProgressEntry(progress, left.id);
@@ -299,7 +305,10 @@ export function sortCardsForReview(cards: DeckCard[], progress: DeckProgressMap,
   });
 }
 
-export function getEffectiveMasteryScore(entry: DeckProgressEntry, nowIsoOrMs: string | number = new Date().toISOString()) {
+export function getEffectiveMasteryScore(
+  entry: DeckProgressEntry,
+  nowIsoOrMs: string | number = new Date().toISOString(),
+) {
   const now = typeof nowIsoOrMs === 'number' ? nowIsoOrMs : Date.parse(nowIsoOrMs);
   const currentScore = clampMasteryScore(entry.masteryScore, entry);
   const lastSeen = Date.parse(entry.lastSeenAt ?? '');
@@ -320,7 +329,10 @@ export function getEffectiveMasteryScore(entry: DeckProgressEntry, nowIsoOrMs: s
   return Math.max(0, Math.min(100, Math.round(decayedScore)));
 }
 
-export function getMasteryGrade(entry: DeckProgressEntry, nowIsoOrMs: string | number = new Date().toISOString()): MasteryGrade {
+export function getMasteryGrade(
+  entry: DeckProgressEntry,
+  nowIsoOrMs: string | number = new Date().toISOString(),
+): MasteryGrade {
   return scoreToMasteryGrade(getEffectiveMasteryScore(entry, nowIsoOrMs));
 }
 
@@ -357,7 +369,9 @@ const ECO_NAME_FALLBACKS: Record<string, string> = {
 };
 
 export function getDeckCardOpeningGroup(card: DeckCard) {
-  const eco = String(card.eco ?? '').trim().toUpperCase();
+  const eco = String(card.eco ?? '')
+    .trim()
+    .toUpperCase();
   const mappedName = ECO_NAME_FALLBACKS[eco];
 
   if (mappedName) {
@@ -400,17 +414,20 @@ export function getDeckCardOpeningGroup(card: DeckCard) {
 }
 
 export function summarizeLineMastery(cards: DeckCard[], progress: DeckProgressMap, nowIso = new Date().toISOString()) {
-  const byLine = new Map<string, {
-    id: string;
-    name: string;
-    eco: string;
-    side: DeckCard['side'];
-    cardCount: number;
-    dueCount: number;
-    newCount: number;
-    scoreTotal: number;
-    weakestScore: number;
-  }>();
+  const byLine = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      eco: string;
+      side: DeckCard['side'];
+      cardCount: number;
+      dueCount: number;
+      newCount: number;
+      scoreTotal: number;
+      weakestScore: number;
+    }
+  >();
   const now = Date.parse(nowIso);
 
   for (const card of cards) {
@@ -444,7 +461,7 @@ export function summarizeLineMastery(cards: DeckCard[], progress: DeckProgressMa
   }
 
   return [...byLine.values()]
-    .map(line => {
+    .map((line) => {
       const averageScore = line.cardCount > 0 ? Math.round(line.scoreTotal / line.cardCount) : 0;
 
       return {
@@ -470,11 +487,13 @@ export function summarizeLineMastery(cards: DeckCard[], progress: DeckProgressMa
 }
 
 function normalizeOpeningGroupId(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '') || 'unknown';
+  return (
+    value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '') || 'unknown'
+  );
 }
 
 export function getDeckCardState(entry: DeckProgressEntry, nowIso = new Date().toISOString()): DeckCardState {
@@ -538,7 +557,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTE_MS = 60 * 1000;
 const FSRS_TARGET_RETENTION = 0.9;
 const FSRS_DECAY = -0.5;
-const FSRS_FACTOR = Math.pow(FSRS_TARGET_RETENTION, 1 / FSRS_DECAY) - 1;
+const FSRS_FACTOR = FSRS_TARGET_RETENTION ** (1 / FSRS_DECAY) - 1;
 const MASTERY_GRADE_CEILINGS: Record<MasteryGrade, number> = {
   F: 17,
   E: 33,
@@ -730,7 +749,10 @@ function getNextMasteryScore(
   return clampMasteryGain(effectiveScore, effectiveScore + (targetScore - effectiveScore) * lift);
 }
 
-export function getCurrentRetrievability(entry: DeckProgressEntry, nowIsoOrMs: string | number = new Date().toISOString()) {
+export function getCurrentRetrievability(
+  entry: DeckProgressEntry,
+  nowIsoOrMs: string | number = new Date().toISOString(),
+) {
   if (entry.seenCount === 0 || entry.stability <= 0) {
     return 0;
   }
@@ -743,7 +765,7 @@ export function getCurrentRetrievability(entry: DeckProgressEntry, nowIsoOrMs: s
   }
 
   const elapsedDays = (now - lastSeen) / DAY_MS;
-  return Math.max(0, Math.min(1, Math.pow(1 + FSRS_FACTOR * (elapsedDays / entry.stability), FSRS_DECAY)));
+  return Math.max(0, Math.min(1, (1 + FSRS_FACTOR * (elapsedDays / entry.stability)) ** FSRS_DECAY));
 }
 
 function getNextIntervalMs(stability: number, rating: DeckAttemptRating) {
@@ -751,7 +773,7 @@ function getNextIntervalMs(stability: number, rating: DeckAttemptRating) {
     return 10 * MINUTE_MS;
   }
 
-  const intervalDays = stability * ((Math.pow(FSRS_TARGET_RETENTION, 1 / FSRS_DECAY) - 1) / FSRS_FACTOR);
+  const intervalDays = stability * ((FSRS_TARGET_RETENTION ** (1 / FSRS_DECAY) - 1) / FSRS_FACTOR);
   const minimumMs = rating === 'hard' ? 30 * MINUTE_MS : DAY_MS;
   return Math.max(minimumMs, Math.round(intervalDays * DAY_MS));
 }

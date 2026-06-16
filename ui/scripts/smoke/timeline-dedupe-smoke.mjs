@@ -10,7 +10,7 @@ const batchInFlight = new Map();
 const batchStarts = [];
 const singleStarts = [];
 const batchSize = 4;
-const getCacheKey = position => `k:${position.moves.join('.')}`;
+const getCacheKey = (position) => `k:${position.moves.join('.')}`;
 
 function makeAnalysis(id) {
   return {
@@ -38,7 +38,7 @@ function fetchSingle(position) {
   }
 
   singleStarts.push(cacheKey);
-  const request = Promise.resolve(makeAnalysis(`single:${cacheKey}`)).then(analysis => {
+  const request = Promise.resolve(makeAnalysis(`single:${cacheKey}`)).then((analysis) => {
     cache.set(cacheKey, analysis);
     return analysis;
   });
@@ -53,29 +53,37 @@ const deep = runTimelineAnalysisDedupe({
   batchInFlight,
   batchSize,
   getCacheKey,
-  buildRequest: position => position,
-  analyzeBatch: async batchPositions => {
+  buildRequest: (position) => position,
+  analyzeBatch: async (batchPositions) => {
     batchStarts.push(batchPositions.map(getCacheKey));
-    await new Promise(resolve => setTimeout(resolve, 10));
-    return batchPositions.map(position => makeAnalysis(`batch:${getCacheKey(position)}`));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return batchPositions.map((position) => makeAnalysis(`batch:${getCacheKey(position)}`));
   },
 });
 
 if (positionInFlight.size !== positions.length) {
-  throw new Error(`Expected every timeline position to be reserved synchronously, got ${positionInFlight.size}/${positions.length}.`);
+  throw new Error(
+    `Expected every timeline position to be reserved synchronously, got ${positionInFlight.size}/${positions.length}.`,
+  );
 }
 
 await Promise.all(positions.slice(5, 16).map(fetchSingle));
 await deep;
 
-const duplicateBatches = findDuplicates(batchStarts.map(batch => batch.join('|')));
+const duplicateBatches = findDuplicates(batchStarts.map((batch) => batch.join('|')));
 
-console.log(JSON.stringify({
-  positions: positions.length,
-  batch_starts: batchStarts.length,
-  duplicate_batches: duplicateBatches,
-  single_starts: singleStarts,
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      positions: positions.length,
+      batch_starts: batchStarts.length,
+      duplicate_batches: duplicateBatches,
+      single_starts: singleStarts,
+    },
+    null,
+    2,
+  ),
+);
 
 if (singleStarts.length !== 0) {
   throw new Error(`Expected zero single analysis starts, got ${singleStarts.length}: ${singleStarts.join(', ')}`);

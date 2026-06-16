@@ -23,7 +23,7 @@ const panels = [
   'GameReviewPanel',
   'LearnPanel',
   'DeckPanel',
-  'PgnImportDialog'
+  'PgnImportDialog',
 ];
 
 let barrelCode = `export * from './shared';\n`;
@@ -33,10 +33,9 @@ for (const panel of panels) {
 }
 
 // 1. Create shared.tsx which contains ALL helpers and types, but NO exported panels.
-let sharedCode = content;
+const sharedCode = content;
 for (const panel of panels) {
   // Regex to remove the entire exported function.
   // This is tricky because of nested braces.
   // Instead of regex, let's just strip lines.
 }
-

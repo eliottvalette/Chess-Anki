@@ -51,7 +51,8 @@ import {
 const lastImportIndex = choppedContent.lastIndexOf('import ');
 const nextLineIndex = choppedContent.indexOf('\n', lastImportIndex);
 
-const finalContent = choppedContent.substring(0, nextLineIndex + 1) + imports + choppedContent.substring(nextLineIndex + 1);
+const finalContent =
+  choppedContent.substring(0, nextLineIndex + 1) + imports + choppedContent.substring(nextLineIndex + 1);
 
 fs.writeFileSync(srcPath, finalContent);
 console.log('Successfully chopped helpers');

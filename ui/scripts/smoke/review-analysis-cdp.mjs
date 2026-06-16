@@ -4,7 +4,7 @@ const USERNAME = process.env.CHESSCOM_USERNAME || 'losvalettos';
 const TIME_CLASS = process.env.CHESSCOM_TIME_CLASS || 'blitz';
 const RUN_MS = Number(process.env.SMOKE_RUN_MS || 45000);
 
-const version = await fetch(`${CDP_URL}/json/version`).then(response => response.json());
+const version = await fetch(`${CDP_URL}/json/version`).then((response) => response.json());
 const ws = new WebSocket(version.webSocketDebuggerUrl);
 let nextId = 1;
 const pending = new Map();
@@ -30,7 +30,7 @@ function waitForOpen() {
   });
 }
 
-ws.addEventListener('message', event => {
+ws.addEventListener('message', (event) => {
   const message = JSON.parse(String(event.data));
 
   if (message.id && pending.has(message.id)) {
@@ -45,7 +45,7 @@ ws.addEventListener('message', event => {
   }
 
   if (message.method === 'Runtime.consoleAPICalled') {
-    const line = message.params.args.map(arg => String(arg.value ?? arg.description ?? '')).join(' ');
+    const line = message.params.args.map((arg) => String(arg.value ?? arg.description ?? '')).join(' ');
     if (line.includes('[analysis:') || line.includes('[preload:game]')) {
       consoleLines.push(line);
       console.log(line);
@@ -62,7 +62,9 @@ ws.addEventListener('message', event => {
 
 await waitForOpen();
 await send('Target.setDiscoverTargets', { discover: true });
-const target = await fetch(`${CDP_URL}/json/new?${encodeURIComponent(APP_URL)}`, { method: 'PUT' }).then(response => response.json());
+const target = await fetch(`${CDP_URL}/json/new?${encodeURIComponent(APP_URL)}`, { method: 'PUT' }).then((response) =>
+  response.json(),
+);
 const session = await send('Target.attachToTarget', { targetId: target.id, flatten: true });
 const sessionId = session.sessionId;
 
@@ -86,7 +88,7 @@ await sessionSend('Network.setCookie', {
   path: '/',
 });
 await sessionSend('Page.navigate', { url: APP_URL });
-await new Promise(resolve => setTimeout(resolve, 3500));
+await new Promise((resolve) => setTimeout(resolve, 3500));
 
 await sessionSend('Runtime.evaluate', {
   expression: `
@@ -100,7 +102,7 @@ await sessionSend('Runtime.evaluate', {
   awaitPromise: true,
 });
 
-await new Promise(resolve => setTimeout(resolve, 5000));
+await new Promise((resolve) => setTimeout(resolve, 5000));
 await sessionSend('Runtime.evaluate', {
   expression: `
     (() => {
@@ -113,19 +115,25 @@ await sessionSend('Runtime.evaluate', {
   awaitPromise: true,
 });
 
-await new Promise(resolve => setTimeout(resolve, RUN_MS));
+await new Promise((resolve) => setTimeout(resolve, RUN_MS));
 
-const starts = consoleLines.filter(line => line.includes('[analysis:game] ->'));
+const starts = consoleLines.filter((line) => line.includes('[analysis:game] ->'));
 const duplicateStarts = findDuplicates(starts.map(normalizeGameStart));
-const positionStarts = consoleLines.filter(line => line.includes('[analysis:position] ->'));
+const positionStarts = consoleLines.filter((line) => line.includes('[analysis:position] ->'));
 
-console.log(JSON.stringify({
-  game_start_count: starts.length,
-  duplicate_game_starts: duplicateStarts,
-  position_start_count: positionStarts.length,
-  sample_position_starts: positionStarts.slice(0, 12),
-  preload_lines: consoleLines.filter(line => line.includes('[preload:game]')).slice(0, 12),
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      game_start_count: starts.length,
+      duplicate_game_starts: duplicateStarts,
+      position_start_count: positionStarts.length,
+      sample_position_starts: positionStarts.slice(0, 12),
+      preload_lines: consoleLines.filter((line) => line.includes('[preload:game]')).slice(0, 12),
+    },
+    null,
+    2,
+  ),
+);
 
 await fetch(`${CDP_URL}/json/close/${target.id}`).catch(() => undefined);
 ws.close();

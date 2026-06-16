@@ -173,10 +173,7 @@ test('classifyTimelineMoves scores played moves against the pre-move MultiPV lin
       makeAnalysis({
         scoreCp: 142,
         bestMove: 'd4b5',
-        lines: [
-          makeLine({ bestMove: 'd4b5', scoreCp: 142 }),
-          makeLine({ bestMove: 'd4e5', scoreCp: 130 }),
-        ],
+        lines: [makeLine({ bestMove: 'd4b5', scoreCp: 142 }), makeLine({ bestMove: 'd4e5', scoreCp: 130 })],
       }),
     ],
     [makeAnalysis({ scoreCp: 94, bestMove: 'c6e5' })],
@@ -389,7 +386,10 @@ test('buildGameReview keeps key moments sparse and includes only the last book m
 
   const review = buildGameReview(reviews, null);
 
-  assert.deepEqual(review.keyMoments.map(moment => moment.ply), [2, 5, 6, 7]);
+  assert.deepEqual(
+    review.keyMoments.map((moment) => moment.ply),
+    [2, 5, 6, 7],
+  );
   assert.equal(review.opening.lastBookPly, 2);
 });
 

@@ -2,9 +2,8 @@ import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import pg from 'pg';
-
-import { getPgConfig } from './migrate.mjs';
 import { loadLocalEnv } from './env.mjs';
+import { getPgConfig } from './migrate.mjs';
 
 const { Client } = pg;
 
@@ -36,7 +35,7 @@ export async function main() {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });

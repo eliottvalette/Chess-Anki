@@ -1,29 +1,22 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { LabState } from '../useLabState';
+import {
+  buildDeterministicAnalyzeRequest,
+  buildReviewAnalyzeRequest,
+  REVIEW_ANALYSIS_PROFILE,
+} from '@/lib/analysis-profile';
+import type { AnalysisResult } from '@/lib/analysis-types';
+import { shouldUseLiveTrainMoveReview } from '@/lib/card-move-reviews';
 import {
   analyzeGamePositions,
   analyzeSinglePosition,
+  buildMoveUciHistory,
   buildTimelineSequencePositions,
   restoreGameFromHistory,
-  buildMoveUciHistory,
   type StoredMove,
 } from '@/lib/chess-analysis-client';
-import {
-  shouldUseLiveTrainMoveReview,
-} from '@/lib/card-move-reviews';
-import type { AnalysisResult } from '@/lib/analysis-types';
-import {
-  DETERMINISTIC_ANALYSIS_PROFILE,
-  REVIEW_ANALYSIS_PROFILE,
-  buildDeterministicAnalyzeRequest,
-  buildReviewAnalyzeRequest,
-} from '@/lib/analysis-profile';
+import { getPositionCacheKey, getTimelinePositionCacheKey, type PositionAnalysisProfile } from '@/lib/lab-helpers';
 import { runTimelineAnalysisDedupe } from '@/lib/timeline-analysis-runner';
-import {
-  getPositionCacheKey,
-  getTimelinePositionCacheKey,
-  type PositionAnalysisProfile,
-} from '@/lib/lab-helpers';
+import type { LabState } from '../useLabState';
 
 const TIMELINE_ANALYSIS_BATCH_SIZE = 4;
 const PRELOAD_AHEAD = 3;
@@ -34,7 +27,7 @@ export function useLabEngine(
     currentFen: string;
     currentMoveList: string[];
     currentLineKey: string;
-  }
+  },
 ) {
   const {
     initialFen,
@@ -49,7 +42,7 @@ export function useLabEngine(
     setTrainAnalysisTick,
   } = state;
 
-  const { currentFen, currentMoveList, currentLineKey } = context;
+  const { currentFen, currentMoveList } = context;
 
   const positionCacheRef = useRef<Map<string, AnalysisResult>>(new Map());
   const positionInFlightRef = useRef<Map<string, Promise<AnalysisResult>>>(new Map());
@@ -88,7 +81,7 @@ export function useLabEngine(
           moves,
         }),
       )
-        .then(analysis => {
+        .then((analysis) => {
           positionCacheRef.current.set(cacheKey, analysis);
           return analysis;
         })
@@ -120,16 +113,20 @@ export function useLabEngine(
         positionInFlight: positionInFlightRef.current,
         batchInFlight: timelineBatchInFlightRef.current,
         batchSize: TIMELINE_ANALYSIS_BATCH_SIZE,
-        getCacheKey: position => getTimelinePositionCacheKey(requestInitialFen, position.moves ?? []),
-        buildRequest: position => buildReviewAnalyzeRequest({
-          ...position,
-          initialFen: requestInitialFen,
-        }),
+        getCacheKey: (position) => getTimelinePositionCacheKey(requestInitialFen, position.moves ?? []),
+        buildRequest: (position) =>
+          buildReviewAnalyzeRequest({
+            ...position,
+            initialFen: requestInitialFen,
+          }),
         analyzeBatch: async (batchPositions, batchSignal) => {
-          const response = await analyzeGamePositions({
-            positions: batchPositions,
-            depth: REVIEW_ANALYSIS_PROFILE.depth,
-          }, batchSignal);
+          const response = await analyzeGamePositions(
+            {
+              positions: batchPositions,
+              depth: REVIEW_ANALYSIS_PROFILE.depth,
+            },
+            batchSignal,
+          );
           return response.analyses ?? [];
         },
         onProgress,
@@ -157,12 +154,12 @@ export function useLabEngine(
     setPositionAnalysis(null);
 
     fetchCachedPositionAnalysis(cacheKey, currentFen, currentMoveList, initialFen, positionProfile)
-      .then(analysis => {
+      .then((analysis) => {
         if (positionRequestIdRef.current === requestId) {
           setPositionAnalysis(analysis);
         }
       })
-      .catch(error => {
+      .catch((error) => {
         if (positionRequestIdRef.current === requestId) {
           setPositionAnalysis(null);
           setServerError(error.message);
@@ -175,7 +172,16 @@ export function useLabEngine(
       });
 
     return undefined;
-  }, [activeDeckCard, currentFen, currentLineKey, currentMoveList, fetchCachedPositionAnalysis, initialFen, setPositionAnalysis, setPositionLoading, setServerError]);
+  }, [
+    activeDeckCard,
+    currentFen,
+    currentMoveList,
+    fetchCachedPositionAnalysis,
+    initialFen,
+    setPositionAnalysis,
+    setPositionLoading,
+    setServerError,
+  ]);
 
   // 2. Pre-fetch train move review if we step forward during training
   useEffect(() => {
@@ -208,12 +214,20 @@ export function useLabEngine(
 
     void fetchCachedPositionAnalysis(beforeKey, beforeGame.fen(), beforeMoveList, initialFen, 'training')
       .then(() => {
-        setTrainAnalysisTick(tick => tick + 1);
+        setTrainAnalysisTick((tick) => tick + 1);
       })
       .catch(() => undefined);
 
     return undefined;
-  }, [activeDeckCard, moveHistory, deckFeedback, fetchCachedPositionAnalysis, historyIndex, initialFen, setTrainAnalysisTick]);
+  }, [
+    activeDeckCard,
+    moveHistory,
+    deckFeedback,
+    fetchCachedPositionAnalysis,
+    historyIndex,
+    initialFen,
+    setTrainAnalysisTick,
+  ]);
 
   // 3. Pre-fetch all remaining trained moves once an answer is given
   useEffect(() => {
@@ -233,7 +247,7 @@ export function useLabEngine(
 
       void fetchCachedPositionAnalysis(cacheKey, game.fen(), moves, initialFen, 'training')
         .then(() => {
-          setTrainAnalysisTick(tick => tick + 1);
+          setTrainAnalysisTick((tick) => tick + 1);
         })
         .catch(() => undefined);
     }
@@ -250,7 +264,11 @@ export function useLabEngine(
     const timer = window.setTimeout(() => {
       const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
 
-      for (let index = historyIndex + 1; index <= Math.min(moveHistory.length, historyIndex + PRELOAD_AHEAD); index += 1) {
+      for (
+        let index = historyIndex + 1;
+        index <= Math.min(moveHistory.length, historyIndex + PRELOAD_AHEAD);
+        index += 1
+      ) {
         const moves = buildMoveUciHistory(moveHistory.slice(0, index));
         const cacheKey = getPositionCacheKey(initialFen, moves, positionProfile);
 
@@ -259,7 +277,9 @@ export function useLabEngine(
         }
 
         const nextGame = restoreGameFromHistory(moveHistory, initialFen, index);
-        void fetchCachedPositionAnalysis(cacheKey, nextGame.fen(), moves, initialFen, positionProfile).catch(() => undefined);
+        void fetchCachedPositionAnalysis(cacheKey, nextGame.fen(), moves, initialFen, positionProfile).catch(
+          () => undefined,
+        );
       }
     }, 180);
 

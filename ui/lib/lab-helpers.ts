@@ -1,33 +1,29 @@
-import { Chess } from 'chess.js';
 import type { CSSProperties } from 'react';
 import type { AnalysisResult } from './analysis-types';
 import {
   classifyTimelineMoves,
   type GameMetadata,
+  type ReviewCategory,
+  reviewCategoryMeta,
   type StoredMove,
   type TimelineReview,
   toStoredMove,
-    reviewCategoryMeta,
-  type ReviewCategory,
 } from './chess-analysis-client';
 
 const LAST_MOVE_STYLE: CSSProperties = {
   backgroundColor: 'rgba(255, 255, 0, 0.4)',
 };
-export { toStoredMove };
-import type { ChessComRecentGameSummary } from './chesscom';
-import {
-  DETERMINISTIC_ANALYSIS_PROFILE,
-  REVIEW_ANALYSIS_PROFILE,
-} from './analysis-profile';
-import { resolveOpeningBookFlagsLocal } from './opening-book';
-import type { DeckProgressMap } from './deck-progress';
-import type { OpeningTreeSummary, OpeningTreeDetail } from '@/lib/opening-tree';
-import type { TrainingDeckSummary } from '@/components/chess-lab-panels';
-import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
-import { parseCardMoveReviews } from '@/lib/card-move-reviews';
-import type { TrainSessionStats } from '../components/chess-lab-panels';
 
+export { toStoredMove };
+
+import { parseCardMoveReviews } from '@/lib/card-move-reviews';
+import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
+import type { TrainingDeckSummary, TrainSessionStats } from '../components/chess-lab-panels';
+import { DETERMINISTIC_ANALYSIS_PROFILE, REVIEW_ANALYSIS_PROFILE } from './analysis-profile';
+import type { ChessComRecentGameSummary } from './chesscom';
+import type { DeckProgressMap } from './deck-progress';
+import { resolveOpeningBookFlagsLocal } from './opening-book';
+import type { OpeningTreeDetail, OpeningTreeSummary } from './opening-tree';
 
 export type TrainingDeckCardRow = {
   id: string;
@@ -78,7 +74,7 @@ export function mapTrainingDeckCard(card: TrainingDeckCardRow): DeckCard {
     scoreSwingCp: typeof card.score_swing_cp === 'number' ? card.score_swing_cp : undefined,
     replayFromStart: Boolean(card.replay_from_start),
     initialFen: card.initial_fen ? String(card.initial_fen) : null,
-    setupMoves: Array.isArray(card.setup_moves) ? card.setup_moves.map(move => String(move)) : [],
+    setupMoves: Array.isArray(card.setup_moves) ? card.setup_moves.map((move) => String(move)) : [],
     moveReviews: parseCardMoveReviews(card.move_reviews),
   };
 }
@@ -309,8 +305,8 @@ export function readCookie(name: string) {
   const prefix = `${name}=`;
   const entry = document.cookie
     .split(';')
-    .map(part => part.trim())
-    .find(part => part.startsWith(prefix));
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(prefix));
 
   return entry ? decodeURIComponent(entry.slice(prefix.length)) : '';
 }
@@ -320,6 +316,7 @@ export function writeCookie(name: string, value: string) {
     return;
   }
 
+  // biome-ignore lint/suspicious/noDocumentCookie: lightweight client preference storage
   document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
 }
 
@@ -328,11 +325,12 @@ export function deleteCookie(name: string) {
     return;
   }
 
+  // biome-ignore lint/suspicious/noDocumentCookie: lightweight client preference storage
   document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
 }
 
 export function delay(ms: number) {
-  return new Promise(resolve => window.setTimeout(resolve, ms));
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 export const DRILL_OPPONENT_DELAY_MS = 400;
@@ -354,16 +352,16 @@ export async function readJsonResponse<T>(response: Response) {
 }
 
 export type TrainingDeckPayload = {
-  decks?: any[];
-  deck?: any | null;
+  decks?: TrainingDeckSummary[];
+  deck?: TrainingDeckSummary | null;
   lines?: Array<{ id: string; name: string; eco: string; side: string; moves: string[] | null }>;
-  cards?: any[];
+  cards?: DeckCard[];
   error?: string;
 };
 
 export type OpeningTreesPayload = {
-  trees?: any[];
-  tree?: any;
+  trees?: OpeningTreeSummary[];
+  tree?: OpeningTreeDetail;
   imported?: number;
   nodes?: number;
   edges?: number;
@@ -425,7 +423,9 @@ export async function loadCachedTimelineAnalysis(
   }
 
   try {
-    const response = await fetch(`/api/game-analysis-cache?key=${encodeURIComponent(cacheKey)}`, { credentials: 'same-origin' });
+    const response = await fetch(`/api/game-analysis-cache?key=${encodeURIComponent(cacheKey)}`, {
+      credentials: 'same-origin',
+    });
     const payload = (await response.json()) as { analysis?: CachedTimelineAnalysis | null };
     const analysis = payload.analysis;
 
@@ -479,13 +479,13 @@ export async function saveCachedTimelineAnalysis({
         key: cacheKey,
         gameLink,
         pgnHash: pgn ? getPgnHash(pgn) : null,
-      analysis: {
-        quality: 'refined',
-        version: GAME_ANALYSIS_CACHE_VERSION,
-        profileKey: TIMELINE_ANALYSIS_PROFILE_KEY,
-        preMoveAnalyses,
-        timelineAnalyses,
-      },
+        analysis: {
+          quality: 'refined',
+          version: GAME_ANALYSIS_CACHE_VERSION,
+          profileKey: TIMELINE_ANALYSIS_PROFILE_KEY,
+          preMoveAnalyses,
+          timelineAnalyses,
+        },
       }),
     });
   } catch {
@@ -506,13 +506,8 @@ export function isUsableCachedTimelineAnalysis(
   }
 
   const analyzedPlies = analysis.timelineAnalyses.length;
-  return (
-    analyzedPlies > 0 &&
-    analyzedPlies === moveCount &&
-    analysis.preMoveAnalyses.length === analyzedPlies
-  );
+  return analyzedPlies > 0 && analyzedPlies === moveCount && analysis.preMoveAnalyses.length === analyzedPlies;
 }
-
 
 export function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
   if (!category) {

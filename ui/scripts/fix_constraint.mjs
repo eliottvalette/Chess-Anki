@@ -27,7 +27,6 @@ async function fix() {
     `);
 
     console.log('Added updated opening_trees_library_check constraint');
-    
   } catch (error) {
     console.error('Error:', error);
   } finally {

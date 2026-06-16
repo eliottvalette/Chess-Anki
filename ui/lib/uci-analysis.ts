@@ -90,9 +90,9 @@ export function getAnalysisFen({ fen, initialFen, moves }: AnalyzeRequest) {
 }
 
 export function parseAnalysis(lines: string[], fen: string | undefined, depthRequested: number): AnalysisResult {
-  const bestMoveLine = [...lines].reverse().find(line => line.startsWith('bestmove '));
+  const bestMoveLine = [...lines].reverse().find((line) => line.startsWith('bestmove '));
   const parsedLines = parseAnalysisLines(lines, fen, depthRequested);
-  const primaryLine = parsedLines.find(line => line.multipv === 1) ?? parsedLines[0] ?? null;
+  const primaryLine = parsedLines.find((line) => line.multipv === 1) ?? parsedLines[0] ?? null;
   const infoLine = findBestInfoLine(lines, 1) ?? findBestInfoLine(lines);
 
   const bestMoveMatch = bestMoveLine?.match(/^bestmove\s+(\S+)(?:\s+ponder\s+(\S+))?/);
@@ -115,14 +115,13 @@ export function parseAnalysis(lines: string[], fen: string | undefined, depthReq
         }
       : null);
 
-  const wdl: RawWdl | null =
-    wdlMatch
+  const wdl: RawWdl | null = wdlMatch
     ? {
         win: Number.parseInt(wdlMatch[1], 10),
         draw: Number.parseInt(wdlMatch[2], 10),
         loss: Number.parseInt(wdlMatch[3], 10),
       }
-    : terminalPerspective?.rawWdl ?? null;
+    : (terminalPerspective?.rawWdl ?? null);
 
   const whitePerspectiveWdl: PerspectiveWdl | null = wdl
     ? turn === 'w'
@@ -223,13 +222,13 @@ function invertScoreBound(bound: RelativeScore['bound']) {
 }
 
 function findBestInfoLine(lines: string[], multipv?: number) {
-  const candidates = [...lines].reverse().filter(line => line.startsWith('info ') && /\bscore (cp|mate) /.test(line));
+  const candidates = [...lines].reverse().filter((line) => line.startsWith('info ') && /\bscore (cp|mate) /.test(line));
 
   if (multipv == null) {
     return candidates[0];
   }
 
-  return candidates.find(line => Number.parseInt(line.match(/\bmultipv\s+(\d+)/)?.[1] ?? '1', 10) === multipv);
+  return candidates.find((line) => Number.parseInt(line.match(/\bmultipv\s+(\d+)/)?.[1] ?? '1', 10) === multipv);
 }
 
 function inferTerminalPerspective(fen: string | undefined) {

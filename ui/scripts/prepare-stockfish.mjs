@@ -1,9 +1,9 @@
+import { spawn } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { chmod, copyFile, mkdir, readdir, rm, stat } from 'node:fs/promises';
 import https from 'node:https';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const STOCKFISH_URL =
@@ -82,7 +82,7 @@ async function prepareBrowserStockfishAssets() {
 
 function downloadFile(url, destination, redirectsLeft = 5) {
   return new Promise((resolve, reject) => {
-    const request = https.get(url, response => {
+    const request = https.get(url, (response) => {
       if (
         response.statusCode &&
         response.statusCode >= 300 &&
@@ -115,7 +115,7 @@ function run(command, args) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { stdio: 'inherit' });
     child.once('error', reject);
-    child.once('exit', code => {
+    child.once('exit', (code) => {
       if (code === 0) {
         resolve();
         return;

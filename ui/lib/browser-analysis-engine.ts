@@ -63,7 +63,7 @@ export async function analyzeSinglePositionInBrowser(payload: AnalyzeRequest, si
 
 export async function analyzeGamePositionsInBrowser(payload: BrowserAnalysisPayload, signal?: AbortSignal) {
   const positions = Array.isArray(payload.positions) ? payload.positions : [];
-  const normalizedPositions = positions.map(position =>
+  const normalizedPositions = positions.map((position) =>
     normalizeAnalyzeRequest({
       ...position,
       depth: payload.depth ?? position.depth,
@@ -72,7 +72,7 @@ export async function analyzeGamePositionsInBrowser(payload: BrowserAnalysisPayl
   );
 
   const analyses = await Promise.all(
-    normalizedPositions.map(position => analyzeSinglePositionInBrowser(position, signal)),
+    normalizedPositions.map((position) => analyzeSinglePositionInBrowser(position, signal)),
   );
 
   return { analyses };
@@ -113,7 +113,8 @@ async function getBrowserEnginePool() {
 }
 
 function getBrowserEnginePoolSize() {
-  const concurrency = typeof navigator === 'undefined' ? BROWSER_ENGINE_DEFAULT_POOL_SIZE : navigator.hardwareConcurrency ?? 0;
+  const concurrency =
+    typeof navigator === 'undefined' ? BROWSER_ENGINE_DEFAULT_POOL_SIZE : (navigator.hardwareConcurrency ?? 0);
 
   if (!Number.isFinite(concurrency) || concurrency < 4) {
     return 1;
@@ -129,8 +130,8 @@ class BrowserStockfishSession {
 
   private constructor(worker: Worker) {
     this.worker = worker;
-    this.worker.addEventListener('message', event => this.handleLine(String(event.data ?? '')));
-    this.worker.addEventListener('error', event => {
+    this.worker.addEventListener('message', (event) => this.handleLine(String(event.data ?? '')));
+    this.worker.addEventListener('error', (event) => {
       this.rejectPending(new Error(event.message || 'Browser Stockfish worker failed.'));
     });
   }
@@ -153,22 +154,26 @@ class BrowserStockfishSession {
       const positionCommand = buildPositionCommand(request);
       const analysisFen = getAnalysisFen(request);
       const searchCommand = movetimeMs == null ? `go depth ${depth}` : `go movetime ${movetimeMs}`;
-      logBrowserAnalysis(`search#${searchId} start ${formatBrowserAnalysisRequest(request)} command="${searchCommand}"`);
+      logBrowserAnalysis(
+        `search#${searchId} start ${formatBrowserAnalysisRequest(request)} command="${searchCommand}"`,
+      );
       const lines = await this.run(
         ['setoption name Clear Hash', `setoption name MultiPV value ${multipv}`, positionCommand, searchCommand],
-        line => line.startsWith('bestmove '),
+        (line) => line.startsWith('bestmove '),
         signal,
         movetimeMs == null ? null : Math.max(BROWSER_ENGINE_TIMEOUT_MS, movetimeMs + 5_000),
       );
 
       const analysis = parseAnalysis(lines, analysisFen, depth);
-      logBrowserAnalysis(`search#${searchId} done elapsed=${getBrowserAnalysisElapsedMs(startedAt)}ms best=${analysis.bestMove ?? '-'} nodes=${analysis.nodes ?? '-'}`);
+      logBrowserAnalysis(
+        `search#${searchId} done elapsed=${getBrowserAnalysisElapsedMs(startedAt)}ms best=${analysis.bestMove ?? '-'} nodes=${analysis.nodes ?? '-'}`,
+      );
       return analysis;
     });
   }
 
   private async initialize() {
-    await this.run(['uci'], line => line === 'uciok');
+    await this.run(['uci'], (line) => line === 'uciok');
     await this.run(
       [
         'setoption name Threads value 1',
@@ -177,7 +182,7 @@ class BrowserStockfishSession {
         'setoption name UCI_ShowWDL value true',
         'isready',
       ],
-      line => line === 'readyok',
+      (line) => line === 'readyok',
     );
   }
 
@@ -204,17 +209,18 @@ class BrowserStockfishSession {
         return;
       }
 
-      const timer = timeoutMs == null
-        ? null
-        : setTimeout(() => {
-            const active = this.pending;
-            this.pending = null;
-            reject(
-              new Error(
-                `Browser Stockfish timeout after ${timeoutMs}ms.${active ? ` Last lines: ${active.lines.slice(-6).join(' | ')}` : ''}`,
-              ),
-            );
-          }, timeoutMs);
+      const timer =
+        timeoutMs == null
+          ? null
+          : setTimeout(() => {
+              const active = this.pending;
+              this.pending = null;
+              reject(
+                new Error(
+                  `Browser Stockfish timeout after ${timeoutMs}ms.${active ? ` Last lines: ${active.lines.slice(-6).join(' | ')}` : ''}`,
+                ),
+              );
+            }, timeoutMs);
 
       const abort = () => {
         const active = this.pending;
@@ -232,11 +238,11 @@ class BrowserStockfishSession {
       this.pending = {
         lines: [],
         predicate,
-        resolve: lines => {
+        resolve: (lines) => {
           signal?.removeEventListener('abort', abort);
           resolve(lines);
         },
-        reject: error => {
+        reject: (error) => {
           signal?.removeEventListener('abort', abort);
           reject(error);
         },
@@ -344,7 +350,9 @@ async function getIndexedDbCache() {
 async function deleteLegacyBrowserAnalysisCaches() {
   if (!legacyCacheCleanup) {
     legacyCacheCleanup = Promise.all(
-      BROWSER_ENGINE_LEGACY_CACHE_NAMES.filter(name => name !== BROWSER_ENGINE_CACHE_NAME).map(deleteIndexedDbDatabase),
+      BROWSER_ENGINE_LEGACY_CACHE_NAMES.filter((name) => name !== BROWSER_ENGINE_CACHE_NAME).map(
+        deleteIndexedDbDatabase,
+      ),
     ).then(() => undefined);
   }
 
@@ -352,7 +360,7 @@ async function deleteLegacyBrowserAnalysisCaches() {
 }
 
 function deleteIndexedDbDatabase(name: string) {
-  return new Promise<void>(resolve => {
+  return new Promise<void>((resolve) => {
     const request = indexedDB.deleteDatabase(name);
     request.onerror = () => resolve();
     request.onsuccess = () => resolve();
@@ -403,7 +411,7 @@ class BrowserAnalysisCache {
   }
 
   get(cacheKey: string) {
-    return new Promise<AnalysisResult | null>(resolve => {
+    return new Promise<AnalysisResult | null>((resolve) => {
       const transaction = this.db.transaction(BROWSER_ENGINE_STORE_NAME, 'readonly');
       const store = transaction.objectStore(BROWSER_ENGINE_STORE_NAME);
       const request = store.get(cacheKey);
@@ -414,7 +422,7 @@ class BrowserAnalysisCache {
   }
 
   set(cacheKey: string, analysis: AnalysisResult) {
-    return new Promise<void>(resolve => {
+    return new Promise<void>((resolve) => {
       const transaction = this.db.transaction(BROWSER_ENGINE_STORE_NAME, 'readwrite');
       const store = transaction.objectStore(BROWSER_ENGINE_STORE_NAME);
       store.put(analysis, cacheKey);

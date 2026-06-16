@@ -39,23 +39,25 @@ const sharedExports = [
   'getMasteryGradeClass',
   'formatNextReview',
   'getOpeningDisplayName',
-  'DeckLibraryItem'
+  'DeckLibraryItem',
 ];
 
 // Helper to copy imports
-const importDecls = sourceFile.getImportDeclarations().map(d => d.getText());
-const importsText = importDecls.join('\n') + `\nimport styles from '../../chess-analysis-lab.module.css';\nimport * as Shared from './shared';\nexport * from './shared';\n\n`;
+const importDecls = sourceFile.getImportDeclarations().map((d) => d.getText());
+const importsText =
+  importDecls.join('\n') +
+  `\nimport styles from '../../chess-analysis-lab.module.css';\nimport * as Shared from './shared';\nexport * from './shared';\n\n`;
 
 // 1. Create shared.tsx
 let sharedCode = importDecls.join('\n') + `\nimport styles from '../../chess-analysis-lab.module.css';\n\n`;
 
-sourceFile.getTypeAliases().forEach(ta => {
+sourceFile.getTypeAliases().forEach((ta) => {
   if (sharedExports.includes(ta.getName())) {
     sharedCode += 'export ' + ta.getText() + '\n\n';
   }
 });
 
-sourceFile.getFunctions().forEach(fn => {
+sourceFile.getFunctions().forEach((fn) => {
   if (sharedExports.includes(fn.getName())) {
     // Check if it already has export modifier
     if (!fn.hasExportKeyword()) {
@@ -77,16 +79,21 @@ for (const panel of panels) {
     console.log(`Panel ${panel} not found`);
     continue;
   }
-  
-  let code = fn.getText();
-  // Instead of prefixing types used in signatures, which is hard with regex, 
+
+  const code = fn.getText();
+  // Instead of prefixing types used in signatures, which is hard with regex,
   // let's just emit `export * from './shared'` inside each file! Wait!
-  // If we have `import * as Shared`, we need prefixing. But if we just export all shared items from './shared' 
+  // If we have `import * as Shared`, we need prefixing. But if we just export all shared items from './shared'
   // and import them using named imports, it's easier.
   // Actually, I can just use ts-morph to extract the nodes.
-  fs.writeFileSync(path.join(outDir, panel.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() + '.tsx'), 
-    importDecls.join('\n') + `\nimport styles from '../../chess-analysis-lab.module.css';\nimport { ${sharedExports.join(', ')} } from './shared';\n\n` + code + '\n');
-    
+  fs.writeFileSync(
+    path.join(outDir, panel.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase() + '.tsx'),
+    importDecls.join('\n') +
+      `\nimport styles from '../../chess-analysis-lab.module.css';\nimport { ${sharedExports.join(', ')} } from './shared';\n\n` +
+      code +
+      '\n',
+  );
+
   barrelContent += `export * from './${panel.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase()}';\n`;
 }
 

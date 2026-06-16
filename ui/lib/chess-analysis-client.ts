@@ -1,5 +1,5 @@
-import { Chess } from 'chess.js';
 import type { ChartOptions, PointStyle } from 'chart.js';
+import { Chess } from 'chess.js';
 
 import type { AnalysisResult, AnalyzeRequest, PerspectiveScore, PerspectiveWdl, ScoreBound } from './analysis-types.ts';
 
@@ -233,7 +233,7 @@ function formatSingleAnalysisFetch(payload: AnalyzeRequest) {
 }
 
 function formatBatchAnalysisFetch(payload: { positions: AnalyzeRequest[]; depth?: number; movetimeMs?: number }) {
-  const plies = payload.positions.map(position => position.moves?.length ?? 0);
+  const plies = payload.positions.map((position) => position.moves?.length ?? 0);
   const firstPly = plies[0] ?? 0;
   const lastPly = plies[plies.length - 1] ?? firstPly;
 
@@ -246,11 +246,7 @@ function formatBatchAnalysisFetch(payload: { positions: AnalyzeRequest[]; depth?
 }
 
 function formatAnalysisResult(result: AnalysisResult) {
-  return [
-    `best=${result.bestMove ?? '-'}`,
-    `depth=${result.depth}`,
-    `pv=${result.multipv}`,
-  ].join(' ');
+  return [`best=${result.bestMove ?? '-'}`, `depth=${result.depth}`, `pv=${result.multipv}`].join(' ');
 }
 
 function getAnalysisLogTime() {
@@ -265,12 +261,19 @@ function logAnalysisFetchStart(kind: 'position' | 'game', detail: string) {
   console.info(`[analysis:${kind}] -> ${detail}`);
 }
 
-function logAnalysisFetchDone(kind: 'position' | 'game', startedAt: number, detail: string, source: 'client' | 'server') {
+function logAnalysisFetchDone(
+  kind: 'position' | 'game',
+  startedAt: number,
+  detail: string,
+  source: 'client' | 'server',
+) {
   console.info(`[analysis:${kind}:${source}] <- ${getAnalysisElapsedMs(startedAt)}ms ${detail}`);
 }
 
 function logAnalysisFetchFail(kind: 'position' | 'game', startedAt: number, error: unknown) {
-  console.warn(`[analysis:${kind}] !! ${getAnalysisElapsedMs(startedAt)}ms ${error instanceof Error ? error.message : String(error)}`);
+  console.warn(
+    `[analysis:${kind}] !! ${getAnalysisElapsedMs(startedAt)}ms ${error instanceof Error ? error.message : String(error)}`,
+  );
 }
 
 function canUseBrowserAnalysis() {
@@ -348,7 +351,7 @@ export function toStoredMove(move: {
 }
 
 export function buildMoveUciHistory(moves: StoredMove[]) {
-  return moves.map(move => move.uci ?? `${move.from}${move.to}${move.promotion ?? ''}`);
+  return moves.map((move) => move.uci ?? `${move.from}${move.to}${move.promotion ?? ''}`);
 }
 
 export function restoreGameFromHistory(moves: StoredMove[], initialFen: string | null, upto = moves.length) {
@@ -713,7 +716,7 @@ export function buildGameReview(reviews: TimelineReview[], metadata: GameMetadat
   const keyMoments = extractKeyMoments(reviews);
   const whiteAccuracy = calculatePlayerAccuracy(reviews, 'w');
   const blackAccuracy = calculatePlayerAccuracy(reviews, 'b');
-  const lastBookPly = [...reviews].reverse().find(review => review.category === 'book')?.ply ?? null;
+  const lastBookPly = [...reviews].reverse().find((review) => review.category === 'book')?.ply ?? null;
 
   return {
     accuracy: {
@@ -740,7 +743,7 @@ export function filterReviewMoments(moments: TimelineReview[], side: ReviewSide)
   }
 
   const color = side === 'white' ? 'w' : 'b';
-  return moments.filter(moment => moment.color === color);
+  return moments.filter((moment) => moment.color === color);
 }
 
 export function buildChartOptions(
@@ -1077,14 +1080,18 @@ function normalizeBoundedLoss(
 export function getMateForColor(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
   const score = analysis?.whitePerspective;
 
-  if (!score || score.type !== 'mate') {
+  if (score?.type !== 'mate') {
     return null;
   }
 
   return color === 'w' ? score.value : -score.value;
 }
 
-export function getCpLoss(beforeAnalysis: AnalysisResult | null | undefined, afterAnalysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
+export function getCpLoss(
+  beforeAnalysis: AnalysisResult | null | undefined,
+  afterAnalysis: AnalysisResult | null | undefined,
+  color: 'w' | 'b',
+) {
   const before = getScoreCpForColor(beforeAnalysis, color);
   const after = getScoreCpForColor(afterAnalysis, color);
   const loss = normalizeBoundedLoss(
@@ -1107,8 +1114,14 @@ function getMoveCpLoss(
   const playedLine = findAnalysisLineForMove(beforeAnalysis, moveUci);
 
   if (bestLine?.whitePerspective && playedLine?.whitePerspective) {
-    const bestScore = getScoreCpForColor({ ...beforeAnalysis, whitePerspective: bestLine.whitePerspective } as AnalysisResult, color);
-    const playedScore = getScoreCpForColor({ ...beforeAnalysis, whitePerspective: playedLine.whitePerspective } as AnalysisResult, color);
+    const bestScore = getScoreCpForColor(
+      { ...beforeAnalysis, whitePerspective: bestLine.whitePerspective } as AnalysisResult,
+      color,
+    );
+    const playedScore = getScoreCpForColor(
+      { ...beforeAnalysis, whitePerspective: playedLine.whitePerspective } as AnalysisResult,
+      color,
+    );
     const loss = normalizeBoundedLoss(
       bestScore,
       playedScore,
@@ -1125,8 +1138,12 @@ function getMoveCpLoss(
 export function getSecondBestGapCp(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
   const first = analysis?.lines?.[0];
   const second = analysis?.lines?.[1];
-  const firstScore = first ? getScoreCpForColor({ ...analysis, whitePerspective: first.whitePerspective } as AnalysisResult, color) : null;
-  const secondScore = second ? getScoreCpForColor({ ...analysis, whitePerspective: second.whitePerspective } as AnalysisResult, color) : null;
+  const firstScore = first
+    ? getScoreCpForColor({ ...analysis, whitePerspective: first.whitePerspective } as AnalysisResult, color)
+    : null;
+  const secondScore = second
+    ? getScoreCpForColor({ ...analysis, whitePerspective: second.whitePerspective } as AnalysisResult, color)
+    : null;
   const gap = normalizeBoundedLoss(
     firstScore,
     secondScore,
@@ -1138,7 +1155,7 @@ export function getSecondBestGapCp(analysis: AnalysisResult | null | undefined, 
 }
 
 function findAnalysisLineForMove(analysis: AnalysisResult | null | undefined, moveUci: string) {
-  return analysis?.lines?.find(line => line.bestMove === moveUci || line.pv[0] === moveUci) ?? null;
+  return analysis?.lines?.find((line) => line.bestMove === moveUci || line.pv[0] === moveUci) ?? null;
 }
 
 export function classifyReviewCategory({
@@ -1187,13 +1204,7 @@ export function classifyReviewCategory({
     return 'blunder';
   }
 
-  if (
-    bestMovePlayed &&
-    sacrifice &&
-    afterWinning &&
-    !beforeCompletelyWinning &&
-    (cpLossCp ?? 0) <= 20
-  ) {
+  if (bestMovePlayed && sacrifice && afterWinning && !beforeCompletelyWinning && (cpLossCp ?? 0) <= 20) {
     return 'brilliant';
   }
 
@@ -1219,10 +1230,7 @@ export function classifyReviewCategory({
       return 'best';
     }
 
-    if (
-      expectedPointsLost <= 0.0005 ||
-      (cpLossCp != null && cpLossCp <= 12 + Math.round(ratingFlex * 200))
-    ) {
+    if (expectedPointsLost <= 0.0005 || (cpLossCp != null && cpLossCp <= 12 + Math.round(ratingFlex * 200))) {
       return 'excellent';
     }
 
@@ -1234,11 +1242,11 @@ export function classifyReviewCategory({
       return 'good';
     }
 
-    if (expectedPointsLost <= 0.10 + ratingFlex) {
+    if (expectedPointsLost <= 0.1 + ratingFlex) {
       return 'inaccuracy';
     }
 
-    if (expectedPointsLost <= 0.20 + ratingFlex) {
+    if (expectedPointsLost <= 0.2 + ratingFlex) {
       return missedWinningChance ? 'miss' : 'mistake';
     }
 
@@ -1273,11 +1281,7 @@ export function classifyReviewCategory({
     return 'mistake';
   }
 
-  if (
-    beforeMate != null &&
-    afterMate == null &&
-    beforeMate > 0
-  ) {
+  if (beforeMate != null && afterMate == null && beforeMate > 0) {
     return 'blunder';
   }
 
@@ -1308,7 +1312,12 @@ function cpLossToAccuracy(cpLossCp: number) {
   return Math.round(Math.max(0, Math.min(100, 100 - cpLossCp / 3)));
 }
 
-function getMoveAccuracy(category: ReviewCategory | null, expectedPointsLost: number | null, cpLossCp: number | null, afterMate: number | null) {
+function getMoveAccuracy(
+  category: ReviewCategory | null,
+  expectedPointsLost: number | null,
+  cpLossCp: number | null,
+  afterMate: number | null,
+) {
   if (!category) {
     return null;
   }
@@ -1329,10 +1338,17 @@ function getMoveAccuracy(category: ReviewCategory | null, expectedPointsLost: nu
     return cpLossToAccuracy(cpLossCp);
   }
 
-  return cpLossCp != null ? cpLossToAccuracy(cpLossCp) : Math.round(Math.max(0, Math.min(100, 100 - expectedPointsLost * 260)));
+  return cpLossCp != null
+    ? cpLossToAccuracy(cpLossCp)
+    : Math.round(Math.max(0, Math.min(100, 100 - expectedPointsLost * 260)));
 }
 
-function isReviewKeyMoment(category: ReviewCategory | null, expectedPointsLost: number | null, cpLossCp: number | null, afterMate: number | null) {
+function isReviewKeyMoment(
+  category: ReviewCategory | null,
+  expectedPointsLost: number | null,
+  cpLossCp: number | null,
+  afterMate: number | null,
+) {
   if (!category) {
     return false;
   }
@@ -1389,7 +1405,10 @@ function buildCoachText({
       : ` Expected score: ${formatExpected(beforeExpected)} -> ${formatExpected(afterExpected)}.`;
   const best = bestMoveSan ? ` Best was ${bestMoveSan}.` : '';
   const loss = expectedPointsLost == null ? '' : ` Loss: ${(expectedPointsLost * 100).toFixed(1)}%.`;
-  const cp = cpLossCp == null || beforeCp == null || afterCp == null ? '' : ` Eval: ${formatCpScore(beforeCp)} -> ${formatCpScore(afterCp)} (loss ${cpLossCp}cp).`;
+  const cp =
+    cpLossCp == null || beforeCp == null || afterCp == null
+      ? ''
+      : ` Eval: ${formatCpScore(beforeCp)} -> ${formatCpScore(afterCp)} (loss ${cpLossCp}cp).`;
 
   switch (category) {
     case 'book':
@@ -1419,8 +1438,8 @@ function buildCoachText({
 
 function calculatePlayerAccuracy(reviews: TimelineReview[], color: 'w' | 'b') {
   const accuracies = reviews
-    .filter(review => review.color === color)
-    .map(review => review.moveAccuracy)
+    .filter((review) => review.color === color)
+    .map((review) => review.moveAccuracy)
     .filter((value): value is number => typeof value === 'number');
 
   if (accuracies.length === 0) {
@@ -1441,8 +1460,8 @@ function calculateGameRating(rating: number | null, accuracy: number | null) {
 }
 
 function extractKeyMoments(reviews: TimelineReview[]) {
-  const lastBookMoment = [...reviews].reverse().find(review => review.category === 'book') ?? null;
-  const directMoments = reviews.filter(review => review.category !== 'book' && review.isKeyMoment);
+  const lastBookMoment = [...reviews].reverse().find((review) => review.category === 'book') ?? null;
+  const directMoments = reviews.filter((review) => review.category !== 'book' && review.isKeyMoment);
   const selected = [
     ...(lastBookMoment ? [lastBookMoment] : []),
     ...directMoments
@@ -1459,8 +1478,7 @@ function extractKeyMoments(reviews: TimelineReview[]) {
       .slice(0, lastBookMoment ? 7 : 8),
   ];
 
-  return selected
-    .sort((left, right) => left.ply - right.ply);
+  return selected.sort((left, right) => left.ply - right.ply);
 }
 
 function getKeyMomentRank(review: TimelineReview) {
@@ -1541,7 +1559,7 @@ function getPieceValue(piece: string) {
 function isMateForColor(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
   const score = analysis?.whitePerspective;
 
-  if (!score || score.type !== 'mate') {
+  if (score?.type !== 'mate') {
     return false;
   }
 

@@ -37,11 +37,11 @@ const MOVETIME_MS = Number(process.env.COMPARE_MOVETIME_MS || 80);
 const ONLY_PLIES = new Set(
   (process.env.COMPARE_PLIES ?? '')
     .split(',')
-    .map(value => Number.parseInt(value.trim(), 10))
+    .map((value) => Number.parseInt(value.trim(), 10))
     .filter(Number.isFinite),
 );
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
@@ -86,9 +86,9 @@ async function main() {
   );
 
   const filtered = reviews
-    .filter(review => review.category)
-    .filter(review => ONLY_PLIES.size === 0 || ONLY_PLIES.has(review.ply))
-    .map(review => ({
+    .filter((review) => review.category)
+    .filter((review) => ONLY_PLIES.size === 0 || ONLY_PLIES.has(review.ply))
+    .map((review) => ({
       ply: review.ply,
       san: review.san,
       color: review.color,
@@ -140,7 +140,7 @@ function cpLoss(beforeAnalysis, afterAnalysis, color) {
 function mateForSide(analysis, color) {
   const score = analysis?.whitePerspective;
 
-  if (!score || score.type !== 'mate') {
+  if (score?.type !== 'mate') {
     return null;
   }
 

@@ -1,11 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
-import { fileURLToPath } from 'node:url';
-
-import { fetchArchives, fetchRecentGames, extractTag } from './api.mjs';
-import { isMoveInOpeningBook, dedupeTrainingCards, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';
 import { DETERMINISTIC_ANALYSIS_PROFILE } from '../../lib/analysis-profile.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
+import { extractTag, fetchArchives, fetchRecentGames } from './api.mjs';
+import { dedupeTrainingCards, isMoveInOpeningBook, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';
 
 const DEFAULT_COUNT = 200;
 const DEFAULT_TIME_CLASS = 'blitz';
@@ -19,7 +18,7 @@ const DECK_ID = 'recent-blitz-trainer-v1';
 const analysisCache = new Map();
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
@@ -89,8 +88,8 @@ export async function main() {
   });
   results.sort((left, right) => left.gameIndex - right.gameIndex);
 
-  const openingLines = results.map(result => result.line);
-  const rawCards = results.flatMap(result => result.cards);
+  const openingLines = results.map((result) => result.line);
+  const rawCards = results.flatMap((result) => result.cards);
   const cards = dedupeTrainingCards(rawCards);
 
   if (rawCards.length !== cards.length) {
@@ -116,8 +115,8 @@ export async function main() {
       version: 1,
       is_active: true,
     };
-    const deckCards = cards.map(card => ({ ...card, deck_id: deck.id }));
-    const deckLines = openingLines.map(line => ({ ...line, deck_id: deck.id }));
+    const deckCards = cards.map((card) => ({ ...card, deck_id: deck.id }));
+    const deckLines = openingLines.map((line) => ({ ...line, deck_id: deck.id }));
 
     if (ownerProfileId) {
       logProgress(`using owner training profile ${ownerProfileId}`);
@@ -151,7 +150,7 @@ export async function main() {
         movetime_ms: movetimeMs,
         concurrency,
         cards: cards.length,
-        top_cards: cards.slice(0, 10).map(card => ({
+        top_cards: cards.slice(0, 10).map((card) => ({
           id: card.id,
           kind: card.kind,
           line_name: card.line_name,
@@ -267,12 +266,10 @@ function getOpeningName(ecoUrl, eco) {
     .replace(/[-_]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/\b\w/g, character => character.toUpperCase());
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
-const ECO_NAME_FALLBACKS = new Map([
-  ['B13', 'Caro-Kann Defense: Exchange Variation'],
-]);
+const ECO_NAME_FALLBACKS = new Map([['B13', 'Caro-Kann Defense: Exchange Variation']]);
 
 export async function buildCardsForGame({
   game,
@@ -336,7 +333,7 @@ export async function buildCardsForGame({
     return cards;
   }
 
-  const requestedPositions = candidates.flatMap(candidate => [
+  const requestedPositions = candidates.flatMap((candidate) => [
     {
       fen: candidate.fenBefore,
       multipv,
@@ -381,7 +378,9 @@ export async function buildCardsForGame({
     });
 
     if (!qualifies) {
-      logProgress(`[${gameIndex + 1}/${totalGames}] ply ${index + 1}: ok ${move.san} loss=${scoreSwingCp}cp book=${inBook ? 'yes' : 'no'}`);
+      logProgress(
+        `[${gameIndex + 1}/${totalGames}] ply ${index + 1}: ok ${move.san} loss=${scoreSwingCp}cp book=${inBook ? 'yes' : 'no'}`,
+      );
       continue;
     }
 
@@ -434,7 +433,7 @@ export function loadVerboseMoves(pgn) {
 }
 
 function extractSanMoves(pgn) {
-  return loadVerboseMoves(pgn).map(move => move.san);
+  return loadVerboseMoves(pgn).map((move) => move.san);
 }
 
 export function inferPlayerColor(game, username) {
@@ -528,12 +527,7 @@ export async function analyzePositionsCached(baseUrl, { positions, depth, moveti
 }
 
 function getDeckAnalysisCacheKey(position, depth, movetimeMs) {
-  return [
-    position.fen ?? '',
-    position.multipv ?? 1,
-    depth ?? '',
-    movetimeMs ?? '',
-  ].join('|');
+  return [position.fen ?? '', position.multipv ?? 1, depth ?? '', movetimeMs ?? ''].join('|');
 }
 
 async function postAnalyzeRequest(baseUrl, path, payload) {

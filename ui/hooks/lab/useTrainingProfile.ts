@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import type { LabState } from '../useLabState';
+import type { DeckProgressMap } from '@/lib/deck-progress';
 import {
   DECK_PROGRESS_STORAGE_KEY,
   mergeDeckProgress,
-  readStoredTrainingUsername,
-  readStoredTrainingPassword,
-  persistTrainingUsername,
   persistTrainingPassword,
+  persistTrainingUsername,
+  readStoredTrainingPassword,
+  readStoredTrainingUsername,
 } from '@/lib/lab-helpers';
-import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import type { TrainingProfile } from '../../lib/analysis-types';
+import type { LabState } from '../useLabState';
 
 export function useTrainingProfile(
   state: LabState,
@@ -18,7 +18,7 @@ export function useTrainingProfile(
     progressHydratedRef: React.MutableRefObject<boolean>;
     progressSyncTimerRef: React.MutableRefObject<number | null>;
     trainingCredentialsHydratedRef: React.MutableRefObject<boolean>;
-  }
+  },
 ) {
   const hydrateTrainingProgressRef = useRef<(options: { saveMerged: boolean }) => Promise<void>>(async () => undefined);
 
@@ -85,11 +85,11 @@ export function useTrainingProfile(
         }
         let mergedProgress: DeckProgressMap | null = null;
 
-        setDeckProgress(current => {
+        setDeckProgress((current) => {
           mergedProgress = mergeDeckProgress(serverProgress, current);
 
           if (typeof window !== 'undefined' && deckCards.length > 0) {
-            const validCardIds = new Set(deckCards.map(card => card.id));
+            const validCardIds = new Set(deckCards.map((card) => card.id));
             mergedProgress = Object.fromEntries(
               Object.entries(mergedProgress).filter(([cardId]) => validCardIds.has(cardId)),
             );
@@ -107,7 +107,7 @@ export function useTrainingProfile(
         sharedRefs.progressHydratedRef.current = true;
       }
     },
-    [deckCards, saveTrainingProgress, setDeckProgress, sharedRefs]
+    [deckCards, saveTrainingProgress, setDeckProgress, sharedRefs],
   );
 
   useEffect(() => {
@@ -261,7 +261,14 @@ export function useTrainingProfile(
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [
+    setTrainingUsername,
+    setTrainingProfile,
+    sharedRefs.progressHydratedRef,
+    setTrainingProfileError,
+    setTrainingProfileBootstrapping,
+    setTrainingPassword,
+  ]);
 
   useEffect(() => {
     if (!trainingProfile || !sharedRefs.progressHydratedRef.current) {
@@ -286,6 +293,6 @@ export function useTrainingProfile(
   return {
     saveTrainingProgress,
     saveTrainingAttempt,
-    hydrateTrainingProgressRef
+    hydrateTrainingProgressRef,
   };
 }

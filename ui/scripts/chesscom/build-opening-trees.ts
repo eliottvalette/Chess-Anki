@@ -1,17 +1,17 @@
 import { loadLocalEnv } from '../supabase/env.mjs';
+
 Object.assign(process.env, loadLocalEnv());
 
-import { createAdminClient } from '../../utils/supabase/admin';
+import { Chess } from 'chess.js';
+import { fetchLichessOpeningExplorer } from '../../lib/opening-book';
 import {
-  DEFAULT_OPENING_TARGET_DEPTH,
   buildOpeningTrees,
-  type OpeningTreeDraft,
-  normalizeOpeningFen,
+  DEFAULT_OPENING_TARGET_DEPTH,
   ensureDraftEdge,
+  type OpeningTreeDraft,
 } from '../../lib/opening-tree';
 import { getStockfishSession } from '../../lib/stockfish-session';
-import { fetchLichessOpeningExplorer } from '../../lib/opening-book';
-import { Chess } from 'chess.js';
+import { createAdminClient } from '../../utils/supabase/admin';
 
 const MAX_ENGINE_IMPORT_NODES = 60;
 const MAX_LICHESS_IMPORT_NODES = 120;
@@ -68,10 +68,8 @@ async function buildInputsFromRows(lines: any[], cards: any[]) {
 }
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
-  const trainNodes = draft.nodes
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_ENGINE_IMPORT_NODES);
-  
+  const trainNodes = draft.nodes.sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
+
   const session = trainNodes.length > 0 ? await getStockfishSession() : null;
 
   if (!session) {
@@ -80,15 +78,18 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 
   for (const node of trainNodes) {
     try {
-      const analysis = await session.analyze({ fen: node.fen, depth: draft.targetDepth, movetimeMs: undefined, multipv: 1 });
+      const analysis = await session.analyze({
+        fen: node.fen,
+        depth: draft.targetDepth,
+        movetimeMs: undefined,
+        multipv: 1,
+      });
 
-      if (!analysis || !analysis.bestMove) continue;
+      if (!analysis?.bestMove) continue;
 
       node.bestUci = analysis.bestMove;
       node.bestSan = moveSanFromFen(node.fen, analysis.bestMove) ?? analysis.bestMove;
-      node.evalCp = analysis.whitePerspective?.type === 'cp'
-        ? analysis.whitePerspective.value
-        : null;
+      node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
 
       ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
         isEngineBest: true,
@@ -101,19 +102,17 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 }
 
 async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
-  const opponentNodes = draft.nodes
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_LICHESS_IMPORT_NODES);
+  const opponentNodes = draft.nodes.sort((left, right) => left.ply - right.ply).slice(0, MAX_LICHESS_IMPORT_NODES);
 
   for (const node of opponentNodes) {
     try {
       const explorer = await fetchLichessOpeningExplorer(node.fen);
       const moves = (explorer.moves ?? [])
-        .map(move => ({
+        .map((move) => ({
           uci: move.uci,
           games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0),
         }))
-        .filter(move => move.games > 0)
+        .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
         .slice(0, 6);
 
@@ -154,7 +153,7 @@ async function upsertTreeDraft(supabase: any, draft: OpeningTreeDraft, ownerProf
 
   if (draft.nodes.length > 0) {
     const { error } = await supabase.from('opening_nodes').upsert(
-      draft.nodes.map(node => ({
+      draft.nodes.map((node) => ({
         id: node.id,
         tree_id: draft.id,
         fen: node.fen,
@@ -178,7 +177,7 @@ async function upsertTreeDraft(supabase: any, draft: OpeningTreeDraft, ownerProf
 
   if (draft.edges.length > 0) {
     const { error } = await supabase.from('opening_edges').upsert(
-      draft.edges.map(edge => ({
+      draft.edges.map((edge) => ({
         id: edge.id,
         tree_id: draft.id,
         from_node_id: edge.fromNodeId,
@@ -218,9 +217,7 @@ async function main() {
     throw new Error(cardsError.message);
   }
 
-  const { data: lines, error: linesError } = await supabase
-    .from('opening_lines')
-    .select('id,name,side,moves');
+  const { data: lines, error: linesError } = await supabase.from('opening_lines').select('id,name,side,moves');
 
   if (linesError) {
     throw new Error(linesError.message);
@@ -241,14 +238,16 @@ async function main() {
 
   for (let i = 0; i < drafts.length; i++) {
     const draft = drafts[i];
-    console.log(`[build-opening-trees] [${i + 1}/${drafts.length}] Enriching ${draft.name} (${draft.nodes.length} nodes)`);
-    
+    console.log(
+      `[build-opening-trees] [${i + 1}/${drafts.length}] Enriching ${draft.name} (${draft.nodes.length} nodes)`,
+    );
+
     // Enrich with Engine
     await enrichEngineBestMoves(draft);
-    
+
     // Enrich with Lichess
     await enrichLichessOpponentMoves(draft);
-    
+
     // Save to DB
     await upsertTreeDraft(supabase, draft, ownerProfileId);
   }

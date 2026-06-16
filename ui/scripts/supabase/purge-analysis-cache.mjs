@@ -1,10 +1,10 @@
-import { createClient } from '@supabase/supabase-js';
 import { fileURLToPath } from 'node:url';
+import { createClient } from '@supabase/supabase-js';
 
 import { loadLocalEnv, requireAdminKey, requireEnv } from './env.mjs';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });

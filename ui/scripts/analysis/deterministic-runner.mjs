@@ -1,8 +1,12 @@
-import { Chess } from 'chess.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
+import { Chess } from 'chess.js';
+import {
+  buildDeterministicAnalyzeRequest,
+  DETERMINISTIC_ANALYSIS_PROFILE,
+  getDeterministicAnalysisCacheKey,
+} from '../../lib/analysis-profile.ts';
 import {
   buildTimelineSequencePositions,
   classifyTimelineMoves,
@@ -10,11 +14,6 @@ import {
   restoreGameFromHistory,
   toStoredMove,
 } from '../../lib/chess-analysis-client.ts';
-import {
-  DETERMINISTIC_ANALYSIS_PROFILE,
-  buildDeterministicAnalyzeRequest,
-  getDeterministicAnalysisCacheKey,
-} from '../../lib/analysis-profile.ts';
 
 export const DEFAULT_ANALYZE_BASE_URL = 'http://localhost:3000';
 export const DEFAULT_BATCH_SIZE = 4;
@@ -80,7 +79,14 @@ export async function analyzeTimelineForPgn({
   const postMoveAnalyses = analyses.slice(1);
   const openingBookFlags = resolveOpeningBookFlagsLocal(moves, initialFen);
   const metadata = extractMetadataFromGame(game);
-  const reviews = classifyTimelineMoves(moves, preMoveAnalyses, postMoveAnalyses, initialFen, metadata, openingBookFlags);
+  const reviews = classifyTimelineMoves(
+    moves,
+    preMoveAnalyses,
+    postMoveAnalyses,
+    initialFen,
+    metadata,
+    openingBookFlags,
+  );
 
   return {
     initialFen,
@@ -95,12 +101,10 @@ export async function analyzeTimelineForPgn({
   };
 }
 
-export async function analyzePositionsCached(baseUrl, {
-  positions,
-  profile = getDeterministicProfile(),
-  cache = new Map(),
-  batchSize = DEFAULT_BATCH_SIZE,
-}) {
+export async function analyzePositionsCached(
+  baseUrl,
+  { positions, profile = getDeterministicProfile(), cache = new Map(), batchSize = DEFAULT_BATCH_SIZE },
+) {
   const analyses = new Array(positions.length);
   const missing = [];
 
@@ -120,7 +124,7 @@ export async function analyzePositionsCached(baseUrl, {
   for (let start = 0; start < missing.length; start += batchSize) {
     const batch = missing.slice(start, start + batchSize);
     const fetched = await analyzeGame(baseUrl, {
-      positions: batch.map(item => item.payload),
+      positions: batch.map((item) => item.payload),
       depth: profile.depth,
       ...(profile.movetimeMs != null ? { movetimeMs: profile.movetimeMs } : {}),
     });
@@ -135,11 +139,10 @@ export async function analyzePositionsCached(baseUrl, {
   return analyses;
 }
 
-export async function analyzeSingleCached(baseUrl, {
-  position,
-  profile = getDeterministicProfile(),
-  cache = new Map(),
-}) {
+export async function analyzeSingleCached(
+  baseUrl,
+  { position, profile = getDeterministicProfile(), cache = new Map() },
+) {
   const analyses = await analyzePositionsCached(baseUrl, {
     positions: [position],
     profile,
@@ -164,7 +167,7 @@ export function buildPgnHash(pgn) {
   let hash = 0;
 
   for (let index = 0; index < pgn.length; index += 1) {
-    hash = Math.imul(31, hash) + pgn.charCodeAt(index) | 0;
+    hash = (Math.imul(31, hash) + pgn.charCodeAt(index)) | 0;
   }
 
   return String(hash >>> 0);
@@ -173,7 +176,7 @@ export function buildPgnHash(pgn) {
 export function buildStoredMovesFromSans(setupMoves, initialFen = null) {
   const game = initialFen ? new Chess(initialFen) : new Chess();
 
-  return setupMoves.map(san => {
+  return setupMoves.map((san) => {
     const move = game.move(san);
 
     if (!move) {
@@ -217,11 +220,10 @@ async function postJson(url, payload) {
   }
 }
 
-
 function resolveOpeningBookFlagsLocal(moves, initialFen) {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
 
-  return moves.map(move => {
+  return moves.map((move) => {
     const fenBefore = chess.fen().trim().split(' ').slice(0, 4).join(' ');
     const inBook = openingBookKeys.has(`${fenBefore}|${move.uci}`);
     chess.move({

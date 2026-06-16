@@ -86,20 +86,22 @@ export async function fetchRecentGames({
 
   for (let index = 0; index < reversedArchives.length; index += ARCHIVE_FETCH_CONCURRENCY) {
     const archiveUrls = reversedArchives.slice(index, index + ARCHIVE_FETCH_CONCURRENCY);
-    const archiveResponses = await Promise.all(archiveUrls.map(archiveUrl => fetchJson(archiveUrl)));
+    const archiveResponses = await Promise.all(archiveUrls.map((archiveUrl) => fetchJson(archiveUrl)));
 
     for (const response of archiveResponses) {
       const games = Array.isArray(response.games) ? response.games : [];
 
       selected.push(
         ...(games as RawChessComGame[])
-          .filter(game => timeClass === 'all' || game?.time_class === timeClass)
-          .filter(game => isPlayerInGame(username, game)),
+          .filter((game) => timeClass === 'all' || game?.time_class === timeClass)
+          .filter((game) => isPlayerInGame(username, game)),
       );
     }
 
     const availableAfterCursor = cursor
-      ? dedupeGames(selected).sort(compareGamesForRecentPage).filter(game => isAfterCursor(game, cursor)).length
+      ? dedupeGames(selected)
+          .sort(compareGamesForRecentPage)
+          .filter((game) => isAfterCursor(game, cursor)).length
       : selected.length;
 
     if (availableAfterCursor >= needed) {
@@ -109,7 +111,7 @@ export async function fetchRecentGames({
 
   const sorted = dedupeGames(selected)
     .sort(compareGamesForRecentPage)
-    .filter(game => isAfterCursor(game, cursor));
+    .filter((game) => isAfterCursor(game, cursor));
   const page = cursor ? sorted.slice(0, count + 1) : sorted.slice(offset, offset + count + 1);
   const games = page.slice(0, count);
 
@@ -122,9 +124,9 @@ export async function fetchRecentGames({
 }
 
 export async function fetchPlayerProfiles(usernames: string[]) {
-  const uniqueUsernames = [...new Set(usernames.map(value => value.trim().toLowerCase()).filter(Boolean))];
+  const uniqueUsernames = [...new Set(usernames.map((value) => value.trim().toLowerCase()).filter(Boolean))];
   const entries = await Promise.all(
-    uniqueUsernames.map(async playerUsername => {
+    uniqueUsernames.map(async (playerUsername) => {
       try {
         const profile = await fetchJson(`https://api.chess.com/pub/player/${playerUsername}`);
         const avatar = typeof profile.avatar === 'string' ? profile.avatar : null;
@@ -145,7 +147,9 @@ export function toGameSummary(
   profiles = new Map<string, ChessComPlayerProfile>(),
 ): ChessComRecentGameSummary {
   const playerColor =
-    game.white?.username?.toLowerCase() === game.black?.username?.toLowerCase() ? 'unknown' : inferPlayerColor(game, username);
+    game.white?.username?.toLowerCase() === game.black?.username?.toLowerCase()
+      ? 'unknown'
+      : inferPlayerColor(game, username);
   const player = playerColor === 'white' ? game.white : game.black;
   const opponent = playerColor === 'white' ? game.black : game.white;
 
@@ -160,8 +164,8 @@ export function toGameSummary(
     playerRating: typeof player?.rating === 'number' ? player.rating : null,
     opponentUsername: opponent?.username ?? null,
     opponentRating: typeof opponent?.rating === 'number' ? opponent.rating : null,
-    whiteAvatar: game.white?.username ? profiles.get(game.white.username.toLowerCase())?.avatar ?? null : null,
-    blackAvatar: game.black?.username ? profiles.get(game.black.username.toLowerCase())?.avatar ?? null : null,
+    whiteAvatar: game.white?.username ? (profiles.get(game.white.username.toLowerCase())?.avatar ?? null) : null,
+    blackAvatar: game.black?.username ? (profiles.get(game.black.username.toLowerCase())?.avatar ?? null) : null,
     result: extractTag(game.pgn, 'Result'),
     termination: extractTag(game.pgn, 'Termination'),
     eco: extractTag(game.pgn, 'ECO'),
@@ -218,7 +222,11 @@ function dedupeGames(games: RawChessComGame[]) {
 }
 
 function getGameStableKey(game: RawChessComGame) {
-  return extractTag(game.pgn, 'Link') ?? game.url ?? `${game.end_time ?? 0}:${game.white?.username ?? ''}:${game.black?.username ?? ''}`;
+  return (
+    extractTag(game.pgn, 'Link') ??
+    game.url ??
+    `${game.end_time ?? 0}:${game.white?.username ?? ''}:${game.black?.username ?? ''}`
+  );
 }
 
 function encodeCursor(game: RawChessComGame) {

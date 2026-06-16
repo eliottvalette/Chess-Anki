@@ -1,13 +1,12 @@
-import { Chess } from 'chess.js';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Chess } from 'chess.js';
 
 import {
   buildStoredMovesFromSanList,
   buildTimelineSequencePositions,
   classifyTimelineMoves,
-  restoreGameFromHistory,
   toStoredMove,
 } from '../../lib/chess-analysis-client.ts';
 
@@ -20,7 +19,7 @@ export function parseCardMoveReviews(value) {
     return [];
   }
 
-  return value.flatMap(entry => {
+  return value.flatMap((entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       return [];
     }
@@ -55,7 +54,7 @@ export function buildDeckCardReplayHistory(card, openingLines) {
     };
   }
 
-  const line = openingLines.find(candidate => candidate.id === card.lineId);
+  const line = openingLines.find((candidate) => candidate.id === card.lineId);
 
   if (line && card.opponentMoveUci) {
     try {
@@ -113,7 +112,7 @@ export function buildCardMoveReviewsFromAnalyses(moves, preMoveAnalyses, postMov
   const openingBookFlags = resolveOpeningBookFlagsLocal(moves, initialFen);
   const reviews = classifyTimelineMoves(moves, preMoveAnalyses, postMoveAnalyses, initialFen, null, openingBookFlags);
 
-  return reviews.flatMap(review => {
+  return reviews.flatMap((review) => {
     if (!review.category) {
       return [];
     }
@@ -132,7 +131,7 @@ export function buildCardMoveReviewsFromAnalyses(moves, preMoveAnalyses, postMov
 function resolveOpeningBookFlagsLocal(moves, initialFen) {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
 
-  return moves.map(move => {
+  return moves.map((move) => {
     const fenBefore = normalizeOpeningBookFen(chess.fen());
     const inBook = openingBookKeys.has(`${fenBefore}|${move.uci}`);
     chess.move({

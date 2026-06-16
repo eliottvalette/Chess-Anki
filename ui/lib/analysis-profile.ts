@@ -44,13 +44,7 @@ export function buildReviewAnalyzeRequest(request: AnalyzeRequest): AnalyzeReque
   return nextRequest;
 }
 
-export function getDeterministicAnalysisCacheKey({
-  fen,
-  initialFen,
-  moves,
-  multipv,
-  depth,
-}: AnalyzeRequest) {
+export function getDeterministicAnalysisCacheKey({ fen, initialFen, moves, multipv, depth }: AnalyzeRequest) {
   return [
     `analysis:v${DETERMINISTIC_ANALYSIS_PROFILE.version}`,
     initialFen ?? 'startpos',

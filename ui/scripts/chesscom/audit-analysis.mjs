@@ -1,19 +1,19 @@
-import { fetchArchives, fetchRecentGames, extractTag } from './api.mjs';
 import { fileURLToPath } from 'node:url';
-import { buildCardsForGame, buildLineRecord } from './build-recent-blitz-deck.mjs';
 import {
-  DEFAULT_ANALYZE_BASE_URL,
   analyzeSingleCached,
   analyzeTimelineForPgn,
   assertAnalyzeApi,
+  DEFAULT_ANALYZE_BASE_URL,
   getDeterministicProfile,
 } from '../analysis/deterministic-runner.mjs';
+import { extractTag, fetchArchives, fetchRecentGames } from './api.mjs';
+import { buildCardsForGame, buildLineRecord } from './build-recent-blitz-deck.mjs';
 
 const DEFAULT_COUNT = 50;
 const DEFAULT_TIME_CLASS = 'blitz';
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
@@ -60,11 +60,11 @@ export async function main() {
       gameIndex,
       totalGames: games.length,
     });
-    const shallowAnalyses = timeline.analyses.filter(analysis => Number(analysis?.depth ?? 0) < profile.depth);
-    const boundedScores = timeline.analyses.filter(analysis =>
-      analysis?.whitePerspective?.bound && analysis.whitePerspective.bound !== 'exact'
+    const shallowAnalyses = timeline.analyses.filter((analysis) => Number(analysis?.depth ?? 0) < profile.depth);
+    const boundedScores = timeline.analyses.filter(
+      (analysis) => analysis?.whitePerspective?.bound && analysis.whitePerspective.bound !== 'exact',
     );
-    const changedLineCandidates = timeline.analyses.filter(analysis => {
+    const changedLineCandidates = timeline.analyses.filter((analysis) => {
       const lines = analysis?.lines ?? [];
       const first = lines[0]?.whitePerspective?.value;
       const second = lines[1]?.whitePerspective?.value;
@@ -85,16 +85,18 @@ export async function main() {
       close_top_lines: changedLineCandidates.length,
       review_counts: countReviewCategories(timeline.reviews),
     });
-    cardReports.push(...cards.map(card => ({
-      id: card.id,
-      game_url: game.url,
-      ply: card.ply,
-      answer_uci: card.answer_uci,
-      answer_san: card.answer_san,
-      reference_eval_cp: card.reference_eval_cp,
-      score_swing_cp: card.score_swing_cp,
-      context: card.context,
-    })));
+    cardReports.push(
+      ...cards.map((card) => ({
+        id: card.id,
+        game_url: game.url,
+        ply: card.ply,
+        answer_uci: card.answer_uci,
+        answer_san: card.answer_san,
+        reference_eval_cp: card.reference_eval_cp,
+        score_swing_cp: card.score_swing_cp,
+        context: card.context,
+      })),
+    );
 
     for (const card of cards) {
       const analysis = await analyzeSingleCached(options.baseUrl, {
@@ -119,29 +121,35 @@ export async function main() {
     }
   }
 
-  console.log(JSON.stringify({
-    username: options.username,
-    count: games.length,
-    time_class: options.timeClass,
-    profile,
-    unique_positions_analyzed: analysisCache.size,
-    totals: {
-      plies: gameReports.reduce((sum, game) => sum + game.plies, 0),
-      positions: gameReports.reduce((sum, game) => sum + game.positions, 0),
-      cards: cardReports.length,
-      shallow_analyses: gameReports.reduce((sum, game) => sum + game.shallow_analyses, 0),
-      bounded_scores: gameReports.reduce((sum, game) => sum + game.bounded_scores, 0),
-      close_top_lines: gameReports.reduce((sum, game) => sum + game.close_top_lines, 0),
-      answer_mismatches: answerMismatches.length,
-    },
-    answer_audit: {
-      checked: cardReports.length,
-      mismatch_count: answerMismatches.length,
-      mismatches: answerMismatches.slice(0, 30),
-    },
-    games: gameReports,
-    cards: cardReports,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        username: options.username,
+        count: games.length,
+        time_class: options.timeClass,
+        profile,
+        unique_positions_analyzed: analysisCache.size,
+        totals: {
+          plies: gameReports.reduce((sum, game) => sum + game.plies, 0),
+          positions: gameReports.reduce((sum, game) => sum + game.positions, 0),
+          cards: cardReports.length,
+          shallow_analyses: gameReports.reduce((sum, game) => sum + game.shallow_analyses, 0),
+          bounded_scores: gameReports.reduce((sum, game) => sum + game.bounded_scores, 0),
+          close_top_lines: gameReports.reduce((sum, game) => sum + game.close_top_lines, 0),
+          answer_mismatches: answerMismatches.length,
+        },
+        answer_audit: {
+          checked: cardReports.length,
+          mismatch_count: answerMismatches.length,
+          mismatches: answerMismatches.slice(0, 30),
+        },
+        games: gameReports,
+        cards: cardReports,
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 function parseArgs(args) {

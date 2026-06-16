@@ -1,17 +1,17 @@
-import test from 'node:test';
 import assert from 'node:assert/strict';
+import test from 'node:test';
 
 import {
   applyDeckAttempt,
-  getDeckCardState,
   getAttemptRating,
-  getDeckQueueCounts,
+  getDeckCardState,
   getDeckProgressEntry,
+  getDeckQueueCounts,
   getDeckStudyQueue,
   isDeckCardStudyable,
   sortCardsForReview,
-  summarizeLineMastery,
   summarizeDeckProgress,
+  summarizeLineMastery,
   toggleDeckIgnored,
 } from './deck-progress.ts';
 
@@ -130,10 +130,7 @@ test('applyDeckAttempt graduates after completing all learning steps', () => {
 test('isDeckCardStudyable keeps missed cards in the study queue immediately', () => {
   const missed = applyDeckAttempt({}, 'card-1', false, '2026-05-24T10:05:00.000Z');
 
-  assert.equal(
-    isDeckCardStudyable(getDeckProgressEntry(missed, 'card-1'), '2026-05-24T10:05:30.000Z'),
-    true,
-  );
+  assert.equal(isDeckCardStudyable(getDeckProgressEntry(missed, 'card-1'), '2026-05-24T10:05:30.000Z'), true);
 });
 
 test('getDeckStudyQueue includes new, due, and missed cards', () => {
@@ -142,7 +139,7 @@ test('getDeckStudyQueue includes new, due, and missed cards', () => {
   const queue = getDeckStudyQueue(cards, progress, '2026-05-24T10:05:30.000Z');
 
   assert.deepEqual(
-    queue.map(card => card.id),
+    queue.map((card) => card.id),
     ['card-missed', 'card-new'],
   );
 });
@@ -176,7 +173,7 @@ test('summarizeLineMastery groups review cards by opening when line ids are empt
   const summary = summarizeLineMastery(cards, {}, '2026-05-24T10:00:00.000Z');
 
   assert.deepEqual(
-    summary.map(line => [line.id, line.name, line.cardCount]),
+    summary.map((line) => [line.id, line.name, line.cardCount]),
     [
       ['eco:B13', 'Caro-Kann Defense: Exchange Variation', 1],
       ['eco:C65', 'Unknown opening C65', 1],
@@ -219,7 +216,7 @@ test('sortCardsForReview prioritizes weaker opening groups before stronger cards
   };
 
   assert.deepEqual(
-    sortCardsForReview(cards, progress, '2026-05-24T10:00:00.000Z').map(card => card.id),
+    sortCardsForReview(cards, progress, '2026-05-24T10:00:00.000Z').map((card) => card.id),
     ['weak-card', 'strong-card'],
   );
 });
@@ -233,11 +230,7 @@ test('summarizeDeckProgress reports review totals and SRS state buckets', () => 
   );
 
   const summary = summarizeDeckProgress(
-    [
-      { id: 'card-1' },
-      { id: 'card-2' },
-      { id: 'card-3' },
-    ],
+    [{ id: 'card-1' }, { id: 'card-2' }, { id: 'card-3' }],
     progress,
     '2026-05-24T10:06:00.000Z',
   );

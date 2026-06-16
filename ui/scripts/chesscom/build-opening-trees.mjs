@@ -1,5 +1,5 @@
-import { Chess } from 'chess.js';
 import { createClient } from '@supabase/supabase-js';
+import { Chess } from 'chess.js';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
 const DEFAULT_OPENING_ROOT_PLY = 4;
@@ -78,7 +78,7 @@ function ensureDraftEdge(draft, fromNode, uci, source, options) {
 
   const toFen = chess.fen();
   const toFenKey = normalizeOpeningFen(toFen);
-  let toNode = draft.nodes.find(node => node.fenKey === toFenKey);
+  let toNode = draft.nodes.find((node) => node.fenKey === toFenKey);
 
   if (!toNode) {
     toNode = {
@@ -96,7 +96,7 @@ function ensureDraftEdge(draft, fromNode, uci, source, options) {
     draft.nodes.push(toNode);
   }
 
-  let edge = draft.edges.find(candidate => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
+  let edge = draft.edges.find((candidate) => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
   if (!edge) {
     edge = {
       id: `opening-edge-${shortHash(`${draft.id}:${fromNode.id}:${uci}`)}`,
@@ -199,8 +199,8 @@ function buildTreeForGroup(group, options) {
     library: first.library,
     rootFenKey: first.rootFenKey,
     rootPly: options.rootPly,
-    rootSan: rootMoves.map(move => move.san),
-    rootUci: rootMoves.map(move => move.uci),
+    rootSan: rootMoves.map((move) => move.san),
+    rootUci: rootMoves.map((move) => move.uci),
     sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
     targetDepth: options.targetDepth,
     nodes: [...nodes.values()],
@@ -225,13 +225,13 @@ function buildOpeningTrees(inputs, options) {
     groups.set(rootFenKey, bucket);
   }
 
-  return [...groups.values()].map(group => buildTreeForGroup(group, { ownerProfileId: options.ownerProfileId, rootPly, targetDepth }));
+  return [...groups.values()].map((group) =>
+    buildTreeForGroup(group, { ownerProfileId: options.ownerProfileId, rootPly, targetDepth }),
+  );
 }
 
 async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
-  const trainNodes = [...draft.nodes]
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_ENGINE_IMPORT_NODES);
+  const trainNodes = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
 
   for (const node of trainNodes) {
     try {
@@ -258,9 +258,7 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
 }
 
 async function enrichLichessOpponentMoves(draft) {
-  const opponentNodes = [...draft.nodes]
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_LICHESS_IMPORT_NODES);
+  const opponentNodes = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_LICHESS_IMPORT_NODES);
 
   for (const node of opponentNodes) {
     try {
@@ -271,13 +269,19 @@ async function enrichLichessOpponentMoves(draft) {
 
       const explorer = await response.json();
       const moves = (explorer.moves ?? [])
-        .map(move => ({ uci: move.uci, games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0) }))
-        .filter(move => move.games > 0)
+        .map((move) => ({
+          uci: move.uci,
+          games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0),
+        }))
+        .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
         .slice(0, 6);
 
       for (const move of moves) {
-        ensureDraftEdge(draft, node, move.uci, 'lichess_masters', { mastersGames: move.games, priority: Math.log10(move.games + 1) * 4 });
+        ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
+          mastersGames: move.games,
+          priority: Math.log10(move.games + 1) * 4,
+        });
       }
     } catch {
       // continue
@@ -309,7 +313,7 @@ async function upsertTreeDraft(supabase, profileId, draft) {
 
   if (draft.nodes.length > 0) {
     const { error } = await supabase.from('opening_nodes').upsert(
-      draft.nodes.map(node => ({
+      draft.nodes.map((node) => ({
         id: node.id,
         tree_id: draft.id,
         fen: node.fen,
@@ -330,7 +334,7 @@ async function upsertTreeDraft(supabase, profileId, draft) {
 
   if (draft.edges.length > 0) {
     const { error } = await supabase.from('opening_edges').upsert(
-      draft.edges.map(edge => ({
+      draft.edges.map((edge) => ({
         id: edge.id,
         tree_id: draft.id,
         from_node_id: edge.fromNodeId,
@@ -352,8 +356,15 @@ async function upsertTreeDraft(supabase, profileId, draft) {
   }
 }
 
-export async function buildAndUpsertOpeningTrees({ supabase, openingLines, cards, ownerProfileId, analyzeBaseUrl, logProgress }) {
-  const lineInputs = openingLines.map(line => ({
+export async function buildAndUpsertOpeningTrees({
+  supabase,
+  openingLines,
+  cards,
+  ownerProfileId,
+  analyzeBaseUrl,
+  logProgress,
+}) {
+  const lineInputs = openingLines.map((line) => ({
     id: line.id,
     name: line.name ?? 'Opening',
     moves: line.moves,
@@ -361,7 +372,7 @@ export async function buildAndUpsertOpeningTrees({ supabase, openingLines, cards
     count: 1,
   }));
 
-  const cardInputs = cards.map(card => {
+  const cardInputs = cards.map((card) => {
     const moves = [...(card.setup_moves ?? [])];
     if (card.answer_san) moves.push(card.answer_san);
     return {
@@ -374,7 +385,7 @@ export async function buildAndUpsertOpeningTrees({ supabase, openingLines, cards
     };
   });
 
-  const inputs = [...lineInputs, ...cardInputs].filter(input => input.moves.length > 0);
+  const inputs = [...lineInputs, ...cardInputs].filter((input) => input.moves.length > 0);
   const drafts = buildOpeningTrees(inputs, { ownerProfileId, targetDepth: DEFAULT_OPENING_TARGET_DEPTH });
 
   logProgress(`building ${drafts.length} opening trees...`);
@@ -393,7 +404,7 @@ export async function buildAndUpsertOpeningTrees({ supabase, openingLines, cards
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { fileURLToPath } = await import('node:url');
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });
@@ -410,15 +421,21 @@ async function main() {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: profiles, error: profileError } = await supabase.from('training_profiles').select('id,username').limit(1);
+  const { data: profiles, error: profileError } = await supabase
+    .from('training_profiles')
+    .select('id,username')
+    .limit(1);
   if (profileError) throw new Error(profileError.message);
   const profile = profiles?.[0];
   if (!profile) throw new Error('No training profile found.');
 
   const { data: decks, error: deckError } = await supabase
-    .from('decks').select('id').eq('is_active', true).eq('owner_profile_id', profile.id);
+    .from('decks')
+    .select('id')
+    .eq('is_active', true)
+    .eq('owner_profile_id', profile.id);
   if (deckError) throw new Error(deckError.message);
-  const deckIds = (decks ?? []).map(deck => deck.id);
+  const deckIds = (decks ?? []).map((deck) => deck.id);
 
   if (deckIds.length === 0) {
     console.error('[build-opening-trees] No active deck found. Run chesscom:build:deck first.');
@@ -427,7 +444,11 @@ async function main() {
 
   const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
     supabase.from('opening_lines').select('id,name,moves').in('deck_id', deckIds),
-    supabase.from('deck_cards').select('id,line_name,answer_san,setup_moves,score_swing_cp').in('deck_id', deckIds).eq('source_type', 'recent_game'),
+    supabase
+      .from('deck_cards')
+      .select('id,line_name,answer_san,setup_moves,score_swing_cp')
+      .in('deck_id', deckIds)
+      .eq('source_type', 'recent_game'),
   ]);
 
   if (linesError) throw new Error(linesError.message);
@@ -439,6 +460,6 @@ async function main() {
     cards: cards ?? [],
     ownerProfileId: profile.id,
     analyzeBaseUrl,
-    logProgress: message => console.error(`[build-opening-trees ${new Date().toISOString()}] ${message}`),
+    logProgress: (message) => console.error(`[build-opening-trees ${new Date().toISOString()}] ${message}`),
   });
 }

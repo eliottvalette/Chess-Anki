@@ -79,7 +79,7 @@ export function isMoveInLocalOpeningBook(fenBefore: string, uci: string) {
 }
 
 export function isMoveInLichessExplorerMoveList(playedUci: string, explorerMoves: LichessExplorerMove[]) {
-  const entry = explorerMoves.find(move => move.uci === playedUci);
+  const entry = explorerMoves.find((move) => move.uci === playedUci);
 
   if (!entry) {
     return false;
@@ -124,7 +124,7 @@ export function resolveOpeningBookPosition(
   const explorerMoves = explorer?.moves ?? [];
 
   if (explorer && isMoveInLichessExplorerMoveList(playedUci, explorerMoves)) {
-    const entry = explorerMoves.find(move => move.uci === playedUci);
+    const entry = explorerMoves.find((move) => move.uci === playedUci);
 
     return {
       inBook: true,
@@ -179,7 +179,7 @@ export async function resolveOpeningBookBatch(
 
 export function resolveOpeningBookFlagsLocal(moves: StoredMove[], initialFen: string | null) {
   const positions = buildOpeningBookPositions(moves, initialFen);
-  return positions.map(position => resolveOpeningBookPosition(position.fenBefore, position.playedUci, null).inBook);
+  return positions.map((position) => resolveOpeningBookPosition(position.fenBefore, position.playedUci, null).inBook);
 }
 
 export function buildOpeningBookPositions(moves: StoredMove[], initialFen: string | null) {
@@ -205,7 +205,7 @@ export function buildOpeningBookPositions(moves: StoredMove[], initialFen: strin
 export async function resolveOpeningBookFlags(moves: StoredMove[], initialFen: string | null) {
   const positions = buildOpeningBookPositions(moves, initialFen);
   const batch = await resolveOpeningBookBatch(positions);
-  return batch.results.map(result => result.inBook);
+  return batch.results.map((result) => result.inBook);
 }
 
 export async function resolveOpeningBookFlagsFromApi(moves: StoredMove[], initialFen: string | null) {
@@ -228,5 +228,5 @@ export async function resolveOpeningBookFlagsFromApi(moves: StoredMove[], initia
   }
 
   const batch = (await response.json()) as OpeningBookBatchResult;
-  return batch.results.map(result => result.inBook);
+  return batch.results.map((result) => result.inBook);
 }

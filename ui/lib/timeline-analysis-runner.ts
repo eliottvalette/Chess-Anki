@@ -49,7 +49,10 @@ export async function runTimelineAnalysisDedupe({
 
   throwIfAborted(signal);
 
-  logTimelineAnalysis(label, `start positions=${positions.length} batch=${batchSize} cache=${cache.size} position_inflight=${positionInFlight.size} batch_inflight=${batchInFlight.size}`);
+  logTimelineAnalysis(
+    label,
+    `start positions=${positions.length} batch=${batchSize} cache=${cache.size} position_inflight=${positionInFlight.size} batch_inflight=${batchInFlight.size}`,
+  );
 
   reportProgress();
 
@@ -86,21 +89,27 @@ export async function runTimelineAnalysisDedupe({
     });
   });
 
-  logTimelineAnalysis(label, `planned cached=${completed} missing=${missing.length} reused_inflight=${missing.filter(item => item.inFlight && !item.deferred).length}`);
+  logTimelineAnalysis(
+    label,
+    `planned cached=${completed} missing=${missing.length} reused_inflight=${missing.filter((item) => item.inFlight && !item.deferred).length}`,
+  );
 
   try {
     for (let start = 0; start < missing.length; start += batchSize) {
       throwIfAborted(signal);
       const batch = missing.slice(start, start + batchSize);
-      const alreadyInFlight = batch.filter(item => item.inFlight && !item.deferred);
-      const needsBatchAnalysis = batch.filter(item => item.deferred);
+      const alreadyInFlight = batch.filter((item) => item.inFlight && !item.deferred);
+      const needsBatchAnalysis = batch.filter((item) => item.deferred);
 
       if (alreadyInFlight.length > 0) {
-        logTimelineAnalysis(label, `await-inflight count=${alreadyInFlight.length} indexes=${formatTimelineIndexes(alreadyInFlight.map(item => item.index))}`);
+        logTimelineAnalysis(
+          label,
+          `await-inflight count=${alreadyInFlight.length} indexes=${formatTimelineIndexes(alreadyInFlight.map((item) => item.index))}`,
+        );
       }
 
       await Promise.all(
-        alreadyInFlight.map(async item => {
+        alreadyInFlight.map(async (item) => {
           throwIfAborted(signal);
           const analysis = await item.inFlight;
 
@@ -119,12 +128,18 @@ export async function runTimelineAnalysisDedupe({
         continue;
       }
 
-      const batchKey = needsBatchAnalysis.map(item => item.cacheKey).join('|');
+      const batchKey = needsBatchAnalysis.map((item) => item.cacheKey).join('|');
       let batchPromise = batchInFlight.get(batchKey);
 
       if (!batchPromise) {
-        logTimelineAnalysis(label, `batch-start count=${needsBatchAnalysis.length} indexes=${formatTimelineIndexes(needsBatchAnalysis.map(item => item.index))}`);
-        batchPromise = analyzeBatch(needsBatchAnalysis.map(item => item.position), signal).finally(() => {
+        logTimelineAnalysis(
+          label,
+          `batch-start count=${needsBatchAnalysis.length} indexes=${formatTimelineIndexes(needsBatchAnalysis.map((item) => item.index))}`,
+        );
+        batchPromise = analyzeBatch(
+          needsBatchAnalysis.map((item) => item.position),
+          signal,
+        ).finally(() => {
           if (batchInFlight.get(batchKey) === batchPromise) {
             batchInFlight.delete(batchKey);
           }
@@ -132,11 +147,14 @@ export async function runTimelineAnalysisDedupe({
 
         batchInFlight.set(batchKey, batchPromise);
       } else {
-        logTimelineAnalysis(label, `batch-reuse count=${needsBatchAnalysis.length} indexes=${formatTimelineIndexes(needsBatchAnalysis.map(item => item.index))}`);
+        logTimelineAnalysis(
+          label,
+          `batch-reuse count=${needsBatchAnalysis.length} indexes=${formatTimelineIndexes(needsBatchAnalysis.map((item) => item.index))}`,
+        );
       }
 
-      const analyses = await batchPromise.catch(error => {
-        needsBatchAnalysis.forEach(item => {
+      const analyses = await batchPromise.catch((error) => {
+        needsBatchAnalysis.forEach((item) => {
           item.deferred?.reject(error);
           if (positionInFlight.get(item.cacheKey) === item.deferred?.promise) {
             positionInFlight.delete(item.cacheKey);
@@ -166,8 +184,11 @@ export async function runTimelineAnalysisDedupe({
       });
     }
   } catch (error) {
-    logTimelineAnalysis(label, `fail elapsed=${getTimelineElapsedMs(startedAt)}ms ${error instanceof Error ? error.message : String(error)}`);
-    missing.forEach(item => {
+    logTimelineAnalysis(
+      label,
+      `fail elapsed=${getTimelineElapsedMs(startedAt)}ms ${error instanceof Error ? error.message : String(error)}`,
+    );
+    missing.forEach((item) => {
       item.deferred?.reject(error);
       if (positionInFlight.get(item.cacheKey) === item.deferred?.promise) {
         positionInFlight.delete(item.cacheKey);

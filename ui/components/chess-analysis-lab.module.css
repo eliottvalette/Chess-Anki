@@ -24,7 +24,7 @@
   overflow: hidden;
   background:
     linear-gradient(180deg, rgba(7, 12, 20, 0.34) 0%, rgba(5, 9, 15, 0.7) 100%),
-    url('/bg.png') center / cover no-repeat fixed,
+    url("/bg.png") center / cover no-repeat fixed,
     var(--app-bg);
   color: var(--text);
 }
@@ -256,7 +256,7 @@
 .openingTreeItemRoot {
   display: block;
   color: var(--text-muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11px;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -295,9 +295,7 @@
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background:
-    radial-gradient(circle at 18% 16%, rgba(152, 184, 255, 0.1), transparent 28%),
-    rgba(4, 8, 15, 0.58);
+  background: radial-gradient(circle at 18% 16%, rgba(152, 184, 255, 0.1), transparent 28%), rgba(4, 8, 15, 0.58);
 }
 
 .openingTreeCanvas :global(.react-flow) {
@@ -1167,8 +1165,8 @@
   padding: 9px 10px;
 }
 
-.accuracyCard>*,
-.openingBox>* {
+.accuracyCard > *,
+.openingBox > * {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1454,7 +1452,9 @@
 
 .deckSelect {
   appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, rgba(214, 226, 244, 0.72) 50%), linear-gradient(135deg, rgba(214, 226, 244, 0.72) 50%, transparent 50%);
+  background-image:
+    linear-gradient(45deg, transparent 50%, rgba(214, 226, 244, 0.72) 50%),
+    linear-gradient(135deg, rgba(214, 226, 244, 0.72) 50%, transparent 50%);
   background-position:
     calc(100% - 18px) calc(50% + 2px),
     calc(100% - 12px) calc(50% + 2px);
@@ -2160,7 +2160,7 @@
 }
 
 .settingSwitchTrack::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 3px;
   left: 3px;
@@ -2173,18 +2173,18 @@
     background-color 160ms ease;
 }
 
-.settingSwitchInput:checked+.settingSwitchTrack {
+.settingSwitchInput:checked + .settingSwitchTrack {
   border-color: rgba(198, 215, 255, 0.58);
   background: rgba(46, 58, 82, 0.72);
   box-shadow: inset 0 0 0 1px rgba(198, 215, 255, 0.1);
 }
 
-.settingSwitchInput:checked+.settingSwitchTrack::after {
+.settingSwitchInput:checked + .settingSwitchTrack::after {
   transform: translateX(20px);
   background: var(--accent-strong);
 }
 
-.settingSwitchInput:focus-visible+.settingSwitchTrack {
+.settingSwitchInput:focus-visible + .settingSwitchTrack {
   outline: 2px solid var(--accent-strong);
   outline-offset: 2px;
 }
@@ -2780,7 +2780,7 @@
 .monoLine {
   margin: 0;
   color: var(--text-muted);
-  font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+  font-family: "SF Mono", "JetBrains Mono", "Menlo", monospace;
   font-size: 12px;
   line-height: 1.5;
   overflow-wrap: anywhere;
@@ -2834,7 +2834,7 @@
   color: var(--text);
   padding: 12px;
   font: inherit;
-  font-family: 'SF Mono', 'JetBrains Mono', 'Menlo', monospace;
+  font-family: "SF Mono", "JetBrains Mono", "Menlo", monospace;
   font-size: 12px;
   line-height: 1.55;
   overflow: auto;

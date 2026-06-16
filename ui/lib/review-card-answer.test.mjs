@@ -49,7 +49,7 @@ test('manual review card answer is selected from post-move eval of the top three
     fen: 'r1b1kbnr/pp1p1ppp/2n5/qN2p3/4P3/8/PPP2PPP/RNBQKB1R w KQkq - 2 6',
     side: 'white',
     rootAnalysis,
-    analyzePosition: async request => analysis({ whiteCp: postMoveScores.get(request.fen) ?? -999 }),
+    analyzePosition: async (request) => analysis({ whiteCp: postMoveScores.get(request.fen) ?? -999 }),
   });
 
   assert.equal(result.answerUci, 'b1c3');
@@ -75,7 +75,7 @@ test('manual review card answer uses the deterministic profile for post-move eva
     fen: 'rnb1kbnr/ppp2ppp/3p1q2/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R w KQkq - 1 4',
     side: 'white',
     rootAnalysis,
-    analyzePosition: async request => {
+    analyzePosition: async (request) => {
       requests.push(request);
       return analysis({ whiteCp: postMoveScores.get(request.fen) ?? -999 });
     },
@@ -84,8 +84,8 @@ test('manual review card answer uses the deterministic profile for post-move eva
   assert.equal(result.answerUci, 'b1c3');
   assert.equal(result.answerSan, 'Nc3');
   assert.equal(result.referenceEvalCp, 160);
-  assert.deepEqual([...new Set(requests.map(request => request.multipv))], [3]);
-  assert.deepEqual([...new Set(requests.map(request => request.depth))], [17]);
+  assert.deepEqual([...new Set(requests.map((request) => request.multipv))], [3]);
+  assert.deepEqual([...new Set(requests.map((request) => request.depth))], [17]);
 });
 
 test('manual review card answer minimizes white eval for black to move', async () => {
@@ -107,7 +107,7 @@ test('manual review card answer minimizes white eval for black to move', async (
     fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
     side: 'black',
     rootAnalysis,
-    analyzePosition: async request => analysis({ whiteCp: postMoveScores.get(request.fen) ?? 999 }),
+    analyzePosition: async (request) => analysis({ whiteCp: postMoveScores.get(request.fen) ?? 999 }),
   });
 
   assert.equal(result.answerUci, 'c7c5');

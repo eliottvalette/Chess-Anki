@@ -1,3 +1,4 @@
+import type { AnalysisResult } from '@/lib/analysis-types';
 import {
   buildTimelineSequencePositions,
   classifyTimelineMoves,
@@ -6,13 +7,8 @@ import {
   type StoredMove,
   type TimelineReview,
 } from '@/lib/chess-analysis-client';
-import {
-  buildDeckCardStartState,
-  type DeckCard,
-  type OpeningSeedLine,
-} from '@/lib/opening-training';
 import { resolveOpeningBookFlagsLocal } from '@/lib/opening-book';
-import type { AnalysisResult } from '@/lib/analysis-types';
+import { buildDeckCardStartState, type DeckCard, type OpeningSeedLine } from '@/lib/opening-training';
 
 export type CardMoveReview = {
   ply: number;
@@ -26,7 +22,7 @@ export function parseCardMoveReviews(value: unknown): CardMoveReview[] {
     return [];
   }
 
-  return value.flatMap(entry => {
+  return value.flatMap((entry) => {
     if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
       return [];
     }
@@ -53,7 +49,7 @@ export function parseCardMoveReviews(value: unknown): CardMoveReview[] {
 }
 
 export function cardMoveReviewsFromTimeline(reviews: TimelineReview[], count: number): CardMoveReview[] {
-  return reviews.slice(0, count).flatMap(review => {
+  return reviews.slice(0, count).flatMap((review) => {
     if (!review.category) {
       return [];
     }
@@ -102,7 +98,11 @@ export function buildDeckCardReplayHistory(card: DeckCard, openingLines: Opening
   };
 }
 
-export function buildTimelineAnalysesForMoves(moves: StoredMove[], initialFen: string | null, analyses: AnalysisResult[]) {
+export function buildTimelineAnalysesForMoves(
+  moves: StoredMove[],
+  initialFen: string | null,
+  analyses: AnalysisResult[],
+) {
   const positions = buildTimelineSequencePositions(moves, initialFen);
 
   if (positions.length === 0 || analyses.length !== positions.length) {
@@ -246,12 +246,7 @@ export function resolveTrainBoardMoveReview(
   }
 
   if (card.opponentMoveUci && moveUci === card.opponentMoveUci && card.scoreSwingCp != null) {
-    return buildTrainBoardMoveReview(
-      move,
-      moveIndex,
-      categoryFromOpponentScoreSwing(card.scoreSwingCp),
-      null,
-    );
+    return buildTrainBoardMoveReview(move, moveIndex, categoryFromOpponentScoreSwing(card.scoreSwingCp), null);
   }
 
   return buildTrainBoardMoveReview(move, moveIndex, 'good', null);
@@ -264,10 +259,7 @@ export function resolveTrainReplayBestMoveUci(
   positionAnalysesByMoveCount: Array<AnalysisResult | null | undefined>,
   currentPositionAnalysis: AnalysisResult | null | undefined,
 ) {
-  const engineBest =
-    positionAnalysesByMoveCount[historyIndex]?.bestMove ??
-    currentPositionAnalysis?.bestMove ??
-    null;
+  const engineBest = positionAnalysesByMoveCount[historyIndex]?.bestMove ?? currentPositionAnalysis?.bestMove ?? null;
 
   if (engineBest) {
     return engineBest;
@@ -307,7 +299,9 @@ export function shouldUseLiveTrainMoveReview(
   }
 
   if (answerFeedback) {
-    const answerMoveIndex = moves.findIndex(candidate => moveUciFromStoredMove(candidate) === answerFeedback.playedUci);
+    const answerMoveIndex = moves.findIndex(
+      (candidate) => moveUciFromStoredMove(candidate) === answerFeedback.playedUci,
+    );
 
     if (answerMoveIndex >= 0 && moveIndex > answerMoveIndex) {
       return true;
@@ -343,7 +337,7 @@ export function buildLiveTrainMoveReview(
   const preMoveAnalyses = subset.map((_, index) => analysesByMoveCount[index] ?? null);
   const postMoveAnalyses = subset.map((_, index) => analysesByMoveCount[index + 1] ?? null);
 
-  if (preMoveAnalyses.some(analysis => analysis == null) || postMoveAnalyses.some(analysis => analysis == null)) {
+  if (preMoveAnalyses.some((analysis) => analysis == null) || postMoveAnalyses.some((analysis) => analysis == null)) {
     return null;
   }
 

@@ -62,7 +62,7 @@ export function getPrimaryMoveSound(move: StoredMove, isSelfMove: boolean): Ches
     return 'promote';
   }
 
-  if (Boolean(move.captured) || move.flags.includes('c') || move.flags.includes('e')) {
+  if (move.captured || move.flags.includes('c') || move.flags.includes('e')) {
     return 'capture';
   }
 

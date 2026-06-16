@@ -8,6 +8,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "format": "biome format --write .",
+    "check": "biome check --write .",
+    "check:ci": "biome ci .",
+    "prepare": "cd .. && husky .husky",
     "test": "node --test",
     "chesscom:recent": "node scripts/chesscom/fetch-recent-games.mjs",
     "chesscom:audit:analysis": "node scripts/chesscom/audit-analysis.mjs",
@@ -43,13 +47,21 @@
   "overrides": {
     "postcss": "^8.5.10"
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,json,css}": [
+      "biome check --write --no-errors-on-unmatched --files-ignore-unknown=true"
+    ]
+  },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.2",
     "server-only": "^0.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"

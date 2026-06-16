@@ -1,7 +1,6 @@
 import { Chess } from 'chess.js';
-
-import type { AnalysisResult } from './analysis-types.ts';
 import { buildDeterministicAnalyzeRequest } from './analysis-profile.ts';
+import type { AnalysisResult } from './analysis-types.ts';
 
 type AnalyzePosition = (payload: Parameters<typeof buildDeterministicAnalyzeRequest>[0]) => Promise<AnalysisResult>;
 type ReviewCardSide = 'white' | 'black';
@@ -30,7 +29,7 @@ export async function resolvePostMoveVerifiedReviewCardAnswer({
   }
 
   const verified = await Promise.all(
-    candidates.map(async answerUci => {
+    candidates.map(async (answerUci) => {
       const chess = new Chess(fen);
       const move = chess.move({
         from: answerUci.slice(0, 2),
@@ -53,29 +52,32 @@ export async function resolvePostMoveVerifiedReviewCardAnswer({
     }),
   );
 
-  return verified.reduce<VerifiedReviewCardAnswer>((best, candidate) => {
-    if (best.referenceEvalCp == null) {
-      return {
-        answerUci: candidate.answerUci,
-        answerSan: candidate.answerSan,
-        referenceEvalCp: candidate.scoreCp,
-      };
-    }
+  return verified.reduce<VerifiedReviewCardAnswer>(
+    (best, candidate) => {
+      if (best.referenceEvalCp == null) {
+        return {
+          answerUci: candidate.answerUci,
+          answerSan: candidate.answerSan,
+          referenceEvalCp: candidate.scoreCp,
+        };
+      }
 
-    if (candidate.scoreCp != null && candidate.scoreCp > best.referenceEvalCp) {
-      return {
-        answerUci: candidate.answerUci,
-        answerSan: candidate.answerSan,
-        referenceEvalCp: candidate.scoreCp,
-      };
-    }
+      if (candidate.scoreCp != null && candidate.scoreCp > best.referenceEvalCp) {
+        return {
+          answerUci: candidate.answerUci,
+          answerSan: candidate.answerSan,
+          referenceEvalCp: candidate.scoreCp,
+        };
+      }
 
-    return best;
-  }, {
-    answerUci: verified[0]?.answerUci ?? candidates[0],
-    answerSan: verified[0]?.answerSan ?? candidates[0],
-    referenceEvalCp: verified[0]?.scoreCp ?? null,
-  });
+      return best;
+    },
+    {
+      answerUci: verified[0]?.answerUci ?? candidates[0],
+      answerSan: verified[0]?.answerSan ?? candidates[0],
+      referenceEvalCp: verified[0]?.scoreCp ?? null,
+    },
+  );
 }
 
 function getRootCandidateMoves(rootAnalysis: AnalysisResult) {

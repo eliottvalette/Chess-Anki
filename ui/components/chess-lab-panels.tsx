@@ -1,8 +1,15 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type ReactNode, type RefObject } from 'react';
-import { Background, ReactFlow, ReactFlowProvider, useReactFlow, type Edge, type Node as FlowNode } from '@xyflow/react';
+import {
+  Background,
+  type Edge,
+  type Node as FlowNode,
+  ReactFlow,
+  ReactFlowProvider,
+  useReactFlow,
+} from '@xyflow/react';
 import dagre from 'dagre';
+import { type ChangeEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 
 function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
@@ -11,9 +18,12 @@ function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | n
   useEffect(() => {
     if (activeNodeId) {
       const node = getNode(activeNodeId);
-      if (node && node.position) {
+      if (node?.position) {
         requestAnimationFrame(() => {
-          setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, { duration: 800, zoom: 1.2 });
+          setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, {
+            duration: 800,
+            zoom: 1.2,
+          });
         });
       }
     }
@@ -24,22 +34,22 @@ function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | n
 
 import type { AnalysisLine, AnalysisResult } from '@/lib/analysis-types';
 import {
-  filterReviewMoments,
+  type filterReviewMoments,
   formatBestMove,
   formatPrincipalVariation,
-  reviewCategoryMeta,
-  toChartScore,
   type ReviewCategory,
+  reviewCategoryMeta,
   type StoredMove,
   type TimelineReview,
+  toChartScore,
 } from '@/lib/chess-analysis-client';
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import {
+  type DeckProgressEntry,
+  type DeckProgressSummary,
   getDeckCardOpeningGroup,
   getEffectiveMasteryScore,
   getMasteryGrade,
-  type DeckProgressEntry,
-  type DeckProgressSummary,
   type MasteryGrade,
 } from '@/lib/deck-progress';
 import type { OpeningLibrary, OpeningTreeDetail, OpeningTreeSummary } from '@/lib/opening-tree';
@@ -49,6 +59,7 @@ export type TrainSessionStats = {
   hits: number;
   misses: number;
 };
+
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import styles from './chess-analysis-lab.module.css';
 
@@ -88,16 +99,16 @@ export function LinesPanel({
   deckFeedback,
   drillActive,
   drillStatus,
-  expectedSan,
+  expectedSan: _expectedSan,
   loading,
   onImportRecent,
   onSelectNode,
   onSelectTree,
-  onStartDrill,
+  onStartDrill: _onStartDrill,
   onStopDrill,
   trainSide,
   onChangeTrainSide,
-  undoMove,
+  undoMove: _undoMove,
   trees,
   minForcedPlies,
   setMinForcedPlies,
@@ -143,18 +154,18 @@ export function LinesPanel({
   }, [minDepth]);
 
   const filteredTrees = useMemo(
-    () => trees.filter(tree =>
-      tree.nodeCount >= minNodes &&
-      tree.targetDepth >= minDepth,
-    ),
+    () => trees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
     [trees, minNodes, minDepth],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
-  const selectedNode = useMemo(
-    () => activeTree?.nodes.find(node => node.id === activeNodeId) ?? null,
+  const _selectedNode = useMemo(
+    () => activeTree?.nodes.find((node) => node.id === activeNodeId) ?? null,
     [activeNodeId, activeTree],
   );
-  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive), [activeTree, activeNodeId, trainSide, onSelectNode, drillActive]);
+  const graph = useMemo(
+    () => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive),
+    [activeTree, activeNodeId, trainSide, onSelectNode, drillActive],
+  );
 
   return (
     <>
@@ -165,7 +176,9 @@ export function LinesPanel({
             <span className={styles.statusText}>{loading ? 'loading' : `${trees.length} openings`}</span>
           </div>
           {trees.length === 0 ? (
-            <p className={styles.copy}>Import your recent games to build opening trees grouped by the position after 4 plies.</p>
+            <p className={styles.copy}>
+              Import your recent games to build opening trees grouped by the position after 4 plies.
+            </p>
           ) : (
             <div className={styles.linesLibrary}>
               <div className={styles.linesFilters}>
@@ -175,7 +188,7 @@ export function LinesPanel({
                     className={styles.linesFilterInput}
                     id="filter-min-forced-plies"
                     min={1}
-                    onChange={event => setMinForcedPlies(Math.max(1, Number(event.target.value) || 1))}
+                    onChange={(event) => setMinForcedPlies(Math.max(1, Number(event.target.value) || 1))}
                     type="number"
                     value={minForcedPlies}
                   />
@@ -186,7 +199,7 @@ export function LinesPanel({
                     className={styles.linesFilterInput}
                     id="filter-min-nodes"
                     min={0}
-                    onChange={event => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
+                    onChange={(event) => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
                     type="number"
                     value={minNodes}
                   />
@@ -197,14 +210,16 @@ export function LinesPanel({
                     className={styles.linesFilterInput}
                     id="filter-min-depth"
                     min={0}
-                    onChange={event => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
+                    onChange={(event) => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
                     type="number"
                     value={minDepth}
                   />
                 </label>
               </div>
-              <span className={styles.linesFilterCount}>{filteredTrees.length} / {trees.length} openings</span>
-              {OPENING_LIBRARY_ORDER.map(library => {
+              <span className={styles.linesFilterCount}>
+                {filteredTrees.length} / {trees.length} openings
+              </span>
+              {OPENING_LIBRARY_ORDER.map((library) => {
                 const libraryTrees = groupedTrees.get(library) ?? [];
 
                 if (libraryTrees.length === 0) {
@@ -215,7 +230,7 @@ export function LinesPanel({
                   <section className={styles.linesLibraryGroup} key={library}>
                     <h3 className={styles.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
                     <div className={styles.openingTreeList}>
-                      {libraryTrees.map(tree => (
+                      {libraryTrees.map((tree) => (
                         <button
                           className={`${styles.openingTreeItem} ${tree.id === activeTreeId ? styles.openingTreeItemActive : ''}`}
                           key={tree.id}
@@ -226,7 +241,9 @@ export function LinesPanel({
                             <strong>{tree.name}</strong>
                             <span className={styles.openingTreeMastery}>{tree.masteryScore}/100</span>
                           </span>
-                          <span className={styles.openingTreeItemRoot}>{tree.rootSan.join(' ') || 'Starting position'}</span>
+                          <span className={styles.openingTreeItemRoot}>
+                            {tree.rootSan.join(' ') || 'Starting position'}
+                          </span>
                           <span className={styles.openingTreeItemStats}>
                             <span>{tree.sourceCount} sources</span>
                             <span>{tree.nodeCount} nodes</span>
@@ -257,28 +274,46 @@ export function LinesPanel({
           {drillActive ? (
             <>
               <div className={styles.trainBackRow}>
-                <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onStopDrill} type="button">
+                <button
+                  className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
+                  onClick={onStopDrill}
+                  type="button"
+                >
                   Back
                 </button>
               </div>
               <div className={styles.trainBackRow} style={{ marginTop: '-4px', marginBottom: '16px' }}>
-                <button className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`} onClick={() => onChangeTrainSide('white')} type="button">
+                <button
+                  className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`}
+                  onClick={() => onChangeTrainSide('white')}
+                  type="button"
+                >
                   White
                 </button>
-                <button className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'black' ? styles.primary : ''}`} onClick={() => onChangeTrainSide('black')} type="button">
+                <button
+                  className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'black' ? styles.primary : ''}`}
+                  onClick={() => onChangeTrainSide('black')}
+                  type="button"
+                >
                   Black
                 </button>
               </div>
             </>
           ) : (
             <div className={styles.trainBackRow} style={{ marginBottom: '16px' }}>
-              <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={() => onSelectTree('')} type="button">
+              <button
+                className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
+                onClick={() => onSelectTree('')}
+                type="button"
+              >
                 Back
               </button>
             </div>
           )}
 
-          <section className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}>
+          <section
+            className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}
+          >
             {!drillActive ? (
               <div className={styles.panelHeader}>
                 <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
@@ -292,15 +327,26 @@ export function LinesPanel({
                 </div>
               </div>
             )}
-            
+
             {drillActive && (drillStatus || deckFeedback) ? (
-              <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}>
+              <div
+                className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`}
+                style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}
+              >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <strong>
-                    {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
+                    {!deckFeedback
+                      ? 'Drill Step'
+                      : deckFeedback.pending
+                        ? 'Checking eval'
+                        : deckFeedback.correct
+                          ? 'Best move'
+                          : 'Miss'}
                   </strong>
                   <span>
-                    {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
+                    {!deckFeedback
+                      ? drillStatus
+                      : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
                   </span>
                 </div>
               </div>
@@ -370,7 +416,13 @@ function formatOpeningLibrary(library: OpeningLibrary) {
   }
 }
 
-function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, trainSide: 'white' | 'black', onSelectNode: (nodeId: string) => void, drillActive = false) {
+function buildOpeningTreeGraph(
+  tree: OpeningTreeDetail | null,
+  activeNodeId: string | null,
+  trainSide: 'white' | 'black',
+  onSelectNode: (nodeId: string) => void,
+  drillActive = false,
+) {
   if (!tree) {
     return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
   }
@@ -389,7 +441,7 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
 
   dagre.layout(graph);
 
-  const nodes = tree.nodes.map(node => {
+  const nodes = tree.nodes.map((node) => {
     const point = graph.node(node.id) ?? { x: 0, y: 0 };
     const isActive = node.id === activeNodeId;
     const isTrainTurn = node.sideToMove === trainSide;
@@ -413,21 +465,26 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
         isActive ? styles.openingTreeNodeActive : '',
         isTrainTurn ? styles.openingTreeNodeTrain : styles.openingTreeNodeOpponent,
         isWeak ? styles.openingTreeNodeWeak : '',
-      ].filter(Boolean).join(' '),
+      ]
+        .filter(Boolean)
+        .join(' '),
       type: 'default',
     } satisfies FlowNode;
   });
-  const edges = tree.edges.map(edge => ({
-    id: edge.id,
-    source: edge.fromNodeId,
-    target: edge.toNodeId,
-    animated: edge.isEngineBest,
-    label: edge.san,
-    className: edge.isEngineBest ? styles.openingTreeEdgeBest : undefined,
-    labelBgPadding: [6, 4],
-    labelBgBorderRadius: 6,
-    labelShowBg: true,
-  } satisfies Edge));
+  const edges = tree.edges.map(
+    (edge) =>
+      ({
+        id: edge.id,
+        source: edge.fromNodeId,
+        target: edge.toNodeId,
+        animated: edge.isEngineBest,
+        label: edge.san,
+        className: edge.isEngineBest ? styles.openingTreeEdgeBest : undefined,
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 6,
+        labelShowBg: true,
+      }) satisfies Edge,
+  );
 
   return { nodes, edges };
 }
@@ -557,25 +614,21 @@ export function ReviewPanel({
   };
 
   if (!hasLoadedGame) {
-    return (
-      <GameReviewPanel
-        {...reviewPanelProps}
-        hasLoadedGame={false}
-      />
-    );
+    return <GameReviewPanel {...reviewPanelProps} hasLoadedGame={false} />;
   }
 
   return (
     <div className={styles.reviewLoadedPanel}>
       <section className={styles.reviewLoadedTop}>
-        <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onBack}>
+        <button
+          className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
+          onClick={onBack}
+          type="button"
+        >
           Back
         </button>
       </section>
-      <GameReviewPanel
-        {...reviewPanelProps}
-        hasLoadedGame={true}
-      />
+      <GameReviewPanel {...reviewPanelProps} hasLoadedGame={true} />
     </div>
   );
 }
@@ -677,7 +730,11 @@ export function TrainPanel({
   return (
     <>
       <div className={styles.trainBackRow}>
-        <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={onBack} type="button">
+        <button
+          className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
+          onClick={onBack}
+          type="button"
+        >
           Back
         </button>
       </div>
@@ -735,7 +792,7 @@ export function TrainingProfilePanel({
       </div>
       <form
         className={styles.profileForm}
-        onSubmit={event => {
+        onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
@@ -743,7 +800,7 @@ export function TrainingProfilePanel({
         <input
           className={`${styles.inlineInput} ${styles.profileFormWide}`}
           value={username}
-          onChange={event => setUsername(event.target.value)}
+          onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
           autoCorrect="off"
           disabled={profileBusy}
@@ -754,14 +811,18 @@ export function TrainingProfilePanel({
         <input
           className={`${styles.inlineInput} ${styles.profileFormWide}`}
           value={password}
-          onChange={event => setPassword(event.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
           disabled={profileBusy}
           name="training_profile_password"
           placeholder="password"
           type="password"
         />
-        <button className={`${styles.action} ${styles.primary} ${styles.profileFormWide}`} disabled={profileBusy || username.trim().length < 3 || password.length < 4} type="submit">
+        <button
+          className={`${styles.action} ${styles.primary} ${styles.profileFormWide}`}
+          disabled={profileBusy || username.trim().length < 3 || password.length < 4}
+          type="submit"
+        >
           {submitting ? 'Opening profile' : 'Open profile'}
         </button>
       </form>
@@ -796,7 +857,12 @@ export function AnalyzePanel({
   return (
     <>
       {engineLines.length > 0 ? (
-        <EngineLinesSection currentFen={currentFen} lines={engineLines} positionAnalysis={positionAnalysis} positionLoading={positionLoading} />
+        <EngineLinesSection
+          currentFen={currentFen}
+          lines={engineLines}
+          positionAnalysis={positionAnalysis}
+          positionLoading={positionLoading}
+        />
       ) : null}
       <section className={`${styles.card} ${styles.movesCard}`}>
         <div className={styles.panelHeader}>
@@ -813,12 +879,13 @@ export function AnalyzePanel({
                 <span>White</span>
                 <span>Black</span>
               </div>
-              {movePairs.map(pair => (
+              {movePairs.map((pair) => (
                 <div className={styles.moveRow} key={pair.moveNumber}>
                   <span className={styles.moveNumber}>{pair.moveNumber}.</span>
                   <button
                     className={`${styles.moveCellButton} ${historyIndex === pair.whitePly ? styles.activeMoveCell : ''}`}
                     onClick={() => jumpToIndex(pair.whitePly)}
+                    type="button"
                   >
                     {pair.white ? renderMoveFigurine(pair.white.san) : '...'}
                   </button>
@@ -826,6 +893,7 @@ export function AnalyzePanel({
                     className={`${styles.moveCellButton} ${historyIndex === pair.blackPly ? styles.activeMoveCell : ''}`}
                     onClick={() => jumpToIndex(pair.blackPly)}
                     disabled={!pair.black}
+                    type="button"
                   >
                     {pair.black ? renderMoveFigurine(pair.black.san) : ''}
                   </button>
@@ -925,11 +993,12 @@ export function GameReviewPanel({
   const activeMoveButtonRef = useRef<HTMLButtonElement | null>(null);
   const currentReview = historyIndex > 0 ? (timelineReviews[historyIndex - 1] ?? null) : null;
   const activeMomentIsQueued =
-    activeReviewMoment != null && (historyIndex === Math.max(0, activeReviewMoment.ply - 1) || historyIndex === activeReviewMoment.ply);
+    activeReviewMoment != null &&
+    (historyIndex === Math.max(0, activeReviewMoment.ply - 1) || historyIndex === activeReviewMoment.ply);
   const coachReview = activeMomentIsQueued ? activeReviewMoment : (currentReview ?? activeReviewMoment);
   const displayActivePly = activeMomentIsQueued && activeReviewMoment ? activeReviewMoment.ply : historyIndex;
   const nextMomentIndex = useMemo(
-    () => reviewMoments.findIndex(moment => moment.ply > historyIndex),
+    () => reviewMoments.findIndex((moment) => moment.ply > historyIndex),
     [historyIndex, reviewMoments],
   );
   const hasNextReviewStep = nextMomentIndex >= 0 || historyIndex < moveHistoryLength;
@@ -940,7 +1009,7 @@ export function GameReviewPanel({
     }
 
     activeMoveButtonRef.current?.scrollIntoView({ block: 'start', inline: 'nearest' });
-  }, [hasLoadedGame, historyIndex]);
+  }, [hasLoadedGame]);
 
   if (!hasLoadedGame) {
     return (
@@ -948,21 +1017,28 @@ export function GameReviewPanel({
         <section className={`${styles.card} ${styles.emptyStateCard}`}>
           <div className={styles.panelHeader}>
             <h2 className={styles.sectionTitle}>Game Review</h2>
-            <span className={styles.statusText}>{recentGamesLoading ? 'loading' : recentGames.length ? `${recentGames.length} games` : 'ready'}</span>
+            <span className={styles.statusText}>
+              {recentGamesLoading ? 'loading' : recentGames.length ? `${recentGames.length} games` : 'ready'}
+            </span>
           </div>
           <p className={styles.copy}>Use your Chess.com username to pull recent public games.</p>
           <div className={styles.inlineForm}>
             <input
               className={styles.inlineInput}
               value={chesscomUsername}
-              onChange={event => onChesscomUsernameChange(event.target.value)}
+              onChange={(event) => onChesscomUsernameChange(event.target.value)}
               autoComplete="off"
               autoCorrect="off"
               name="chesscom_lookup_handle"
               placeholder=""
               spellCheck={false}
             />
-            <button className={styles.action} onClick={() => onChesscomUsernameChange('')} disabled={!chesscomUsername}>
+            <button
+              className={styles.action}
+              onClick={() => onChesscomUsernameChange('')}
+              disabled={!chesscomUsername}
+              type="button"
+            >
               Clear
             </button>
             <button
@@ -975,11 +1051,12 @@ export function GameReviewPanel({
             </button>
           </div>
           <div className={styles.reviewSideTabs}>
-            {(['bullet', 'blitz', 'rapid'] as const).map(timeClass => (
+            {(['bullet', 'blitz', 'rapid'] as const).map((timeClass) => (
               <button
                 className={`${styles.action} ${recentGameTimeClass === timeClass ? styles.primary : styles.secondary}`}
                 key={timeClass}
                 onClick={() => onRecentGameTimeClassChange(timeClass)}
+                type="button"
               >
                 {timeClass}
               </button>
@@ -994,27 +1071,33 @@ export function GameReviewPanel({
               <span className={styles.statusText}>click to review</span>
             </div>
             <div className={styles.openingList}>
-              {recentGames.map(game => (
+              {recentGames.map((game) => (
                 <button
                   className={`${styles.openingButton} ${styles.recentGameButton} ${
-                    game.outcome === 'win' ? styles.recentGameWin : game.outcome === 'loss' ? styles.recentGameLoss : styles.recentGameDraw
+                    game.outcome === 'win'
+                      ? styles.recentGameWin
+                      : game.outcome === 'loss'
+                        ? styles.recentGameLoss
+                        : styles.recentGameDraw
                   }`}
                   key={game.link}
                   onClick={() => loadRecentGame(game)}
+                  type="button"
                 >
                   <span className={styles.recentGameDate}>{formatRecentGameAge(game)}</span>
-                  <strong className={styles.recentGamePlayers}>
-                    {formatRecentGamePlayers(game)}
-                  </strong>
+                  <strong className={styles.recentGamePlayers}>{formatRecentGamePlayers(game)}</strong>
                   <span className={styles.recentGameMoves}>{game.moveCount ? `${game.moveCount} moves` : '-'}</span>
-                  <span className={styles.recentGameMeta}>
-                    {formatRecentGameMeta(game)}
-                  </span>
+                  <span className={styles.recentGameMeta}>{formatRecentGameMeta(game)}</span>
                 </button>
               ))}
             </div>
             {recentGamesHasMore ? (
-              <button className={`${styles.action} ${styles.fullWidthAction}`} onClick={onLoadMoreRecentGames} disabled={recentGamesLoading}>
+              <button
+                className={`${styles.action} ${styles.fullWidthAction}`}
+                onClick={onLoadMoreRecentGames}
+                disabled={recentGamesLoading}
+                type="button"
+              >
                 {recentGamesLoading ? 'Loading' : 'Load 10 more'}
               </button>
             ) : null}
@@ -1029,12 +1112,19 @@ export function GameReviewPanel({
       <div className={styles.reviewCoach}>
         <div className={styles.coachHeader}>
           <div className={styles.coachTitle}>
-            <span className={styles.reviewBadge} style={{ ['--review-color' as string]: coachReview?.colorHex ?? '#98b8ff' }}>
+            <span
+              className={styles.reviewBadge}
+              style={{ ['--review-color' as string]: coachReview?.colorHex ?? '#98b8ff' }}
+            >
               {coachReview?.label ?? 'Review'}
             </span>
-            <strong>{coachReview ? `${coachReview.moveLabel} ${coachReview.san}` : `${whiteReviewName} vs ${blackReviewName}`}</strong>
+            <strong>
+              {coachReview ? `${coachReview.moveLabel} ${coachReview.san}` : `${whiteReviewName} vs ${blackReviewName}`}
+            </strong>
           </div>
-          <span className={styles.statusText}>{timelineLoading ? formatTimelineProgress(timelineProgress) : `${reviewMoments.length} moments`}</span>
+          <span className={styles.statusText}>
+            {timelineLoading ? formatTimelineProgress(timelineProgress) : `${reviewMoments.length} moments`}
+          </span>
         </div>
         {coachReview ? <p className={styles.coachText}>{compactCoachText(coachReview)}</p> : null}
         <div className={styles.reviewCoachActions}>
@@ -1065,9 +1155,11 @@ export function GameReviewPanel({
       <div className={styles.reviewMoveTableScroller}>
         <table className={styles.reviewMoveTable} aria-label="Reviewed moves">
           <tbody>
-            {movePairs.map(pair => (
+            {movePairs.map((pair) => (
               <tr className={styles.reviewMoveRow} key={pair.moveNumber}>
-                <th className={styles.reviewMoveNumber} scope="row">{pair.moveNumber}.</th>
+                <th className={styles.reviewMoveNumber} scope="row">
+                  {pair.moveNumber}.
+                </th>
                 <ReviewMoveBadgeCell review={timelineReviews[pair.whitePly - 1] ?? null} />
                 <td className={styles.reviewMoveColumn}>
                   <ReviewMoveButton
@@ -1146,16 +1238,14 @@ function ReviewSaveDeckPanel({
   reviewSaveMoveSan: string | null;
   selectedDeckId: string | null;
 }) {
-  const ownedDecks = deckSummaries.filter(deck => deck.isOwned);
+  const ownedDecks = deckSummaries.filter((deck) => deck.isOwned);
   const hasOwnedDeck = ownedDecks.length > 0;
-  const activeDeckId = selectedDeckId && ownedDecks.some(deck => deck.id === selectedDeckId)
-    ? selectedDeckId
-    : ownedDecks[0]?.id ?? '';
-  const saveButtonLabel = reviewDeckSaveStatus === 'Saving'
-    ? 'Adding'
-    : reviewDeckSaveStatus === 'Saved'
-      ? 'Added'
-      : 'Add card';
+  const activeDeckId =
+    selectedDeckId && ownedDecks.some((deck) => deck.id === selectedDeckId)
+      ? selectedDeckId
+      : (ownedDecks[0]?.id ?? '');
+  const saveButtonLabel =
+    reviewDeckSaveStatus === 'Saving' ? 'Adding' : reviewDeckSaveStatus === 'Saved' ? 'Added' : 'Add card';
 
   useEffect(() => {
     if (!hasOwnedDeck || !activeDeckId || activeDeckId === selectedDeckId) {
@@ -1173,8 +1263,7 @@ function ReviewSaveDeckPanel({
         <p className={styles.copy}>Engine is finding the best move for this position.</p>
       ) : reviewSaveMoveSan ? (
         <p className={styles.copy}>
-          Create a training card where the answer is{' '}
-          <span className={styles.saveMoveAnswer}>{reviewSaveMoveSan}</span>.
+          Create a training card where the answer is <span className={styles.saveMoveAnswer}>{reviewSaveMoveSan}</span>.
         </p>
       ) : (
         <p className={styles.copy}>No best move is available for this position yet.</p>
@@ -1188,7 +1277,7 @@ function ReviewSaveDeckPanel({
             onChange={(event: ChangeEvent<HTMLSelectElement>) => onSelectSaveDeck(event.target.value)}
             value={activeDeckId}
           >
-            {ownedDecks.map(deck => (
+            {ownedDecks.map((deck) => (
               <option key={deck.id} value={deck.id}>
                 {deck.name}
               </option>
@@ -1295,9 +1384,10 @@ function ReviewTimelineStrip({
   timelineProgress: number | null;
   timelineReviews: TimelineReview[];
 }) {
-  const scores = timelineAnalyses.map(analysis => Math.max(-10, Math.min(10, toChartScore(analysis))));
+  const scores = timelineAnalyses.map((analysis) => Math.max(-10, Math.min(10, toChartScore(analysis))));
   const pointCount = Math.max(1, scores.length);
-  const cursorX = moveHistoryLength <= 1 ? 0 : ((Math.max(1, historyIndex) - 1) / Math.max(1, moveHistoryLength - 1)) * 100;
+  const cursorX =
+    moveHistoryLength <= 1 ? 0 : ((Math.max(1, historyIndex) - 1) / Math.max(1, moveHistoryLength - 1)) * 100;
   const progressValue = getTimelineProgressValue(timelineProgress);
   const timelinePoints = scores.map((score, index) => {
     const x = pointCount <= 1 ? 0 : (index / (pointCount - 1)) * 100;
@@ -1308,49 +1398,69 @@ function ReviewTimelineStrip({
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
     .join(' ');
   const whiteAreaPath = timelinePoints.length
-    ? `M 0 28 L ${timelinePoints.map(point => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' L ')} L 100 28 Z`
+    ? `M 0 28 L ${timelinePoints.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' L ')} L 100 28 Z`
     : '';
-  const loadingAreaPath = 'M 0 28 L 0 11.8 L 9 13.2 L 18 10.4 L 29 15.6 L 41 12.6 L 53 17.2 L 66 11.4 L 78 14.8 L 90 9.8 L 100 12.8 L 100 28 Z';
-  const loadingBoundaryPath = 'M 0 11.8 L 9 13.2 L 18 10.4 L 29 15.6 L 41 12.6 L 53 17.2 L 66 11.4 L 78 14.8 L 90 9.8 L 100 12.8';
+  const loadingAreaPath =
+    'M 0 28 L 0 11.8 L 9 13.2 L 18 10.4 L 29 15.6 L 41 12.6 L 53 17.2 L 66 11.4 L 78 14.8 L 90 9.8 L 100 12.8 L 100 28 Z';
+  const loadingBoundaryPath =
+    'M 0 11.8 L 9 13.2 L 18 10.4 L 29 15.6 L 41 12.6 L 53 17.2 L 66 11.4 L 78 14.8 L 90 9.8 L 100 12.8';
   const hasTimeline = timelineAnalysesLength > 0;
 
   return (
     <div className={styles.reviewTimeline}>
       <div className={`${styles.reviewTimelineGraph} ${timelineLoading ? styles.reviewTimelineGraphLoading : ''}`}>
-        <svg className={styles.reviewTimelineSvg} viewBox="0 0 100 28" preserveAspectRatio="none" aria-label="Evaluation timeline">
+        <svg
+          className={styles.reviewTimelineSvg}
+          viewBox="0 0 100 28"
+          preserveAspectRatio="none"
+          aria-label="Evaluation timeline"
+        >
           <rect className={styles.reviewTimelineBlack} x="0" y="0" width="100" height="28" />
           <path className={styles.reviewTimelineWhite} d={hasTimeline ? whiteAreaPath : loadingAreaPath} />
           <line className={styles.reviewTimelineMidline} x1="0" x2="100" y1="14" y2="14" />
           <path className={styles.reviewTimelinePath} d={hasTimeline ? boundaryPath : loadingBoundaryPath} />
-          <line className={styles.reviewTimelineCursor} x1={cursorX} x2={cursorX} y1="0" y2="28" vectorEffect="non-scaling-stroke" />
+          <line
+            className={styles.reviewTimelineCursor}
+            x1={cursorX}
+            x2={cursorX}
+            y1="0"
+            y2="28"
+            vectorEffect="non-scaling-stroke"
+          />
         </svg>
-        {hasTimeline ? timelineReviews.map(review => {
-          const dotColor = getReviewDotColor(review);
+        {hasTimeline
+          ? timelineReviews.map((review) => {
+              const dotColor = getReviewDotColor(review);
 
-          if (!dotColor) {
-            return null;
-          }
+              if (!dotColor) {
+                return null;
+              }
 
-          const point = timelinePoints[review.ply - 1] ?? { x: 0, y: 14 };
+              const point = timelinePoints[review.ply - 1] ?? { x: 0, y: 14 };
 
-          return (
-            <button
-              aria-label={`Go to ${review.moveLabel}`}
-              className={styles.reviewTimelinePoint}
-              key={review.ply}
-              onClick={() => jumpToIndex(review.ply)}
-              style={{
-                ['--timeline-point-color' as string]: dotColor,
-                left: `${point.x}%`,
-                top: `${(point.y / 28) * 100}%`,
-              }}
-              type="button"
-            />
-          );
-        }) : null}
+              return (
+                <button
+                  aria-label={`Go to ${review.moveLabel}`}
+                  className={styles.reviewTimelinePoint}
+                  key={review.ply}
+                  onClick={() => jumpToIndex(review.ply)}
+                  style={{
+                    ['--timeline-point-color' as string]: dotColor,
+                    left: `${point.x}%`,
+                    top: `${(point.y / 28) * 100}%`,
+                  }}
+                  type="button"
+                />
+              );
+            })
+          : null}
       </div>
       {timelineLoading ? (
-        <div className={styles.reviewTimelineProgress} aria-label={`Analysis ${formatTimelineProgress(progressValue)}`}>
+        <div
+          className={styles.reviewTimelineProgress}
+          role="status"
+          aria-label={`Analysis ${formatTimelineProgress(progressValue)}`}
+        >
           <div className={styles.reviewTimelineProgressTop}>
             <span>Deep analysis</span>
             <strong>{formatTimelineProgress(progressValue)}</strong>
@@ -1360,7 +1470,9 @@ function ReviewTimelineStrip({
           </div>
         </div>
       ) : null}
-      {!timelineLoading && timelineAnalysesLength === 0 ? <div className={styles.reviewTimelineFallback}>No review yet.</div> : null}
+      {!timelineLoading && timelineAnalysesLength === 0 ? (
+        <div className={styles.reviewTimelineFallback}>No review yet.</div>
+      ) : null}
       {timelineError ? <span className={styles.reviewTimelineError}>{timelineError}</span> : null}
     </div>
   );
@@ -1387,7 +1499,10 @@ function compactCoachText(review: TimelineReview) {
     return `${review.san} matches the engine's top move.`;
   }
 
-  if ((review.category === 'mistake' || review.category === 'blunder' || review.category === 'inaccuracy') && review.bestMoveSan) {
+  if (
+    (review.category === 'mistake' || review.category === 'blunder' || review.category === 'inaccuracy') &&
+    review.bestMoveSan
+  ) {
     return `${review.san} is ${review.label?.toLowerCase() ?? 'imprecise'}. Best was ${review.bestMoveSan}.`;
   }
 
@@ -1422,7 +1537,14 @@ function getReviewBadgeSrc(review: TimelineReview | null) {
   return reviewCategoryMeta[review.category]?.badge ?? null;
 }
 
-const REVIEW_DOT_CATEGORIES = new Set<ReviewCategory>(['brilliant', 'great', 'inaccuracy', 'mistake', 'miss', 'blunder']);
+const REVIEW_DOT_CATEGORIES = new Set<ReviewCategory>([
+  'brilliant',
+  'great',
+  'inaccuracy',
+  'mistake',
+  'miss',
+  'blunder',
+]);
 
 function formatRecentGamePlayers(game: ChessComRecentGameSummary) {
   const player = game.playerUsername ?? 'You';
@@ -1503,9 +1625,7 @@ function capitalizeRecentGameTimeClass(value: ChessComRecentGameTimeClass) {
 
 const MASTERY_GRADE_ORDER: MasteryGrade[] = ['F', 'E', 'D', 'C', 'B', 'A', 'S'];
 
-function buildMasteryGradeDistribution(
-  lines: ReturnType<typeof import('@/lib/deck-progress').summarizeLineMastery>,
-) {
+function buildMasteryGradeDistribution(lines: ReturnType<typeof import('@/lib/deck-progress').summarizeLineMastery>) {
   const counts = new Map<MasteryGrade, number>();
 
   for (const grade of MASTERY_GRADE_ORDER) {
@@ -1522,18 +1642,20 @@ function buildMasteryGradeDistribution(
     return [];
   }
 
-  return MASTERY_GRADE_ORDER.flatMap(grade => {
+  return MASTERY_GRADE_ORDER.flatMap((grade) => {
     const count = counts.get(grade) ?? 0;
 
     if (count === 0) {
       return [];
     }
 
-    return [{
-      grade,
-      count,
-      percent: Math.round((count / total) * 100),
-    }];
+    return [
+      {
+        grade,
+        count,
+        percent: Math.round((count / total) * 100),
+      },
+    ];
   });
 }
 
@@ -1676,9 +1798,9 @@ function DeckLibraryItem({
             <input
               className={`${styles.inlineInput} ${styles.deckRenameInput}`}
               onBlur={submitRename}
-              onChange={event => setRenameDraft(event.target.value)}
-              onClick={event => event.stopPropagation()}
-              onKeyDown={event => {
+              onChange={(event) => setRenameDraft(event.target.value)}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
                   submitRename();
@@ -1689,7 +1811,7 @@ function DeckLibraryItem({
                   cancelRename();
                 }
               }}
-              onPointerDown={event => event.stopPropagation()}
+              onPointerDown={(event) => event.stopPropagation()}
               ref={renameInputRef}
               value={renameDraft}
             />
@@ -1713,9 +1835,9 @@ function DeckLibraryItem({
             aria-label={`Deck options for ${deck.name}`}
             className={styles.deckLibraryMenuButton}
             disabled={deckBusy || deckActionLoading}
-            onClick={event => {
+            onClick={(event) => {
               event.stopPropagation();
-              setMenuOpen(open => !open);
+              setMenuOpen((open) => !open);
             }}
             type="button"
           >
@@ -1727,7 +1849,12 @@ function DeckLibraryItem({
               <button className={styles.deckLibraryMenuOption} onClick={startRename} role="menuitem" type="button">
                 Rename
               </button>
-              <button className={`${styles.deckLibraryMenuOption} ${styles.deckLibraryMenuOptionDanger}`} onClick={handleDeleteDeck} role="menuitem" type="button">
+              <button
+                className={`${styles.deckLibraryMenuOption} ${styles.deckLibraryMenuOptionDanger}`}
+                onClick={handleDeleteDeck}
+                role="menuitem"
+                type="button"
+              >
                 Delete
               </button>
             </div>
@@ -1822,7 +1949,7 @@ export function LearnPanel({
           </p>
         ) : (
           <div className={styles.deckLibrary}>
-            {deckSummaries.map(deck => (
+            {deckSummaries.map((deck) => (
               <DeckLibraryItem
                 deck={deck}
                 deckActionLoading={deckActionLoading}
@@ -1859,7 +1986,7 @@ export function LearnPanel({
         <div className={styles.inlineForm}>
           <input
             className={styles.inlineInput}
-            onChange={event => onNewDeckTitleChange(event.target.value)}
+            onChange={(event) => onNewDeckTitleChange(event.target.value)}
             placeholder="Deck title"
             ref={createDeckInputRef}
             value={newDeckTitle}
@@ -1874,7 +2001,12 @@ export function LearnPanel({
           </button>
         </div>
       </section>
-      <button className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`} onClick={onGenerateRecentDeck} disabled={deckActionLoading}>
+      <button
+        className={`${styles.action} ${styles.primary} ${styles.fullWidthAction}`}
+        onClick={onGenerateRecentDeck}
+        disabled={deckActionLoading}
+        type="button"
+      >
         {deckActionLoading ? 'Generating' : 'Generate automatic deck your last 50 games'}
       </button>
       {deckActionError ? <p className={styles.error}>{deckActionError}</p> : null}
@@ -1927,15 +2059,16 @@ export function DeckPanel({
   const cardGrade = activeCardProgress ? getMasteryGrade(activeCardProgress) : 'F';
   const cardScore = activeCardProgress ? getEffectiveMasteryScore(activeCardProgress) : 0;
   const activeOpeningGroup = card ? getDeckCardOpeningGroup(card) : null;
-  const activeLineMastery = activeOpeningGroup ? deckLineMastery.find(line => line.id === activeOpeningGroup.id) : null;
-  const gradeDistribution = useMemo(
-    () => buildMasteryGradeDistribution(deckLineMastery),
-    [deckLineMastery],
-  );
+  const activeLineMastery = activeOpeningGroup
+    ? deckLineMastery.find((line) => line.id === activeOpeningGroup.id)
+    : null;
+  const gradeDistribution = useMemo(() => buildMasteryGradeDistribution(deckLineMastery), [deckLineMastery]);
 
   return (
     <>
-      <section className={`${styles.card} ${styles.deckCard} ${styles.trainingDeckCard} ${getMasteryToneClass(cardGrade)}`}>
+      <section
+        className={`${styles.card} ${styles.deckCard} ${styles.trainingDeckCard} ${getMasteryToneClass(cardGrade)}`}
+      >
         {card ? (
           <>
             <div className={styles.trainingCardHead}>
@@ -1943,29 +2076,34 @@ export function DeckPanel({
                 <strong className={styles.trainingCardTitle}>{getOpeningDisplayName(card)}</strong>
                 <span className={styles.trainingCardEco}>Active card</span>
               </div>
-              <span className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(cardGrade)}`} title="Active card grade">{cardGrade}</span>
+              <span
+                className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(cardGrade)}`}
+                title="Active card grade"
+              >
+                {cardGrade}
+              </span>
             </div>
             <div className={styles.trainSessionProgress} aria-hidden="true">
               <div className={styles.trainSessionProgressFill} style={{ width: `${cardScore}%` }} />
             </div>
             <div className={styles.trainingCardMeta}>
               <span>Card {cardScore}/100</span>
-              <span>{trainAllSession ? `${trainSessionCardCurrent}/${trainSessionCardTotal}` : `${deckStats.due + deckStats.new} cards`}</span>
+              <span>
+                {trainAllSession
+                  ? `${trainSessionCardCurrent}/${trainSessionCardTotal}`
+                  : `${deckStats.due + deckStats.new} cards`}
+              </span>
             </div>
             {trainAllSession ? (
-              <div className={styles.trainSessionProgress} aria-label="Cram progress">
+              <div className={styles.trainSessionProgress} role="status" aria-label="Cram progress">
                 <div className={styles.trainSessionProgressFill} style={{ width: `${sessionProgressPercent}%` }} />
               </div>
             ) : null}
             {deckFeedback ? (
-              <div className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`}>
-                <strong>
-                  {deckFeedback.pending
-                    ? 'Checking eval'
-                    : deckFeedback.correct
-                      ? 'Best move'
-                      : 'Miss'}
-                </strong>
+              <div
+                className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`}
+              >
+                <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
                 <span>
                   played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
                   {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
@@ -1979,21 +2117,39 @@ export function DeckPanel({
                       : `${activeCardProgress ? `${getMasteryGrade(activeCardProgress)} · ${getEffectiveMasteryScore(activeCardProgress)}/100` : ''} · ${formatNextReview(activeCardProgress)}`}
                   </span>
                 ) : null}
-                {!deckFeedback.pending && !deckFeedback.correct && deckCounterSan ? <span>counter {deckCounterSan}</span> : null}
+                {!deckFeedback.pending && !deckFeedback.correct && deckCounterSan ? (
+                  <span>counter {deckCounterSan}</span>
+                ) : null}
               </div>
             ) : null}
             <div className={styles.deckActions}>
-              <button className={`${styles.action} ${styles.deleteAction}`} disabled={!card || !canDeleteCard || deckActionLoading} onClick={onDeleteCard} type="button">
+              <button
+                className={`${styles.action} ${styles.deleteAction}`}
+                disabled={!card || !canDeleteCard || deckActionLoading}
+                onClick={onDeleteCard}
+                type="button"
+              >
                 {deleteCardLabel}
               </button>
-              <button className={`${styles.action} ${styles.primary}`} disabled={deckPlaybackBusy} onClick={onNext} type="button">
+              <button
+                className={`${styles.action} ${styles.primary}`}
+                disabled={deckPlaybackBusy}
+                onClick={onNext}
+                type="button"
+              >
                 Next
               </button>
             </div>
           </>
         ) : (
           <>
-            <p className={styles.empty}>{deckLoading ? 'Loading learning cards from Supabase.' : trainAllSession ? 'No cram cards loaded.' : 'Nothing to study right now in this deck.'}</p>
+            <p className={styles.empty}>
+              {deckLoading
+                ? 'Loading learning cards from Supabase.'
+                : trainAllSession
+                  ? 'No cram cards loaded.'
+                  : 'Nothing to study right now in this deck.'}
+            </p>
             {deckLoadError ? <p className={styles.error}>{deckLoadError}</p> : null}
           </>
         )}
@@ -2003,9 +2159,16 @@ export function DeckPanel({
           <div className={styles.lineMetricHead}>
             <div className={styles.trainingCardTitleBlock}>
               <strong className={styles.lineMetricTitle}>Opening mastery</strong>
-              <span className={styles.lineMetricSubtitle}>{activeLineMastery.cardCount} cards in {getOpeningDisplayName(card!)}</span>
+              <span className={styles.lineMetricSubtitle}>
+                {activeLineMastery.cardCount} cards in {getOpeningDisplayName(card!)}
+              </span>
             </div>
-            <span className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(activeLineMastery.grade)}`} title="Line metric grade">{activeLineMastery.grade}</span>
+            <span
+              className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(activeLineMastery.grade)}`}
+              title="Line metric grade"
+            >
+              {activeLineMastery.grade}
+            </span>
           </div>
           <div className={styles.trainSessionProgress} aria-hidden="true">
             <div className={styles.trainSessionProgressFill} style={{ width: `${activeLineMastery.masteryScore}%` }} />
@@ -2023,11 +2186,11 @@ export function DeckPanel({
             <span>{deckLineMastery.length} openings</span>
           </div>
           <div
-            aria-label={`Line metric spread: ${gradeDistribution.map(segment => `${segment.grade} ${segment.percent}%`).join(', ')}`}
+            aria-label={`Line metric spread: ${gradeDistribution.map((segment) => `${segment.grade} ${segment.percent}%`).join(', ')}`}
             className={styles.masteryDistributionBar}
             role="img"
           >
-            {gradeDistribution.map(segment => (
+            {gradeDistribution.map((segment) => (
               <div
                 className={`${styles.masteryDistributionSegment} ${styles[`masteryDistribution${segment.grade}`]}`}
                 key={segment.grade}
@@ -2037,7 +2200,7 @@ export function DeckPanel({
             ))}
           </div>
           <div className={styles.masteryDistributionLegend}>
-            {gradeDistribution.map(segment => (
+            {gradeDistribution.map((segment) => (
               <span className={styles.masteryDistributionLegendItem} key={segment.grade}>
                 <span className={`${styles.masteryDistributionDot} ${styles[`masteryDistribution${segment.grade}`]}`} />
                 <span>{segment.grade}</span>
@@ -2067,8 +2230,23 @@ export function PgnImportDialog({
   setPgnDraft: (value: string) => void;
 }) {
   return (
-    <div className={styles.modalLayer} role="presentation" onMouseDown={onClose}>
-      <section className={styles.importDialog} role="dialog" aria-modal="true" aria-labelledby="pgn-import-title" onMouseDown={event => event.stopPropagation()}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: modal backdrop closes on click outside dialog
+    <div
+      className={styles.modalLayer}
+      onMouseDown={onClose}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          onClose();
+        }
+      }}
+    >
+      <section
+        className={styles.importDialog}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="pgn-import-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         <div className={styles.panelHeader}>
           <div>
             <h2 className={styles.sectionTitle} id="pgn-import-title">
@@ -2076,7 +2254,7 @@ export function PgnImportDialog({
             </h2>
             <p className={styles.support}>Use this only when you want full-game review.</p>
           </div>
-          <button className={styles.iconButton} onClick={onClose} title="Close import">
+          <button className={styles.iconButton} onClick={onClose} title="Close import" type="button">
             X
           </button>
         </div>
@@ -2084,7 +2262,12 @@ export function PgnImportDialog({
           <label className={`${styles.action} ${styles.primary}`} htmlFor="pgn-upload">
             Load file
           </label>
-          <button className={`${styles.action} ${styles.secondary}`} onClick={() => void handlePgnPaste()} disabled={!pgnDraft.trim()}>
+          <button
+            className={`${styles.action} ${styles.secondary}`}
+            onClick={() => void handlePgnPaste()}
+            disabled={!pgnDraft.trim()}
+            type="button"
+          >
             Paste PGN
           </button>
         </div>
@@ -2092,7 +2275,7 @@ export function PgnImportDialog({
         <textarea
           className={styles.pgnInput}
           value={pgnDraft}
-          onChange={event => setPgnDraft(event.target.value)}
+          onChange={(event) => setPgnDraft(event.target.value)}
           placeholder={'[Event "Live Chess"]\n[White "LosValettos"]\n[Black "rafaelpiresrj"]\n\n1. e4 e5 2. Nf3 Nc6'}
           spellCheck={false}
         />
@@ -2117,10 +2300,12 @@ function EngineLinesSection({
     <section className={`${styles.card} ${styles.engineCard}`}>
       <div className={styles.panelHeader}>
         <h2 className={styles.sectionTitle}>Engine</h2>
-        <span className={styles.statusText}>{positionLoading ? 'updating' : `depth ${positionAnalysis?.depth ?? '--'}`}</span>
+        <span className={styles.statusText}>
+          {positionLoading ? 'updating' : `depth ${positionAnalysis?.depth ?? '--'}`}
+        </span>
       </div>
       <div className={styles.engineLines}>
-        {lines.map(line => (
+        {lines.map((line) => (
           <div className={styles.engineLine} key={line.multipv}>
             <div className={styles.engineLineHead}>
               <span className={styles.engineRank}>#{line.multipv}</span>
@@ -2140,7 +2325,7 @@ function getDisplayEngineLines(positionAnalysis: AnalysisResult | null) {
     return [];
   }
 
-  return (positionAnalysis.lines ?? []).filter(line => Boolean(line.bestMove) || line.pv.length > 0).slice(0, 3);
+  return (positionAnalysis.lines ?? []).filter((line) => Boolean(line.bestMove) || line.pv.length > 0).slice(0, 3);
 }
 
 function formatCpSwing(value: number) {
@@ -2185,7 +2370,7 @@ function formatMoveFigurine(san: string) {
     N: '♘',
   };
 
-  return san.replace(/^[KQRBN]/, piece => pieces[piece] ?? piece);
+  return san.replace(/^[KQRBN]/, (piece) => pieces[piece] ?? piece);
 }
 
 function renderMoveFigurine(san: string): ReactNode {

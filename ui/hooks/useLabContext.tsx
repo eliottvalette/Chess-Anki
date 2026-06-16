@@ -1,5 +1,5 @@
-import { createContext, useContext, type ReactNode } from 'react';
-import { useLabState, type LabState } from './useLabState';
+import { createContext, type ReactNode, useContext } from 'react';
+import { type LabState, useLabState } from './useLabState';
 
 export const LabContext = createContext<LabState | null>(null);
 

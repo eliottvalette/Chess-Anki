@@ -32,7 +32,7 @@ export async function main() {
   }
 
   const migrations = readMigrationFiles('supabase/migrations');
-  const sql = buildCanonicalResetSql(migrations.map(migration => migration.sql).join('\n\n'));
+  const sql = buildCanonicalResetSql(migrations.map((migration) => migration.sql).join('\n\n'));
   const client = new Client(getPgConfig(loadLocalEnv()));
 
   await client.connect();
@@ -43,7 +43,7 @@ export async function main() {
     await client.end();
   }
 
-  console.log(`canonical deck schema recreated from: ${migrations.map(migration => migration.path).join(', ')}`);
+  console.log(`canonical deck schema recreated from: ${migrations.map((migration) => migration.path).join(', ')}`);
 }
 
 export function buildCanonicalResetSql(schemaSql) {
@@ -52,9 +52,9 @@ export function buildCanonicalResetSql(schemaSql) {
 
 export function readMigrationFiles(directory) {
   return readdirSync(directory)
-    .filter(fileName => fileName.endsWith('.sql'))
+    .filter((fileName) => fileName.endsWith('.sql'))
     .sort()
-    .map(fileName => {
+    .map((fileName) => {
       const path = `${directory}/${fileName}`;
       return {
         path,
@@ -106,7 +106,7 @@ export function getPgConfig(env) {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) {
-  main().catch(error => {
+  main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
   });

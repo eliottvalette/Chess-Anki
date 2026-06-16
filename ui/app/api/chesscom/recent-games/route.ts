@@ -25,12 +25,14 @@ export async function GET(request: Request) {
       timeClass,
     });
     const games = page.games.slice(0, count);
-    const profileUsernames = games.flatMap(game => [game.white?.username, game.black?.username]).filter(Boolean) as string[];
+    const profileUsernames = games
+      .flatMap((game) => [game.white?.username, game.black?.username])
+      .filter(Boolean) as string[];
     const profiles = await fetchPlayerProfiles(profileUsernames);
 
     return NextResponse.json({
       username,
-      games: games.map(game => toGameSummary(game, username, profiles)),
+      games: games.map((game) => toGameSummary(game, username, profiles)),
       hasMore: page.hasMore || page.games.length > count,
       nextCursor: page.nextCursor,
       nextOffset: page.nextOffset,

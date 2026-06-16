@@ -1,37 +1,40 @@
-import { useLab } from '../LabContext';
+import { Chess } from 'chess.js';
 import {
-  TrainingProfilePanel,
-  LinesPanel,
-  TrainPanel,
-  ReviewPanel,
   getModeLabel,
-  PgnImportDialog
+  LinesPanel,
+  PgnImportDialog,
+  ReviewPanel,
+  TrainingProfilePanel,
+  TrainPanel,
 } from '@/components/chess-lab-panels';
 import { formatBestMove } from '@/lib/chess-analysis-client';
-import styles from '../../chess-analysis-lab.module.css';
-import { Chess } from 'chess.js';
+import type { WorkspaceMode } from '../../../lib/analysis-types';
 import { createEmptyTrainSessionStats, LAST_TRAINING_DECK_STORAGE_KEY } from '../../../lib/lab-helpers';
-import { type WorkspaceMode } from '../../../lib/analysis-types';
+import styles from '../../chess-analysis-lab.module.css';
+import { useLab } from '../LabContext';
 
 export function LabSidebar() {
   const lab = useLab();
-  
+
   return (
     <>
       <section className={`${styles.panel} ${styles.contextPanel}`}>
         <div className={styles.modeTabs}>
-          {(['review', 'train', 'lines'] as WorkspaceMode[]).map(tabMode => (
+          {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
             <button
               key={tabMode}
               className={`${styles.modeTab} ${lab.labState.mode === tabMode ? styles.activeModeTab : ''}`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
+              type="button"
             >
               {getModeLabel(tabMode)}
             </button>
           ))}
         </div>
 
-        <div className={`${styles.panelScroll} ${lab.labState.mode === 'review' && lab.hasLoadedGame ? styles.reviewPanelScroll : ''}`}>
+        <div
+          className={`${styles.panelScroll} ${lab.labState.mode === 'review' && lab.hasLoadedGame ? styles.reviewPanelScroll : ''}`}
+        >
           {lab.labState.mode === 'review' ? (
             <ReviewPanel
               activeReviewMoment={lab.activeReviewMoment}
@@ -80,7 +83,6 @@ export function LabSidebar() {
               reviewSaveMoveSan={lab.deckOpponentBestSan ?? null}
               positionLoading={lab.labState.positionLoading}
               deckSummaries={lab.labState.deckSummaries}
-
               recentGameTimeClass={lab.labState.recentGameTimeClass}
               recentGames={lab.labState.recentChessGames}
               recentGamesError={lab.labState.recentChessGamesError}
@@ -90,10 +92,10 @@ export function LabSidebar() {
               onRecentGameTimeClassChange={lab.labState.setRecentGameTimeClass}
               canSaveReviewCard={Boolean(
                 lab.labState.trainingProfile &&
-                lab.labState.selectedDeckId &&
-                lab.displayAnalysis?.bestMove &&
-                !lab.labState.positionLoading &&
-                (!lab.labState.saveReplayFromStart || lab.currentMoves.length > 0)
+                  lab.labState.selectedDeckId &&
+                  lab.displayAnalysis?.bestMove &&
+                  !lab.labState.positionLoading &&
+                  (!lab.labState.saveReplayFromStart || lab.currentMoves.length > 0),
               )}
               onSaveReviewCard={() => void lab.saveReviewPositionToDeck()}
               onGoCreateDeck={lab.openTrainCreateDeck}
@@ -130,7 +132,12 @@ export function LabSidebar() {
               deckFeedback={lab.labState.deckFeedback}
               drillActive={lab.labState.openingDrillActive}
               drillStatus={lab.labState.openingDrillStatus}
-              expectedSan={lab.labState.openingDrillExpected?.san ?? (lab.labState.openingDrillExpected?.uci ? formatBestMove(lab.currentFen, lab.labState.openingDrillExpected.uci) : null)}
+              expectedSan={
+                lab.labState.openingDrillExpected?.san ??
+                (lab.labState.openingDrillExpected?.uci
+                  ? formatBestMove(lab.currentFen, lab.labState.openingDrillExpected.uci)
+                  : null)
+              }
               loading={lab.labState.openingTreesLoading}
               onImportRecent={() => void lab.importRecentOpeningTrees()}
               onSelectNode={lab.selectOpeningNode}
@@ -206,14 +213,13 @@ export function LabSidebar() {
                 }
               }}
               selectedDeckId={lab.labState.selectedDeckId}
-                            focusCreateDeck={lab.labState.focusTrainCreateDeck}
-
+              focusCreateDeck={lab.labState.focusTrainCreateDeck}
               onCreateDeck={() => void lab.createTrainingDeck(lab.labState.newDeckTitle)}
               onGenerateRecentDeck={() => void lab.generateRecentTrainingDeck()}
               onDeleteCard={() => void lab.deleteActiveDeckCard()}
               onNext={lab.advanceDeckCard}
               onNewDeckTitleChange={lab.labState.setNewDeckTitle}
-              onTrainDeck={deckId => void lab.trainDeckFromLibrary(deckId)}
+              onTrainDeck={(deckId) => void lab.trainDeckFromLibrary(deckId)}
               onTrainAll={() => void lab.trainAllDecks()}
               onRenameDeck={(deckId, name) => void lab.renameTrainingDeck(deckId, name)}
               onDeleteDeck={() => void lab.deleteTrainingDeck(lab.labState.selectedDeckId!)}
@@ -221,20 +227,18 @@ export function LabSidebar() {
             />
           )}
         </div>
-
-        
       </section>
 
       {lab.labState.pgnDialogOpen && (
-      <PgnImportDialog
-        fileName={lab.labState.fileName}
-        handlePgnPaste={lab.handlePgnPaste}
-        handleUpload={lab.handleUpload}
-        onClose={() => lab.labState.setPgnDialogOpen(false)}
-        pgnDraft={lab.labState.pgnDraft}
-        setPgnDraft={lab.labState.setPgnDraft}
-      />
-    )}
+        <PgnImportDialog
+          fileName={lab.labState.fileName}
+          handlePgnPaste={lab.handlePgnPaste}
+          handleUpload={lab.handleUpload}
+          onClose={() => lab.labState.setPgnDialogOpen(false)}
+          pgnDraft={lab.labState.pgnDraft}
+          setPgnDraft={lab.labState.setPgnDraft}
+        />
+      )}
     </>
   );
 }

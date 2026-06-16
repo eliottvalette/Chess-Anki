@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { loadLocalEnv, requireEnv } from './env.mjs';
 
-main().catch(error => {
+main().catch((error) => {
   console.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });
@@ -11,7 +11,8 @@ async function main() {
   const env = loadLocalEnv();
   const supabaseUrl = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const publishableKey = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY');
-  const adminKey = env.SUPABASE_ADMIN_KEY?.trim() || env.SUPABASE_SERVICE_ROLE_KEY?.trim() || env.SUPABASE_SECRET_KEY?.trim();
+  const adminKey =
+    env.SUPABASE_ADMIN_KEY?.trim() || env.SUPABASE_SERVICE_ROLE_KEY?.trim() || env.SUPABASE_SECRET_KEY?.trim();
 
   const publicClient = createClient(supabaseUrl, publishableKey, {
     auth: {
@@ -49,7 +50,9 @@ async function checkPublicRead(publicClient) {
   const { data, error } = await publicClient.from('decks').select('id,name,version,is_active').limit(5);
 
   if (error) {
-    throw new Error(`public deck read failed. Did you apply supabase/migrations/0001_learning_decks.sql? ${error.message}`);
+    throw new Error(
+      `public deck read failed. Did you apply supabase/migrations/0001_learning_decks.sql? ${error.message}`,
+    );
   }
 
   console.log(JSON.stringify({ public_decks_read: data.length }, null, 2));

@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import type { DeckProgressEntry, DeckProgressMap } from '@/lib/deck-progress';
-import { TRAINING_SESSION_COOKIE, hashTrainingSessionToken, parseTrainingSessionCookie } from '@/lib/training-profile';
+import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 export async function GET() {
@@ -15,7 +15,9 @@ export async function GET() {
   const supabase = createAdminClient();
   const { data, error } = await supabase
     .from('training_card_progress')
-    .select('card_id,seen_count,correct_count,miss_count,streak,review_count,lapse_count,learning_step,ease,interval_days,mastery_score,last_response_ms,last_rating,stability,difficulty,retrievability,ignored,last_outcome,due_at,last_seen_at')
+    .select(
+      'card_id,seen_count,correct_count,miss_count,streak,review_count,lapse_count,learning_step,ease,interval_days,mastery_score,last_response_ms,last_rating,stability,difficulty,retrievability,ignored,last_outcome,due_at,last_seen_at',
+    )
     .eq('profile_id', profile.id);
 
   if (error) {
@@ -37,7 +39,13 @@ export async function GET() {
       intervalDays: Number(row.interval_days ?? 0),
       masteryScore: Number(row.mastery_score ?? 0),
       lastResponseMs: row.last_response_ms == null ? null : Number(row.last_response_ms),
-      lastRating: row.last_rating === 'fail' || row.last_rating === 'hard' || row.last_rating === 'good' || row.last_rating === 'easy' ? row.last_rating : null,
+      lastRating:
+        row.last_rating === 'fail' ||
+        row.last_rating === 'hard' ||
+        row.last_rating === 'good' ||
+        row.last_rating === 'easy'
+          ? row.last_rating
+          : null,
       stability: Number(row.stability ?? 0),
       difficulty: Number(row.difficulty ?? 5),
       retrievability: Number(row.retrievability ?? 0),
@@ -65,73 +73,77 @@ export async function POST(request: Request) {
     const supabase = createAdminClient();
     const progressCardIds = Object.keys(progress);
     const validProgressCardIds = await fetchExistingCardIds(supabase, progressCardIds);
-  const rows = Object.entries(progress).flatMap(([cardId, entry]) => {
-    if (!validProgressCardIds.has(cardId)) {
-      return [];
-    }
+    const rows = Object.entries(progress).flatMap(([cardId, entry]) => {
+      if (!validProgressCardIds.has(cardId)) {
+        return [];
+      }
 
-    return [{
-    profile_id: profile.id,
-    card_id: cardId,
-    seen_count: entry.seenCount,
-    correct_count: entry.correctCount,
-    miss_count: entry.missCount,
-    streak: entry.streak,
-    review_count: entry.reviewCount,
-    lapse_count: entry.lapseCount,
-    learning_step: entry.learningStep,
-    ease: entry.ease,
-    interval_days: entry.intervalDays,
-    mastery_score: entry.masteryScore,
-    last_response_ms: entry.lastResponseMs,
-    last_rating: entry.lastRating,
-    stability: entry.stability,
-    difficulty: entry.difficulty,
-    retrievability: entry.retrievability,
-    ignored: entry.ignored,
-    last_outcome: entry.lastOutcome,
-    due_at: entry.dueAt ?? new Date(0).toISOString(),
-    last_seen_at: entry.lastSeenAt,
-    }];
-  });
-
-  let saved = 0;
-
-  if (rows.length > 0) {
-    const { error } = await supabase.from('training_card_progress').upsert(rows, { onConflict: 'profile_id,card_id' });
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    saved = rows.length;
-  }
-
-  if (attempt) {
-    const attemptCardIds = await fetchExistingCardIds(supabase, [attempt.cardId]);
-
-    if (!attemptCardIds.has(attempt.cardId)) {
-      return NextResponse.json({ saved, attemptSaved: false });
-    }
-
-    const { error } = await supabase.from('training_card_attempts').insert({
-      profile_id: profile.id,
-      card_id: attempt.cardId,
-      played_uci: attempt.playedUci,
-      played_san: attempt.playedSan,
-      expected_uci: attempt.expectedUci,
-      expected_san: attempt.expectedSan,
-      correct: attempt.correct,
-      exact: attempt.exact,
-      eval_loss_cp: attempt.evalLossCp,
+      return [
+        {
+          profile_id: profile.id,
+          card_id: cardId,
+          seen_count: entry.seenCount,
+          correct_count: entry.correctCount,
+          miss_count: entry.missCount,
+          streak: entry.streak,
+          review_count: entry.reviewCount,
+          lapse_count: entry.lapseCount,
+          learning_step: entry.learningStep,
+          ease: entry.ease,
+          interval_days: entry.intervalDays,
+          mastery_score: entry.masteryScore,
+          last_response_ms: entry.lastResponseMs,
+          last_rating: entry.lastRating,
+          stability: entry.stability,
+          difficulty: entry.difficulty,
+          retrievability: entry.retrievability,
+          ignored: entry.ignored,
+          last_outcome: entry.lastOutcome,
+          due_at: entry.dueAt ?? new Date(0).toISOString(),
+          last_seen_at: entry.lastSeenAt,
+        },
+      ];
     });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-  }
+    let saved = 0;
 
-  return NextResponse.json({ saved, attemptSaved: Boolean(attempt) });
+    if (rows.length > 0) {
+      const { error } = await supabase
+        .from('training_card_progress')
+        .upsert(rows, { onConflict: 'profile_id,card_id' });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+
+      saved = rows.length;
+    }
+
+    if (attempt) {
+      const attemptCardIds = await fetchExistingCardIds(supabase, [attempt.cardId]);
+
+      if (!attemptCardIds.has(attempt.cardId)) {
+        return NextResponse.json({ saved, attemptSaved: false });
+      }
+
+      const { error } = await supabase.from('training_card_attempts').insert({
+        profile_id: profile.id,
+        card_id: attempt.cardId,
+        played_uci: attempt.playedUci,
+        played_san: attempt.playedSan,
+        expected_uci: attempt.expectedUci,
+        expected_san: attempt.expectedSan,
+        correct: attempt.correct,
+        exact: attempt.exact,
+        eval_loss_cp: attempt.evalLossCp,
+      });
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ saved, attemptSaved: Boolean(attempt) });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to save training progress.';
     return NextResponse.json({ error: message }, { status: 500 });
@@ -163,7 +175,13 @@ function sanitizeProgress(value: unknown): DeckProgressMap {
       intervalDays: clampCount(entry.intervalDays),
       masteryScore: clampCount(entry.masteryScore),
       lastResponseMs: clampNullableCount(entry.lastResponseMs),
-      lastRating: entry.lastRating === 'fail' || entry.lastRating === 'hard' || entry.lastRating === 'good' || entry.lastRating === 'easy' ? entry.lastRating : null,
+      lastRating:
+        entry.lastRating === 'fail' ||
+        entry.lastRating === 'hard' ||
+        entry.lastRating === 'good' ||
+        entry.lastRating === 'easy'
+          ? entry.lastRating
+          : null,
       stability: clampMemoryNumber(entry.stability, 0, 0, 3650),
       difficulty: clampMemoryNumber(entry.difficulty, 5, 1, 10),
       retrievability: clampMemoryNumber(entry.retrievability, 0, 0, 1),

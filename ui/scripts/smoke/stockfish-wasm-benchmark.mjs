@@ -1,5 +1,5 @@
-import stockfish from 'stockfish';
 import { Chess } from 'chess.js';
+import stockfish from 'stockfish';
 
 import {
   buildPositionCommand,
@@ -26,15 +26,21 @@ async function main() {
   const nativeUrl = options.nativeUrl ?? DEFAULT_NATIVE_URL;
   const positions = await loadRecentPositions({ username, archive, positionCount, depth, multipv });
 
-  console.log(JSON.stringify({
-    benchmark: 'stockfish-native-vs-wasm',
-    username,
-    archive,
-    positions: positions.length,
-    depth,
-    multipv,
-    nativeUrl,
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        benchmark: 'stockfish-native-vs-wasm',
+        username,
+        archive,
+        positions: positions.length,
+        depth,
+        multipv,
+        nativeUrl,
+      },
+      null,
+      2,
+    ),
+  );
 
   const native = await benchmarkNative(positions, { depth, multipv, nativeUrl });
   const lite = await benchmarkWasm('lite-single', positions, { depth, multipv });
@@ -104,8 +110,8 @@ async function loadRecentPositions({ username, archive, positionCount, depth, mu
       continue;
     }
 
-    const moves = game.history({ verbose: true }).map(move => `${move.from}${move.to}${move.promotion ?? ''}`);
-    const interestingPlies = [4, 6, 8, 10, 12, 14, 16, 20, 24, 30, 36, 44].filter(ply => ply < moves.length);
+    const moves = game.history({ verbose: true }).map((move) => `${move.from}${move.to}${move.promotion ?? ''}`);
+    const interestingPlies = [4, 6, 8, 10, 12, 14, 16, 20, 24, 30, 36, 44].filter((ply) => ply < moves.length);
 
     for (const ply of interestingPlies) {
       const request = {
@@ -211,16 +217,17 @@ class WasmStockfishSession {
   }
 
   initialize() {
-    return this.run([
-      'uci',
-    ], line => line === 'uciok').then(() =>
-      this.run([
-        `setoption name Threads value ${this.engineName === 'full' ? 4 : 1}`,
-        'setoption name Hash value 32',
-        'setoption name UCI_AnalyseMode value true',
-        'setoption name UCI_ShowWDL value true',
-        'isready',
-      ], line => line === 'readyok'),
+    return this.run(['uci'], (line) => line === 'uciok').then(() =>
+      this.run(
+        [
+          `setoption name Threads value ${this.engineName === 'full' ? 4 : 1}`,
+          'setoption name Hash value 32',
+          'setoption name UCI_AnalyseMode value true',
+          'setoption name UCI_ShowWDL value true',
+          'isready',
+        ],
+        (line) => line === 'readyok',
+      ),
     );
   }
 
@@ -229,12 +236,16 @@ class WasmStockfishSession {
     const safeMultiPv = sanitizeMultiPv(request.multipv);
     const positionCommand = buildPositionCommand(request);
     const analysisFen = getAnalysisFen(request);
-    const lines = await this.run([
-      'setoption name Clear Hash',
-      `setoption name MultiPV value ${safeMultiPv}`,
-      positionCommand,
-      `go depth ${safeDepth}`,
-    ], line => line.startsWith('bestmove '), 60_000);
+    const lines = await this.run(
+      [
+        'setoption name Clear Hash',
+        `setoption name MultiPV value ${safeMultiPv}`,
+        positionCommand,
+        `go depth ${safeDepth}`,
+      ],
+      (line) => line.startsWith('bestmove '),
+      60_000,
+    );
 
     return parseAnalysis(lines, analysisFen, safeDepth);
   }
@@ -245,10 +256,12 @@ class WasmStockfishSession {
       const previousListener = this.engine.listener;
       const timer = setTimeout(() => {
         this.engine.listener = previousListener;
-        reject(new Error(`${this.engineName} timeout after ${timeoutMs}ms. Last lines: ${lines.slice(-6).join(' | ')}`));
+        reject(
+          new Error(`${this.engineName} timeout after ${timeoutMs}ms. Last lines: ${lines.slice(-6).join(' | ')}`),
+        );
       }, timeoutMs);
 
-      this.engine.listener = line => {
+      this.engine.listener = (line) => {
         const text = String(line ?? '').trim();
 
         if (!text) {
@@ -272,7 +285,7 @@ class WasmStockfishSession {
 }
 
 function summarizeEngine(run) {
-  const elapsed = run.results.map(result => result.elapsedMs).sort((left, right) => left - right);
+  const elapsed = run.results.map((result) => result.elapsedMs).sort((left, right) => left - right);
 
   return {
     engine: run.engine,
@@ -285,16 +298,20 @@ function summarizeEngine(run) {
 }
 
 function compareEngines(reference, candidate) {
-  const pairs = reference.map((referenceResult, index) => ({
-    reference: referenceResult,
-    candidate: candidate[index],
-  })).filter(pair => pair.candidate);
-  const bestMoveMatches = pairs.filter(pair => pair.reference.analysis.bestMove === pair.candidate.analysis.bestMove);
-  const cpDeltas = pairs.map(pair => Math.abs(getWhiteCp(pair.reference.analysis) - getWhiteCp(pair.candidate.analysis))).filter(Number.isFinite);
+  const pairs = reference
+    .map((referenceResult, index) => ({
+      reference: referenceResult,
+      candidate: candidate[index],
+    }))
+    .filter((pair) => pair.candidate);
+  const bestMoveMatches = pairs.filter((pair) => pair.reference.analysis.bestMove === pair.candidate.analysis.bestMove);
+  const cpDeltas = pairs
+    .map((pair) => Math.abs(getWhiteCp(pair.reference.analysis) - getWhiteCp(pair.candidate.analysis)))
+    .filter(Number.isFinite);
   const disagreements = pairs
-    .filter(pair => pair.reference.analysis.bestMove !== pair.candidate.analysis.bestMove)
+    .filter((pair) => pair.reference.analysis.bestMove !== pair.candidate.analysis.bestMove)
     .slice(0, 8)
-    .map(pair => ({
+    .map((pair) => ({
       id: pair.reference.id,
       ply: pair.reference.ply,
       native_best: pair.reference.analysis.bestMove,
@@ -309,7 +326,10 @@ function compareEngines(reference, candidate) {
     positions: pairs.length,
     best_move_match_rate: round(bestMoveMatches.length / Math.max(1, pairs.length), 4),
     avg_abs_cp_delta: round(avg(cpDeltas), 1),
-    p95_abs_cp_delta: percentile(cpDeltas.sort((left, right) => left - right), 0.95),
+    p95_abs_cp_delta: percentile(
+      cpDeltas.sort((left, right) => left - right),
+      0.95,
+    ),
     disagreements,
   };
 }
