@@ -10,6 +10,7 @@ import {
 } from '@xyflow/react';
 import dagre from 'dagre';
 import { type ChangeEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import styles from './chess-analysis-lab.module.css';
 import '@xyflow/react/dist/style.css';
 
 function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
@@ -66,7 +67,36 @@ export type TrainSessionStats = {
 };
 
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
-import styles from './chess-analysis-lab.module.css';
+
+const masteryGradeClassByGrade = {
+  F: 'bg-[#d94b62] text-[#fff7f8]',
+  E: 'bg-[#d94b62] text-[#fff7f8]',
+  D: 'bg-[#d98a35] text-[#fff7ec]',
+  C: 'bg-[#d98a35] text-[#fff7ec]',
+  B: 'bg-[#4e93d8] text-[#f5fbff]',
+  A: 'bg-[#35a979] text-[#f4fff9]',
+  S: 'bg-[#35a979] text-[#f4fff9]',
+} as const satisfies Record<string, string>;
+
+const masteryToneClassByGrade = {
+  F: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
+  E: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
+  D: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
+  C: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
+  B: 'border-[rgba(138,198,255,0.34)] bg-[rgba(42,82,126,0.18)]',
+  A: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
+  S: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
+} as const satisfies Record<string, string>;
+
+const masteryDistributionClassByGrade = {
+  F: 'bg-[rgba(217,75,98,0.62)]',
+  E: 'bg-[rgba(217,75,98,0.48)]',
+  D: 'bg-[rgba(217,138,53,0.58)]',
+  C: 'bg-[rgba(217,138,53,0.44)]',
+  B: 'bg-[rgba(78,147,216,0.56)]',
+  A: 'bg-[rgba(53,169,121,0.58)]',
+  S: 'bg-[rgba(53,169,121,0.72)]',
+} as const satisfies Record<string, string>;
 
 export type WorkspaceMode = 'review' | 'train' | 'lines';
 
@@ -289,7 +319,7 @@ export function LinesPanel({
           </div>
 
           <section
-            className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}
+            className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.feedbackGood : deckFeedback?.pending === false ? styles.feedbackBad : styles.feedbackPending) : ''}`}
           >
             <div className={styles.trainingCardHead}>
               <div className={styles.trainingCardTitleBlock}>
@@ -564,8 +594,8 @@ export function ReviewPanel({
   }
 
   return (
-    <div className={styles.reviewLoadedPanel}>
-      <section className={styles.reviewLoadedTop}>
+    <div className="min-h-0 h-full grid grid-rows-[auto_minmax(0,1fr)] gap-[10px]">
+      <section className="min-h-0 flex-[0_0_auto]">
         <button
           className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
           onClick={onBack}
@@ -675,7 +705,7 @@ export function TrainPanel({
 
   return (
     <>
-      <div className={styles.trainBackRow}>
+      <div className="flex w-full items-stretch gap-[8px]">
         <button
           className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
           onClick={onBack}
@@ -731,20 +761,24 @@ export function TrainingProfilePanel({
   const statusText = bootstrapping ? 'syncing' : submitting ? 'signing in' : 'required';
 
   return (
-    <section className={`${styles.card} ${styles.emptyStateCard}`}>
-      <div className={styles.panelHeader}>
-        <h2 className={styles.sectionTitle}>Training Profile</h2>
-        <span className={styles.statusText}>{statusText}</span>
+    <section
+      className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto] gap-[18px] overflow-visible gap-[16px]'}`}
+    >
+      <div className="min-w-0 flex items-center justify-between gap-[14px]">
+        <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+          Training Profile
+        </h2>
+        <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">{statusText}</span>
       </div>
       <form
-        className={styles.profileForm}
+        className="grid grid-cols-2 gap-[8px] grid-cols-1fr"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit();
         }}
       >
         <input
-          className={`${styles.inlineInput} ${styles.profileFormWide}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
@@ -755,7 +789,7 @@ export function TrainingProfilePanel({
           spellCheck={false}
         />
         <input
-          className={`${styles.inlineInput} ${styles.profileFormWide}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
@@ -772,7 +806,7 @@ export function TrainingProfilePanel({
           {submitting ? 'Opening profile' : 'Open profile'}
         </button>
       </form>
-      {error ? <p className={styles.error}>{error}</p> : null}
+      {error ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{error}</p> : null}
     </section>
   );
 }
@@ -810,33 +844,49 @@ export function AnalyzePanel({
           positionLoading={positionLoading}
         />
       ) : null}
-      <section className={`${styles.card} ${styles.movesCard}`}>
-        <div className={styles.panelHeader}>
-          <h2 className={styles.sectionTitle}>Line</h2>
-          <span className={styles.statusText}>{movePairs.length ? `${movePairs.length} moves` : 'manual board'}</span>
+      <section
+        className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto]'}`}
+      >
+        <div className="min-w-0 flex items-center justify-between gap-[14px]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+            Line
+          </h2>
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
+            {movePairs.length ? `${movePairs.length} moves` : 'manual board'}
+          </span>
         </div>
         <div className={styles.moveList}>
           {movePairs.length === 0 ? (
-            <p className={styles.empty}>Play on the board or import a PGN.</p>
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+              Play on the board or import a PGN.
+            </p>
           ) : (
             <>
-              <div className={styles.moveTableHeader} aria-hidden="true">
+              <div
+                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-0 min-h-[30px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.1)] bg-[rgba(255,255,255,0.03)] text-[var(--text-soft)] text-[11px] font-[weight:400] tracking-[0.08em] uppercase"
+                aria-hidden="true"
+              >
                 <span />
                 <span>White</span>
                 <span>Black</span>
               </div>
               {movePairs.map((pair) => (
-                <div className={styles.moveRow} key={pair.moveNumber}>
-                  <span className={styles.moveNumber}>{pair.moveNumber}.</span>
+                <div
+                  className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] gap-0 items-center min-h-[42px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.07)] border-b-0"
+                  key={pair.moveNumber}
+                >
+                  <span className="text-[14px] leading-[1.45] text-[13px] font-[weight:400] text-[var(--text-soft)]">
+                    {pair.moveNumber}.
+                  </span>
                   <button
-                    className={`${styles.moveCellButton} ${historyIndex === pair.whitePly ? styles.activeMoveCell : ''}`}
+                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[var(--text)] text-[15px] font-[weight:650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.whitePly ? 'bg-[rgba(198,215,255,0.14)] text-[var(--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
                     onClick={() => jumpToIndex(pair.whitePly)}
                     type="button"
                   >
                     {pair.white ? renderMoveFigurine(pair.white.san) : '...'}
                   </button>
                   <button
-                    className={`${styles.moveCellButton} ${historyIndex === pair.blackPly ? styles.activeMoveCell : ''}`}
+                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[var(--text)] text-[15px] font-[weight:650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.blackPly ? 'bg-[rgba(198,215,255,0.14)] text-[var(--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
                     onClick={() => jumpToIndex(pair.blackPly)}
                     disabled={!pair.black}
                     type="button"
@@ -960,17 +1010,23 @@ export function GameReviewPanel({
   if (!hasLoadedGame) {
     return (
       <>
-        <section className={`${styles.card} ${styles.emptyStateCard}`}>
-          <div className={styles.panelHeader}>
-            <h2 className={styles.sectionTitle}>Game Review</h2>
-            <span className={styles.statusText}>
+        <section
+          className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto] gap-[18px] overflow-visible gap-[16px]'}`}
+        >
+          <div className="min-w-0 flex items-center justify-between gap-[14px]">
+            <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+              Game Review
+            </h2>
+            <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
               {recentGamesLoading ? 'loading' : recentGames.length ? `${recentGames.length} games` : 'ready'}
             </span>
           </div>
-          <p className={styles.copy}>Use your Chess.com username to pull recent public games.</p>
-          <div className={styles.inlineForm}>
+          <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+            Use your Chess.com username to pull recent public games.
+          </p>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
             <input
-              className={styles.inlineInput}
+              className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
               value={chesscomUsername}
               onChange={(event) => onChesscomUsernameChange(event.target.value)}
               autoComplete="off"
@@ -996,7 +1052,7 @@ export function GameReviewPanel({
               {recentGamesLoading ? 'Loading' : 'Fetch games'}
             </button>
           </div>
-          <div className={styles.reviewSideTabs}>
+          <div className="grid gap-[8px] grid-cols-3">
             {(['bullet', 'blitz', 'rapid'] as const).map((timeClass) => (
               <button
                 className={`${styles.action} ${recentGameTimeClass === timeClass ? styles.primary : styles.secondary}`}
@@ -1008,7 +1064,9 @@ export function GameReviewPanel({
               </button>
             ))}
           </div>
-          {recentGamesError ? <p className={styles.error}>{recentGamesError}</p> : null}
+          {recentGamesError ? (
+            <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{recentGamesError}</p>
+          ) : null}
         </section>
         {recentGames.length ? (
           <section className={`${styles.card} ${styles.openingListCard}`}>
@@ -1054,12 +1112,12 @@ export function GameReviewPanel({
   }
 
   return (
-    <section className={styles.reviewGamePanel}>
-      <div className={styles.reviewCoach}>
-        <div className={styles.coachHeader}>
-          <div className={styles.coachTitle}>
+    <section className="min-h-0 h-full grid grid-rows-[clamp(132px,16svh,148px)_minmax(0,1fr)_clamp(44px,8svh,62px)] gap-[10px] overflow-hidden">
+      <div className="border-[1px] border-solid border-[rgba(214,226,244,0.14)] rounded-[10px] bg-[rgba(8,12,19,0.78)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] min-h-0 flex flex-col gap-[7px] p-[9px] overflow-hidden">
+        <div className="min-w-0 flex items-center justify-between gap-[14px] text-[var(--text)] text-[15px] overflow-hidden text-ellipsis whitespace-nowrap">
+          <div className="min-w-0 flex items-center gap-[8px] text-[var(--text)] text-[15px] font-[weight:550] overflow-hidden text-ellipsis whitespace-nowrap">
             <span
-              className={styles.reviewBadge}
+              className="flex-[0_0_auto] px-[8px] py-[5px] rounded-[999px] bg-color-mix(in bg-srgb,var(--review-color) bg-[rgba(9,14,23,0.42)] border-[1px] border-solid border-color-mix(in border-srgb,var(--review-color) border-50%,rgba(214,226,244,0.18)) text-[var(--text)] text-[11px] font-[weight:550] tracking-[0.06em] uppercase"
               style={{ ['--review-color' as string]: coachReview?.colorHex ?? '#98b8ff' }}
             >
               {coachReview?.label ?? 'Review'}
@@ -1068,12 +1126,16 @@ export function GameReviewPanel({
               {coachReview ? `${coachReview.moveLabel} ${coachReview.san}` : `${whiteReviewName} vs ${blackReviewName}`}
             </strong>
           </div>
-          <span className={styles.statusText}>
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
             {timelineLoading ? formatTimelineProgress(timelineProgress) : `${reviewMoments.length} moments`}
           </span>
         </div>
-        {coachReview ? <p className={styles.coachText}>{compactCoachText(coachReview)}</p> : null}
-        <div className={styles.reviewCoachActions}>
+        {coachReview ? (
+          <p className="m-0 min-h-[calc(12.5px*1.2*2)] text-[var(--text-muted)] text-[12.5px] leading-[1.2] box line-clamp-2 [-webkit-box-orient:vertical] overflow-hidden">
+            {compactCoachText(coachReview)}
+          </p>
+        ) : null}
+        <div className="grid grid-cols-2 gap-[8px] mt-auto min-h-[36px]">
           <button
             className={`${styles.action} ${styles.actionBest}`}
             onClick={() => {
@@ -1102,12 +1164,15 @@ export function GameReviewPanel({
         <table className={styles.reviewMoveTable} aria-label="Reviewed moves">
           <tbody>
             {movePairs.map((pair) => (
-              <tr className={styles.reviewMoveRow} key={pair.moveNumber}>
-                <th className={styles.reviewMoveNumber} scope="row">
+              <tr className="h-[38px] bg-[rgba(255,255,255,0.026)]" key={pair.moveNumber}>
+                <th
+                  className="text-[var(--text-soft)] text-[12px] font-[weight:550] text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
+                  scope="row"
+                >
                   {pair.moveNumber}.
                 </th>
                 <ReviewMoveBadgeCell review={timelineReviews[pair.whitePly - 1] ?? null} />
-                <td className={styles.reviewMoveColumn}>
+                <td className="p-0 align-middle">
                   <ReviewMoveButton
                     activeMoveButtonRef={activeMoveButtonRef}
                     activePly={displayActivePly}
@@ -1118,7 +1183,7 @@ export function GameReviewPanel({
                   />
                 </td>
                 <ReviewMoveBadgeCell review={timelineReviews[pair.blackPly - 1] ?? null} />
-                <td className={styles.reviewMoveColumn}>
+                <td className="p-0 align-middle">
                   <ReviewMoveButton
                     activeMoveButtonRef={activeMoveButtonRef}
                     activePly={displayActivePly}
@@ -1204,22 +1269,34 @@ function ReviewSaveDeckPanel({
   }, [activeDeckId, hasOwnedDeck, onSelectSaveDeck, selectedDeckId]);
 
   return (
-    <section className={`${styles.card} ${styles.emptyStateCard}`}>
+    <section
+      className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto] gap-[18px] overflow-visible gap-[16px]'}`}
+    >
       {positionLoading ? (
-        <p className={styles.copy}>Engine is finding the best move for this position.</p>
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+          Engine is finding the best move for this position.
+        </p>
       ) : reviewSaveMoveSan ? (
-        <p className={styles.copy}>
-          Create a training card where the answer is <span className={styles.saveMoveAnswer}>{reviewSaveMoveSan}</span>.
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+          Create a training card where the answer is{' '}
+          <span className="inline-block border-[1px] border-solid border-[rgba(184,247,161,0.42)] rounded-[6px] bg-[rgba(184,247,161,0.1)] text-[#d8f5cc] font-[weight:550] px-[7px] py-[1px]">
+            {reviewSaveMoveSan}
+          </span>
+          .
         </p>
       ) : (
-        <p className={styles.copy}>No best move is available for this position yet.</p>
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+          No best move is available for this position yet.
+        </p>
       )}
 
       {hasOwnedDeck ? (
-        <label className={styles.labeledField}>
-          <span className={styles.fieldLabel}>Target deck</span>
+        <label className="flex flex-col gap-[6px] min-w-0">
+          <span className="text-[var(--text-soft)] text-[11px] font-[weight:400] tracking-[0.04em] uppercase">
+            Target deck
+          </span>
           <select
-            className={`${styles.inlineInput} ${styles.deckSelect}`}
+            className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'appearance-none bg-[linear-gradient(45deg,transparent_50%,rgba(214,226,244,0.72)_50%),linear-gradient(135deg,rgba(214,226,244,0.72)_50%,transparent_50%)] bg-[position:calc(100%-18px)_calc(50%+2px),calc(100%-12px)_calc(50%+2px)] bg-[length:6px_6px,6px_6px] bg-no-repeat cursor-pointer pr-[34px] outline-none border-[rgba(198,215,255,0.42)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.12)]'}`}
             onChange={(event: ChangeEvent<HTMLSelectElement>) => onSelectSaveDeck(event.target.value)}
             value={activeDeckId}
           >
@@ -1231,7 +1308,9 @@ function ReviewSaveDeckPanel({
           </select>
         </label>
       ) : (
-        <p className={styles.copy}>Create a personal deck in Train, then come back here to save this position.</p>
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+          Create a personal deck in Train, then come back here to save this position.
+        </p>
       )}
 
       {hasOwnedDeck ? (
@@ -1272,7 +1351,7 @@ function ReviewMoveButton({
   review: TimelineReview | null;
 }) {
   if (!move) {
-    return <span className={styles.reviewMoveEmpty} />;
+    return <span className="w-full min-w-0 min-h-[30px]" />;
   }
 
   const isActive = activePly === ply;
@@ -1280,7 +1359,7 @@ function ReviewMoveButton({
 
   return (
     <button
-      className={`${styles.reviewMoveCell} ${moveColor ? styles.reviewMoveCellClassified : ''} ${isActive ? styles.activeReviewMoveCell : ''}`}
+      className={`${'w-full min-w-0 min-h-[30px] relative inline-flex items-center justify-start gap-[6px] border-[1px] border-solid border-transparent rounded-[7px] bg-transparent text-[var(--text-muted)] pt-0 pb-0 pl-[2px] pr-[8px] font-inherit text-[15px] font-[weight:550] text-left cursor-pointer bg-[rgba(255,255,255,0.06)] text-[var(--text)]'} ${moveColor ? 'text-[var(--move-dot-color,var(--text))]' : ''} ${isActive ? 'bg-[rgba(198,215,255,0.14)] text-[var(--text)] text-[var(--move-dot-color,var(--text))]' : ''}`}
       onClick={() => jumpToIndex(ply)}
       ref={isActive ? activeMoveButtonRef : undefined}
       style={{
@@ -1288,7 +1367,9 @@ function ReviewMoveButton({
       }}
       type="button"
     >
-      <span className={styles.reviewMoveSan}>{renderMoveFigurine(move.san)}</span>
+      <span className="flex-[1_1_auto] min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">
+        {renderMoveFigurine(move.san)}
+      </span>
     </button>
   );
 }
@@ -1297,11 +1378,11 @@ function ReviewMoveBadgeCell({ review }: { review: TimelineReview | null }) {
   const badgeSrc = getReviewBadgeSrc(review);
 
   return (
-    <td className={styles.reviewMoveBadgeColumn}>
+    <td className="w-[24px] p-0 text-center align-middle">
       {badgeSrc ? (
         <span
           aria-hidden="true"
-          className={styles.reviewMoveBadge}
+          className="inline-block w-[17px] h-[17px] align-middle bg-[var(--review-badge-url)] bg-[position:center] bg-no-repeat bg-[length:contain] drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)] pointer-events-none"
           style={{ ['--review-badge-url' as string]: `url(${badgeSrc})` }}
         />
       ) : null}
@@ -1353,20 +1434,25 @@ function ReviewTimelineStrip({
   const hasTimeline = timelineAnalysesLength > 0;
 
   return (
-    <div className={styles.reviewTimeline}>
-      <div className={`${styles.reviewTimelineGraph} ${timelineLoading ? styles.reviewTimelineGraphLoading : ''}`}>
+    <div className="border-[1px] border-solid border-[rgba(214,226,244,0.14)] rounded-[10px] bg-[rgba(8,12,19,0.78)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] relative min-h-0 p-0 overflow-hidden">
+      <div
+        className={`${'relative w-full h-full min-h-0 rounded-[10px] overflow-hidden bg-[#3a3631]'} ${timelineLoading ? 'blur-1.6px) saturate(0.9 scale-[101%]' : ''}`}
+      >
         <svg
-          className={styles.reviewTimelineSvg}
+          className="w-full h-full block rounded-[7px] overflow-hidden cursor-pointer"
           viewBox="0 0 100 28"
           preserveAspectRatio="none"
           aria-label="Evaluation timeline"
         >
-          <rect className={styles.reviewTimelineBlack} x="0" y="0" width="100" height="28" />
-          <path className={styles.reviewTimelineWhite} d={hasTimeline ? whiteAreaPath : loadingAreaPath} />
-          <line className={styles.reviewTimelineMidline} x1="0" x2="100" y1="14" y2="14" />
-          <path className={styles.reviewTimelinePath} d={hasTimeline ? boundaryPath : loadingBoundaryPath} />
+          <rect className="fill-[#3d3934] op-100" x="0" y="0" width="100" height="28" />
+          <path className="fill-[#f5f2e8] op-96" d={hasTimeline ? whiteAreaPath : loadingAreaPath} />
+          <line className="stroke-[rgba(245,242,232,0.22)] stroke-0.55" x1="0" x2="100" y1="14" y2="14" />
+          <path
+            className="fill-none stroke-[rgba(245,242,232,0.88)] [stroke-linecap:round] [stroke-linejoin:round] stroke-1.1 [vector-effect:non-scaling-stroke]"
+            d={hasTimeline ? boundaryPath : loadingBoundaryPath}
+          />
           <line
-            className={styles.reviewTimelineCursor}
+            className="stroke-[rgba(255,196,128,0.95)] stroke-1.4"
             x1={cursorX}
             x2={cursorX}
             y1="0"
@@ -1387,7 +1473,7 @@ function ReviewTimelineStrip({
               return (
                 <button
                   aria-label={`Go to ${review.moveLabel}`}
-                  className={styles.reviewTimelinePoint}
+                  className="absolute w-[9px] h-[9px] p-0 border-0 rounded-[999px] bg-color-mix(in bg-srgb,var(--timeline-point-color,#ff954a) bg-62%,white) shadow-[none] translate-[-50%] cursor-pointer"
                   key={review.ply}
                   onClick={() => jumpToIndex(review.ply)}
                   style={{
@@ -1403,23 +1489,32 @@ function ReviewTimelineStrip({
       </div>
       {timelineLoading ? (
         <div
-          className={styles.reviewTimelineProgress}
+          className="absolute left-[12px] right-[12px] top-[50%] flex flex-col gap-[7px] px-[11px] py-[10px] border-[1px] border-solid border-[rgba(245,242,232,0.18)] rounded-[9px] bg-[rgba(12,15,20,0.62)] shadow-[0_12px_34px_rgba(0,0,0,0.22)] translate-y-[-50%] backdrop-blur-[14px]"
           role="status"
           aria-label={`Analysis ${formatTimelineProgress(progressValue)}`}
         >
-          <div className={styles.reviewTimelineProgressTop}>
+          <div className="flex items-center justify-between gap-[10px] text-[rgba(245,242,232,0.78)] text-[11px] font-[weight:550] tracking-[0.04em] uppercase text-[#f8f3e8] text-[13px] tracking-0 normal-case">
             <span>Deep analysis</span>
             <strong>{formatTimelineProgress(progressValue)}</strong>
           </div>
-          <div className={styles.reviewTimelineProgressTrack}>
-            <span className={styles.reviewTimelineProgressFill} style={{ width: `${progressValue}%` }} />
+          <div className="relative h-[8px] overflow-hidden rounded-[999px] bg-[rgba(245,242,232,0.12)]">
+            <span
+              className="absolute [inset:0_auto_0_0] min-w-[8px] rounded-[inherit] bg-gradient-linear bg-gradient-[90deg,#e65d55_0%,#f09a45_48%] shadow-[0_0_18px_rgba(240,154,69,0.34)] transition-width duration-[180ms] ease-[ease]"
+              style={{ width: `${progressValue}%` }}
+            />
           </div>
         </div>
       ) : null}
       {!timelineLoading && timelineAnalysesLength === 0 ? (
-        <div className={styles.reviewTimelineFallback}>No review yet.</div>
+        <div className="absolute [inset:0] flex items-center justify-center text-[rgba(13,17,24,0.7)] text-[12px] font-[weight:550]">
+          No review yet.
+        </div>
       ) : null}
-      {timelineError ? <span className={styles.reviewTimelineError}>{timelineError}</span> : null}
+      {timelineError ? (
+        <span className="absolute left-[10px] right-[10px] bottom-[8px] text-[var(--danger)] text-[11px] leading-[1.2] overflow-hidden text-ellipsis whitespace-nowrap">
+          {timelineError}
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -1606,11 +1701,11 @@ function buildMasteryGradeDistribution(lines: ReturnType<typeof import('@/lib/de
 }
 
 function getMasteryGradeClass(grade: MasteryGrade) {
-  return styles[`masteryGrade${grade}`];
+  return masteryGradeClassByGrade[grade];
 }
 
 function getMasteryToneClass(grade: MasteryGrade) {
-  return styles[`masteryTone${grade}`];
+  return masteryToneClassByGrade[grade];
 }
 
 function getOpeningDisplayName(card: DeckCard) {
@@ -1742,7 +1837,7 @@ function DeckLibraryItem({
         <span className={styles.deckLibraryHead}>
           {renaming ? (
             <input
-              className={`${styles.inlineInput} ${styles.deckRenameInput}`}
+              className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'min-h-[34px] px-[10px] py-0 text-[14px] font-[weight:550]'}`}
               onBlur={submitRename}
               onChange={(event) => setRenameDraft(event.target.value)}
               onClick={(event) => event.stopPropagation()}
@@ -1813,7 +1908,7 @@ function DeckLibraryItem({
 
 function DeckMoreIcon() {
   return (
-    <svg className={styles.deckMenuIcon} viewBox="0 0 24 24" aria-hidden="true">
+    <svg className="w-[16px] h-[16px] block" viewBox="0 0 24 24" aria-hidden="true">
       <circle cx="5" cy="12" r="1.8" fill="currentColor" />
       <circle cx="12" cy="12" r="1.8" fill="currentColor" />
       <circle cx="19" cy="12" r="1.8" fill="currentColor" />
@@ -1880,13 +1975,19 @@ export function LearnPanel({
 
   return (
     <>
-      <section className={`${styles.card} ${styles.emptyStateCard}`}>
-        <div className={styles.panelHeader}>
-          <h2 className={styles.sectionTitle}>Decks</h2>
-          <span className={styles.statusText}>{deckLibraryLoading ? 'loading' : `${deckSummaries.length} decks`}</span>
+      <section
+        className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto] gap-[18px] overflow-visible gap-[16px]'}`}
+      >
+        <div className="min-w-0 flex items-center justify-between gap-[14px]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+            Decks
+          </h2>
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
+            {deckLibraryLoading ? 'loading' : `${deckSummaries.length} decks`}
+          </span>
         </div>
         {deckSummaries.length === 0 ? (
-          <p className={styles.copy}>
+          <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
             {deckLibraryLoading
               ? 'Loading decks.'
               : deckLoadError
@@ -1894,7 +1995,7 @@ export function LearnPanel({
                 : 'Create a deck, then add cards from Review.'}
           </p>
         ) : (
-          <div className={styles.deckLibrary}>
+          <div className="min-h-0 flex flex-col gap-[8px]">
             {deckSummaries.map((deck) => (
               <DeckLibraryItem
                 deck={deck}
@@ -1909,7 +2010,7 @@ export function LearnPanel({
             ))}
           </div>
         )}
-        {deckLoadError ? <p className={styles.error}>{deckLoadError}</p> : null}
+        {deckLoadError ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{deckLoadError}</p> : null}
         {deckSummaries.length > 0 ? (
           <button
             className={`${styles.action} ${styles.fullWidthAction}`}
@@ -1922,16 +2023,18 @@ export function LearnPanel({
         ) : null}
       </section>
       <section
-        className={`${styles.card} ${styles.emptyStateCard} ${focusCreateDeck ? styles.createDeckSectionFocus : ''}`}
+        className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto] gap-[18px] overflow-visible gap-[16px]'} ${focusCreateDeck ? 'border-[rgba(198,215,255,0.58)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_0_1px_rgba(198,215,255,0.14)]' : ''}`}
         ref={createDeckSectionRef}
       >
-        <div className={styles.panelHeader}>
-          <h2 className={styles.sectionTitle}>Create deck</h2>
-          <span className={styles.statusText}>manual</span>
+        <div className="min-w-0 flex items-center justify-between gap-[14px]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+            Create deck
+          </h2>
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">manual</span>
         </div>
-        <div className={styles.inlineForm}>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
           <input
-            className={styles.inlineInput}
+            className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
             onChange={(event) => onNewDeckTitleChange(event.target.value)}
             placeholder="Deck title"
             ref={createDeckInputRef}
@@ -1955,7 +2058,7 @@ export function LearnPanel({
       >
         {deckActionLoading ? 'Generating' : 'Generate automatic deck your last 50 games'}
       </button>
-      {deckActionError ? <p className={styles.error}>{deckActionError}</p> : null}
+      {deckActionError ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{deckActionError}</p> : null}
     </>
   );
 }
@@ -2013,26 +2116,36 @@ export function DeckPanel({
   return (
     <>
       <section
-        className={`${styles.card} ${styles.deckCard} ${styles.trainingDeckCard} ${getMasteryToneClass(cardGrade)}`}
+        className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-[0_1_auto] flex-col gap-[10px] min-h-0 max-h-[calc(100svh-250px)]'} ${'max-h-none rounded-[10px] border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)] border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)] border-[rgba(138,198,255,0.34)] bg-[rgba(42,82,126,0.18)] border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)] gap-[10px] p-[12px] overflow-visible'} ${getMasteryToneClass(cardGrade)}`}
       >
         {card ? (
           <>
-            <div className={styles.trainingCardHead}>
-              <div className={styles.trainingCardTitleBlock}>
-                <strong className={styles.trainingCardTitle}>{getOpeningDisplayName(card)}</strong>
-                <span className={styles.trainingCardEco}>Active card</span>
+            <div className="flex items-center justify-between gap-[10px] min-w-0">
+              <div className="flex min-w-0 flex-col gap-[4px]">
+                <strong className="text-[var(--text)] text-[16px] leading-[1.2] tracking-0 wrap-anywhere text-[15px] leading-[1.15]">
+                  {getOpeningDisplayName(card)}
+                </strong>
+                <span className="text-[var(--text-muted)] text-[11px] leading-[1.1] tracking-[0.06em] uppercase leading-[1.3]">
+                  Active card
+                </span>
               </div>
               <span
-                className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(cardGrade)}`}
+                className={`${'inline-flex items-center justify-center min-w-[30px] h-[30px] rounded-[6px] text-[15px] font-[weight:500] tracking-0 min-w-[28px] h-[28px] text-[14px]'} ${getMasteryGradeClass(cardGrade)}`}
                 title="Active card grade"
               >
                 {cardGrade}
               </span>
             </div>
-            <div className={styles.trainSessionProgress} aria-hidden="true">
-              <div className={styles.trainSessionProgressFill} style={{ width: `${cardScore}%` }} />
+            <div
+              className="w-full h-[6px] rounded-[999px] bg-[rgba(214,226,244,0.08)] overflow-hidden h-[5px]"
+              aria-hidden="true"
+            >
+              <div
+                className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-[180ms] ease-[ease]"
+                style={{ width: `${cardScore}%` }}
+              />
             </div>
-            <div className={styles.trainingCardMeta}>
+            <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
               <span>Card {cardScore}/100</span>
               <span>
                 {trainAllSession
@@ -2041,13 +2154,20 @@ export function DeckPanel({
               </span>
             </div>
             {trainAllSession ? (
-              <div className={styles.trainSessionProgress} role="status" aria-label="Cram progress">
-                <div className={styles.trainSessionProgressFill} style={{ width: `${sessionProgressPercent}%` }} />
+              <div
+                className="w-full h-[6px] rounded-[999px] bg-[rgba(214,226,244,0.08)] overflow-hidden h-[5px]"
+                role="status"
+                aria-label="Cram progress"
+              >
+                <div
+                  className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-[180ms] ease-[ease]"
+                  style={{ width: `${sessionProgressPercent}%` }}
+                />
               </div>
             ) : null}
             {deckFeedback ? (
               <div
-                className={`${styles.feedbackBox} ${deckFeedback.pending ? styles.feedbackPending : deckFeedback.correct ? styles.feedbackGood : styles.feedbackBad}`}
+                className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-[var(--text)] text-[var(--text-muted)] px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border-[1px] border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border-[1px] border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border-[1px] border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
               >
                 <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
                 <span>
@@ -2068,7 +2188,7 @@ export function DeckPanel({
                 ) : null}
               </div>
             ) : null}
-            <div className={styles.deckActions}>
+            <div className="grid grid-cols-2 gap-[6px] min-h-[38px] px-[8px] py-0 text-[11px] grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-w-0 min-h-[34px] overflow-hidden text-ellipsis whitespace-nowrap">
               <button
                 className={`${styles.action} ${styles.deleteAction}`}
                 disabled={!card || !canDeleteCard || deckActionLoading}
@@ -2089,66 +2209,81 @@ export function DeckPanel({
           </>
         ) : (
           <>
-            <p className={styles.empty}>
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
               {deckLoading
                 ? 'Loading learning cards from Supabase.'
                 : trainAllSession
                   ? 'No cram cards loaded.'
                   : 'Nothing to study right now in this deck.'}
             </p>
-            {deckLoadError ? <p className={styles.error}>{deckLoadError}</p> : null}
+            {deckLoadError ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{deckLoadError}</p> : null}
           </>
         )}
       </section>
       {!trainAllSession && activeLineMastery ? (
-        <section className={`${styles.card} ${styles.lineMetricCard} ${getMasteryToneClass(activeLineMastery.grade)}`}>
-          <div className={styles.lineMetricHead}>
-            <div className={styles.trainingCardTitleBlock}>
-              <strong className={styles.lineMetricTitle}>Opening mastery</strong>
-              <span className={styles.lineMetricSubtitle}>
+        <section
+          className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[10px] p-[12px] rounded-[10px]'} ${getMasteryToneClass(activeLineMastery.grade)}`}
+        >
+          <div className="flex items-center justify-between gap-[10px] min-w-0">
+            <div className="flex min-w-0 flex-col gap-[4px]">
+              <strong className="text-[var(--text)] text-[13px] leading-[1.2]">Opening mastery</strong>
+              <span className="text-[var(--text-muted)] text-[11px] leading-tight wrap-anywhere">
                 {activeLineMastery.cardCount} cards in {getOpeningDisplayName(card!)}
               </span>
             </div>
             <span
-              className={`${styles.masteryGradeBadge} ${getMasteryGradeClass(activeLineMastery.grade)}`}
+              className={`${'inline-flex items-center justify-center min-w-[30px] h-[30px] rounded-[6px] text-[15px] font-[weight:500] tracking-0 min-w-[28px] h-[28px] text-[14px]'} ${getMasteryGradeClass(activeLineMastery.grade)}`}
               title="Line metric grade"
             >
               {activeLineMastery.grade}
             </span>
           </div>
-          <div className={styles.trainSessionProgress} aria-hidden="true">
-            <div className={styles.trainSessionProgressFill} style={{ width: `${activeLineMastery.masteryScore}%` }} />
+          <div
+            className="w-full h-[6px] rounded-[999px] bg-[rgba(214,226,244,0.08)] overflow-hidden h-[5px]"
+            aria-hidden="true"
+          >
+            <div
+              className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-[180ms] ease-[ease]"
+              style={{ width: `${activeLineMastery.masteryScore}%` }}
+            />
           </div>
-          <div className={styles.trainingCardMeta}>
+          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
             <span>Opening {activeLineMastery.masteryScore}/100</span>
             <span>{activeLineMastery.newCount + activeLineMastery.dueCount} due/new</span>
           </div>
         </section>
       ) : null}
       {!trainAllSession && gradeDistribution.length > 0 ? (
-        <section className={`${styles.card} ${styles.masteryDistributionCard}`}>
-          <div className={styles.masteryDistributionHeader}>
+        <section
+          className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[10px] p-[12px] rounded-[10px] bg-[rgba(9,14,23,0.34)]'}`}
+        >
+          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[var(--text-muted)] text-[11px]">
             <span>Opening spread</span>
             <span>{deckLineMastery.length} openings</span>
           </div>
           <div
             aria-label={`Line metric spread: ${gradeDistribution.map((segment) => `${segment.grade} ${segment.percent}%`).join(', ')}`}
-            className={styles.masteryDistributionBar}
+            className="flex w-full min-h-[12px] gap-[4px] rounded-[999px] p-[3px] bg-[rgba(214,226,244,0.07)]"
             role="img"
           >
             {gradeDistribution.map((segment) => (
               <div
-                className={`${styles.masteryDistributionSegment} ${styles[`masteryDistribution${segment.grade}`]}`}
+                className={`${'min-w-[8px] rounded-[999px] transition-flex duration-[220ms] ease-[ease]'} ${masteryDistributionClassByGrade[segment.grade]}`}
                 key={segment.grade}
                 style={{ flex: `${segment.count} ${segment.count} 0` }}
                 title={`${segment.grade} · ${segment.count} line${segment.count === 1 ? '' : 's'} · ${segment.percent}%`}
               />
             ))}
           </div>
-          <div className={styles.masteryDistributionLegend}>
+          <div className="flex flex-wrap gap-8px 12px">
             {gradeDistribution.map((segment) => (
-              <span className={styles.masteryDistributionLegendItem} key={segment.grade}>
-                <span className={`${styles.masteryDistributionDot} ${styles[`masteryDistribution${segment.grade}`]}`} />
+              <span
+                className="inline-flex items-center gap-[6px] text-[var(--text-soft)] text-[11px] text-[var(--text-muted)]"
+                key={segment.grade}
+              >
+                <span
+                  className={`${'w-[8px] h-[8px] rounded-[50%] flex-[0_0_auto]'} ${masteryDistributionClassByGrade[segment.grade]}`}
+                />
                 <span>{segment.grade}</span>
                 <span>{segment.percent}%</span>
               </span>
@@ -2178,7 +2313,7 @@ export function PgnImportDialog({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: modal backdrop closes on click outside dialog
     <div
-      className={styles.modalLayer}
+      className="fixed [inset:0] z-20 flex items-center justify-center p-[18px] bg-[rgba(1,5,12,0.62)] backdrop-blur-[10px]"
       onMouseDown={onClose}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
@@ -2187,24 +2322,29 @@ export function PgnImportDialog({
       }}
     >
       <section
-        className={styles.importDialog}
+        className="w-[min(680px,calc(100vw-36px))] max-h-min(720px,calc(100svh min-h-0 grid grid-rows-[auto_auto_minmax(220px,1fr)_auto] gap-[14px] overflow-hidden border-[1px] border-solid border-[var(--border)] rounded-[16px] bg-[rgba(12,18,29,0.9)] shadow-[var(--glass-shadow)] p-[18px]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pgn-import-title"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className={styles.panelHeader}>
+        <div className="min-w-0 flex items-center justify-between gap-[14px]">
           <div>
-            <h2 className={styles.sectionTitle} id="pgn-import-title">
+            <h2
+              className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]"
+              id="pgn-import-title"
+            >
               Import PGN
             </h2>
-            <p className={styles.support}>Use this only when you want full-game review.</p>
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0 text-[var(--text)] font-[weight:550]">
+              Use this only when you want full-game review.
+            </p>
           </div>
           <button className={styles.iconButton} onClick={onClose} title="Close import" type="button">
             X
           </button>
         </div>
-        <div className={styles.pgnControls}>
+        <div className="grid gap-[8px] grid-cols-2 grid-cols-1fr">
           <label className={`${styles.action} ${styles.primary}`} htmlFor="pgn-upload">
             Load file
           </label>
@@ -2217,7 +2357,7 @@ export function PgnImportDialog({
             Paste PGN
           </button>
         </div>
-        <input className={styles.hiddenInput} id="pgn-upload" type="file" accept=".pgn" onChange={handleUpload} />
+        <input className="hidden" id="pgn-upload" type="file" accept=".pgn" onChange={handleUpload} />
         <textarea
           className={styles.pgnInput}
           value={pgnDraft}
@@ -2225,7 +2365,9 @@ export function PgnImportDialog({
           placeholder={'[Event "Live Chess"]\n[White "LosValettos"]\n[Black "rafaelpiresrj"]\n\n1. e4 e5 2. Nf3 Nc6'}
           spellCheck={false}
         />
-        <p className={styles.support}>{fileName || 'No PGN loaded'}</p>
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0 text-[var(--text)] font-[weight:550]">
+          {fileName || 'No PGN loaded'}
+        </p>
       </section>
     </div>
   );
@@ -2243,22 +2385,31 @@ function EngineLinesSection({
   positionLoading: boolean;
 }) {
   return (
-    <section className={`${styles.card} ${styles.engineCard}`}>
-      <div className={styles.panelHeader}>
-        <h2 className={styles.sectionTitle}>Engine</h2>
-        <span className={styles.statusText}>
+    <section
+      className={`${'min-h-0 relative border-[1px] border-solid border-[var(--border-soft)] rounded-[12px] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-16px) saturate(1.16'} ${'flex flex-col gap-[13px] flex-[0_0_auto]'}`}
+    >
+      <div className="min-w-0 flex items-center justify-between gap-[14px]">
+        <h2 className="m-0 min-w-0 text-[var(--text)] font-[weight:560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+          Engine
+        </h2>
+        <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
           {positionLoading ? 'updating' : `depth ${positionAnalysis?.depth ?? '--'}`}
         </span>
       </div>
       <div className={styles.engineLines}>
         {lines.map((line) => (
-          <div className={styles.engineLine} key={line.multipv}>
-            <div className={styles.engineLineHead}>
-              <span className={styles.engineRank}>#{line.multipv}</span>
+          <div
+            className="border-[1px] border-solid border-[rgba(214,226,244,0.16)] rounded-[8px] bg-[rgba(7,12,20,0.44)] p-[10px]"
+            key={line.multipv}
+          >
+            <div className="min-w-0 flex items-center justify-between gap-[14px] grid grid-cols-[auto_minmax(0,1fr)_auto] text-[var(--text-muted)] text-[13px] gap-[10px] text-[var(--text)] text-[16px] overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="text-[var(--accent-strong)] font-[weight:550]">#{line.multipv}</span>
               <strong>{line.bestMove ? formatBestMove(currentFen, line.bestMove) : '--'}</strong>
               <span>{formatLineScore(line)}</span>
             </div>
-            <p className={styles.enginePv}>{formatPvLine(currentFen, line.pv)}</p>
+            <p className="mx-0 mt-[8px] mb-0 text-[var(--text-muted)] text-[12px] leading-[1.45] whitespace-nowrap overflow-hidden text-ellipsis">
+              {formatPvLine(currentFen, line.pv)}
+            </p>
           </div>
         ))}
       </div>
@@ -2337,9 +2488,9 @@ function renderMoveFigurine(san: string): ReactNode {
 
   return (
     <>
-      <span className={styles.movePieceIcon}>{icon}</span>
-      <span className={styles.movePieceGap} aria-hidden="true" />
-      <span className={styles.movePieceText}>{san.slice(1)}</span>
+      <span className="text-[1.95em] leading-none text-center">{icon}</span>
+      <span className="w-[0.72em]" aria-hidden="true" />
+      <span className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap">{san.slice(1)}</span>
     </>
   );
 }

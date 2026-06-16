@@ -1,4 +1,35 @@
 'use client';
+
+const masteryGradeClassByGrade = {
+  F: 'bg-[#d94b62] text-[#fff7f8]',
+  E: 'bg-[#d94b62] text-[#fff7f8]',
+  D: 'bg-[#d98a35] text-[#fff7ec]',
+  C: 'bg-[#d98a35] text-[#fff7ec]',
+  B: 'bg-[#4e93d8] text-[#f5fbff]',
+  A: 'bg-[#35a979] text-[#f4fff9]',
+  S: 'bg-[#35a979] text-[#f4fff9]',
+} as const satisfies Record<string, string>;
+
+const masteryToneClassByGrade = {
+  F: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
+  E: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
+  D: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
+  C: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
+  B: 'border-[rgba(138,198,255,0.34)] bg-[rgba(42,82,126,0.18)]',
+  A: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
+  S: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
+} as const satisfies Record<string, string>;
+
+const masteryDistributionClassByGrade = {
+  F: 'bg-[rgba(217,75,98,0.62)]',
+  E: 'bg-[rgba(217,75,98,0.48)]',
+  D: 'bg-[rgba(217,138,53,0.58)]',
+  C: 'bg-[rgba(217,138,53,0.44)]',
+  B: 'bg-[rgba(78,147,216,0.56)]',
+  A: 'bg-[rgba(53,169,121,0.58)]',
+  S: 'bg-[rgba(53,169,121,0.72)]',
+} as const satisfies Record<string, string>;
+
 import { Chess } from 'chess.js';
 import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceMode } from '@/components/chess-lab-panels';
@@ -71,7 +102,6 @@ import {
   recentGameAnalysisMemoryCache,
   saveCachedTimelineAnalysis,
 } from '../../lib/lab-helpers';
-import styles from '../chess-analysis-lab.module.css';
 
 const TIMELINE_CACHE_PROGRESS = 4;
 const TIMELINE_ENGINE_PROGRESS_OFFSET = 8;
@@ -2029,12 +2059,22 @@ export function useLabOrchestrator() {
   };
 
   const pageClassName = [
-    styles.page,
-    mode === 'train' ? styles.trainMode : '',
-    mode === 'train' && activeDeckCard ? styles.trainSessionMode : '',
+    'min-h-svh h-svh overflow-hidden p-[18px] text-[var(--text)]',
+    '[--app-bg:#07101b] [--panel-bg:rgba(12,18,29,0.54)] [--surface:rgba(18,25,38,0.48)] [--surface-strong:rgba(9,14,23,0.72)] [--border:rgba(214,226,244,0.2)] [--border-soft:rgba(214,226,244,0.12)] [--text:#f5f8ff] [--text-muted:#c0cadb] [--text-soft:#8f9cb2] [--text-disabled:#657185] [--accent:#98b8ff] [--accent-strong:#c6d7ff] [--accent-bg:rgba(152,184,255,0.16)] [--positive:#8ae3c1] [--warning:#ffd27a] [--danger:#ff8d91] [--glass-shadow:0_24px_70px_rgba(0,0,0,0.42),inset_0_1px_0_rgba(255,255,255,0.08)] [--panel-scroll-gap:14px]',
+    'max-[980px]:h-auto max-[980px]:min-h-svh max-[980px]:overflow-auto max-[720px]:p-3',
+    mode === 'train' ? '[--workspace-mode:train]' : '',
+    mode === 'train' && activeDeckCard ? '[--panel-scroll-gap:10px] max-[720px]:overflow-auto max-[720px]:p-1' : '',
   ]
     .filter(Boolean)
     .join(' ');
+
+  const pageStyle = {
+    backgroundColor: '#07101b',
+    backgroundImage: 'linear-gradient(180deg, rgba(7, 12, 20, 0.34) 0%, rgba(5, 9, 15, 0.7) 100%), url("/bg.png")',
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+    backgroundAttachment: 'fixed',
+  } satisfies CSSProperties;
 
   const slicedTrees = useMemo(
     () => sliceOpeningForest(labState.openingTrees, labState.minForcedPlies),
@@ -2112,6 +2152,7 @@ export function useLabOrchestrator() {
     whiteReviewName,
     blackReviewName,
     pageClassName,
+    pageStyle,
     applyWorkspaceSnapshot,
     persistReviewWorkspaceSnapshot,
     persistTrainWorkspaceSnapshot,

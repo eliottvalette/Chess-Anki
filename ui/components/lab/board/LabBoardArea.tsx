@@ -8,7 +8,11 @@ import { BoardPlayerBar } from './BoardPlayerBar';
 
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ssr: false,
-  loading: () => <div className={styles.boardFallback}>Loading board...</div>,
+  loading: () => (
+    <div className="flex h-full min-h-[150px] w-full items-center justify-center rounded-[10px] border border-dashed border-[rgba(214,226,244,0.22)] p-[18px] text-center text-[var(--text-soft)]">
+      Loading board...
+    </div>
+  ),
 });
 
 export function LabBoardArea() {
@@ -32,10 +36,16 @@ export function LabBoardArea() {
     isTrainCardFinished,
   } = useLab();
 
+  const isBlackOrientation = labState.orientation === 'black';
+
   return (
-    <section className={`${styles.panel} ${styles.boardPanel}`}>
-      <div className={styles.boardWorkspace}>
-        <div className={styles.boardTools} role="toolbar" aria-label="Board tools">
+    <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-[var(--glass-shadow)] [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
+      <div className="relative grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-3.5 overflow-hidden max-[720px]:grid-cols-1">
+        <div
+          className="z-[2] flex flex-col gap-2 self-center max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
+          role="toolbar"
+          aria-label="Board tools"
+        >
           <button
             className={styles.iconButton}
             onClick={() => labState.setPgnDialogOpen(true)}
@@ -81,25 +91,49 @@ export function LabBoardArea() {
           </button>
         </div>
 
-        <div className={styles.boardStage} ref={boardStageRef}>
-          <div className={styles.evalRail} ref={evalRailRef}>
+        <div
+          className="grid min-h-0 min-w-0 grid-cols-[54px_auto_54px] items-center justify-center gap-[22px] overflow-hidden p-0.5 max-[980px]:grid-cols-1 max-[980px]:justify-items-center max-[980px]:gap-2.5 max-[720px]:order-1"
+          ref={boardStageRef}
+        >
+          <div
+            className="flex w-[54px] flex-col items-center gap-3 max-[980px]:w-full max-[980px]:flex-row max-[980px]:justify-center"
+            ref={evalRailRef}
+          >
             <div
-              className={`${styles.evalShell} ${labState.orientation === 'black' ? styles.evalShellFlipped : ''}`}
+              className="relative h-[min(620px,calc(100svh-340px))] w-[18px] overflow-hidden rounded-full border border-[rgba(214,226,244,0.26)] bg-[rgba(7,12,20,0.5)] max-[980px]:h-[18px] max-[980px]:w-[min(720px,calc(100vw-128px))]"
               style={{ ['--white-share' as string]: `${whiteAdvantage}%` }}
             >
-              <div className={styles.evalBlack} />
-              <div className={styles.evalWhite} />
-              <div className={styles.evalDivider} />
+              <div
+                className={`absolute w-full transition-[height,width] duration-[240ms] ease-linear bg-gradient-to-b from-[#04070c] to-[rgba(38,50,70,0.92)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${
+                  isBlackOrientation
+                    ? 'bottom-0 h-[calc(100%-var(--white-share,50%))]'
+                    : 'top-0 h-[calc(100%-var(--white-share,50%))]'
+                }`}
+              />
+              <div
+                className={`absolute w-full transition-[height,width] duration-[240ms] ease-linear bg-gradient-to-b from-[#f5f8ff] to-[#bcc8da] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-[var(--white-share,50%)] ${
+                  isBlackOrientation ? 'top-0 h-[var(--white-share,50%)]' : 'bottom-0 h-[var(--white-share,50%)]'
+                }`}
+              />
+              <div
+                className={`absolute bg-[var(--accent)] shadow-[0_0_12px_rgba(152,184,255,0.76)] max-[980px]:bottom-0 max-[980px]:left-[var(--white-share,50%)] max-[980px]:h-full max-[980px]:w-[2px] max-[980px]:-translate-x-1/2 ${
+                  isBlackOrientation
+                    ? 'bottom-[calc(100%-var(--white-share,50%))] left-0 h-[2px] w-full translate-y-1/2'
+                    : 'bottom-[var(--white-share,50%)] left-0 h-[2px] w-full translate-y-1/2'
+                }`}
+              />
             </div>
-            <div className={styles.evalCopy}>
-              <span className={styles.score}>{boardScoreLabel}</span>
+            <div className="flex justify-center">
+              <span className="min-w-0 text-lg font-semibold leading-none text-[var(--text)] max-[720px]:min-w-[42px]">
+                {boardScoreLabel}
+              </span>
             </div>
           </div>
 
-          <div className={styles.boardStack} style={{ width: `${labState.boardWidth}px` }}>
+          <div className="flex max-w-full flex-col gap-2" style={{ width: `${labState.boardWidth}px` }}>
             <BoardPlayerBar player={topBoardPlayer} />
             <div
-              className={styles.boardFrame}
+              className="relative flex max-h-full max-w-full flex-none items-center justify-center overflow-hidden rounded-[10px] border-0 bg-transparent p-0 max-[980px]:max-w-[calc(100vw-112px)] max-[720px]:max-w-[calc(100vw-56px)]"
               style={{ width: `${labState.boardWidth}px`, height: `${labState.boardWidth}px` }}
             >
               <Chessboard
@@ -147,7 +181,7 @@ export function LabBoardArea() {
               {boardReviewBadge ? (
                 <span
                   aria-hidden="true"
-                  className={styles.boardReviewBadge}
+                  className="pointer-events-none absolute z-[5] h-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] w-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--board-review-badge-color)] bg-[length:contain] bg-center bg-no-repeat shadow-[0_10px_24px_rgba(8,13,21,0.34),0_0_0_1px_rgba(255,255,255,0.22)] drop-shadow-[0_2px_3px_rgba(0,0,0,0.34)]"
                   style={
                     {
                       '--board-review-badge-url': `url(${boardReviewBadge.badge})`,
@@ -155,6 +189,7 @@ export function LabBoardArea() {
                       '--board-square-size': `${boardReviewBadge.squareSize}px`,
                       left: `${boardReviewBadge.left}px`,
                       top: `${boardReviewBadge.top}px`,
+                      backgroundImage: `url(${boardReviewBadge.badge})`,
                     } as CSSProperties
                   }
                 />
@@ -162,7 +197,7 @@ export function LabBoardArea() {
             </div>
             <BoardPlayerBar player={bottomBoardPlayer} />
           </div>
-          <div className={styles.boardStageSpacer} aria-hidden="true" />
+          <div className="w-[54px] self-stretch max-[980px]:hidden" aria-hidden="true" />
         </div>
       </div>
     </section>

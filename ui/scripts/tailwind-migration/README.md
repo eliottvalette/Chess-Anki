@@ -35,8 +35,19 @@ Reports are written to `ui/reports/tailwind-migration/`.
 | `audit-css-module.mjs` | Classifies CSS rules into `auto / review / manual / keep_css` |
 | `audit-jsx-usage.mjs` | Maps `styles.*` usage per file and suggests migration order |
 | `dry-run-convert.mjs` | Simulates conversion on isolated `.class` rules only |
+| `apply-inline.mjs` | Writes Tailwind `className="..."` into TSX (does **not** touch CSS) |
 
-Nothing in this folder modifies source files.
+Audit scripts are read-only. `apply-inline.mjs` modifies TSX only.
+
+## Inline migration (what you actually want)
+
+```bash
+npm i -D transform-to-tailwindcss-core
+node scripts/tailwind-migration/apply-inline.mjs --dry-run components/lab/lab-icons.tsx
+node scripts/tailwind-migration/apply-inline.mjs --write components/lab/board/BoardPlayerBar.tsx
+```
+
+Avoid `css-to-tailwind-react` big-bang: it strips the CSS module without writing JSX classes.
 
 ## Optional sharper dry-run
 
@@ -50,8 +61,10 @@ npm run migrate:tailwind:dry-run
 For a full JSX+CSS migrator preview (still dry-run):
 
 ```bash
-npx @vyeos/css-to-tailwind-react --dry-run --diff ./components
+npx css-to-tailwind-react --dry-run ./components
 ```
+
+Do **not** run without `--dry-run` on this codebase.
 
 ## How to read results
 

@@ -15,7 +15,8 @@
     "test": "node --test",
     "migrate:tailwind:audit-css": "node scripts/tailwind-migration/audit-css-module.mjs",
     "migrate:tailwind:audit-jsx": "node scripts/tailwind-migration/audit-jsx-usage.mjs",
-    "migrate:tailwind:dry-run": "node scripts/tailwind-migration/dry-run-convert.mjs",
+    "migrate:tailwind:apply-inline": "node scripts/tailwind-migration/apply-inline.mjs",
+    "migrate:tailwind:apply-all": "node scripts/tailwind-migration/apply-inline.mjs --write",
     "migrate:tailwind:audit": "node scripts/tailwind-migration/audit-css-module.mjs && node scripts/tailwind-migration/audit-jsx-usage.mjs && node scripts/tailwind-migration/dry-run-convert.mjs",
     "chesscom:recent": "node scripts/chesscom/fetch-recent-games.mjs",
     "chesscom:audit:analysis": "node scripts/chesscom/audit-analysis.mjs",
@@ -68,6 +69,7 @@
     "lint-staged": "^16.1.2",
     "server-only": "^0.0.1",
     "tailwindcss": "^4",
+    "transform-to-tailwindcss-core": "^0.0.43",
     "typescript": "^5"
   }
 }
