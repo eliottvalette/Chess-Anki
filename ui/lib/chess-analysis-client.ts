@@ -648,7 +648,6 @@ export function classifyTimelineMoves(
     const coachText = buildCoachText({
       moveLabel,
       category,
-      playedMove: move.san,
       bestMoveSan,
       beforeExpected,
       afterExpected,
@@ -1379,7 +1378,6 @@ function isReviewKeyMoment(
 function buildCoachText({
   moveLabel,
   category,
-  playedMove,
   bestMoveSan,
   beforeExpected,
   afterExpected,
@@ -1390,7 +1388,6 @@ function buildCoachText({
 }: {
   moveLabel: string;
   category: ReviewCategory | null;
-  playedMove: string;
   bestMoveSan: string | null;
   beforeExpected: number | null;
   afterExpected: number | null;
@@ -1412,27 +1409,27 @@ function buildCoachText({
 
   switch (category) {
     case 'book':
-      return `${moveLabel} ${playedMove} stays in the opening lane.`;
+      return `${moveLabel} stays in the opening lane.`;
     case 'brilliant':
-      return `${moveLabel} ${playedMove} is a strong sacrifice that keeps or increases the advantage.${swing}${cp}`;
+      return `${moveLabel} is a strong sacrifice that keeps or increases the advantage.${swing}${cp}`;
     case 'great':
-      return `${moveLabel} ${playedMove} is a key engine-aligned move.${swing}${cp}`;
+      return `${moveLabel} is a key engine-aligned move.${swing}${cp}`;
     case 'best':
-      return `${moveLabel} ${playedMove} matches the engine's top choice.`;
+      return `${moveLabel} matches the engine's top choice.`;
     case 'excellent':
-      return `${moveLabel} ${playedMove} is accurate with only a tiny practical loss.${loss}${cp}`;
+      return `${moveLabel} is accurate with only a tiny practical loss.${loss}${cp}`;
     case 'good':
-      return `${moveLabel} ${playedMove} is playable, but it leaves a little more on the board.${loss}${cp}`;
+      return `${moveLabel} is playable, but it leaves a little more on the board.${loss}${cp}`;
     case 'inaccuracy':
-      return `${moveLabel} ${playedMove} is an inaccuracy.${swing}${best}${cp}`;
+      return `${moveLabel} is an inaccuracy.${swing}${best}${cp}`;
     case 'miss':
-      return `${moveLabel} ${playedMove} misses a chance to punish the previous move.${swing}${best}${cp}`;
+      return `${moveLabel} misses a chance to punish the previous move.${swing}${best}${cp}`;
     case 'mistake':
-      return `${moveLabel} ${playedMove} is a mistake.${swing}${best}${cp}`;
+      return `${moveLabel} is a mistake.${swing}${best}${cp}`;
     case 'blunder':
-      return `${moveLabel} ${playedMove} is a blunder.${swing}${best}${cp}`;
+      return `${moveLabel} is a blunder.${swing}${best}${cp}`;
     default:
-      return `${moveLabel} ${playedMove}.`;
+      return `${moveLabel}.`;
   }
 }
 
@@ -1600,7 +1597,7 @@ function isCompletelyWinning(analysis: AnalysisResult | null | undefined, color:
 
 function formatTimelineMoveLabel(index: number, move: StoredMove) {
   const moveNumber = Math.floor(index / 2) + 1;
-  return move.color === 'b' ? `${moveNumber}... ${move.san}` : `${moveNumber}. ${move.san}`;
+  return `${moveNumber}. ${move.san}`;
 }
 
 function formatChartAxisValue(value: number) {

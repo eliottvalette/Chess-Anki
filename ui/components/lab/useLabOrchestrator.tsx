@@ -528,6 +528,10 @@ export function useLabOrchestrator() {
     isViewingDeckFailurePosition && !positionLoading && positionAnalysis?.bestMove
       ? formatBestMove(currentFen, positionAnalysis.bestMove)
       : null;
+  const reviewSaveMoveSan =
+    !activeDeckCard && hasLoadedGame && !positionLoading && displayAnalysis?.bestMove
+      ? formatBestMove(currentFen, displayAnalysis.bestMove)
+      : null;
   const boardArrows =
     mode === 'lines'
       ? []
@@ -2025,7 +2029,7 @@ export function useLabOrchestrator() {
   };
 
   const pageClassName = [
-    'chess-lab min-h-svh h-svh overflow-hidden p-[18px] text-[var(--text)]',
+    'chess-lab min-h-svh h-svh overflow-hidden p-[18px] text-(--text)',
     'max-[980px]:h-auto max-[980px]:min-h-svh max-[980px]:overflow-auto max-[720px]:p-3',
     mode === 'train' ? 'chess-lab--train' : '',
     mode === 'train' && activeDeckCard ? 'chess-lab--train-session max-[720px]:overflow-auto max-[720px]:p-1' : '',
@@ -2107,6 +2111,7 @@ export function useLabOrchestrator() {
     boardScoreLabel,
     whiteAdvantage,
     deckOpponentBestSan,
+    reviewSaveMoveSan,
     deckBusy,
     deckStats,
     deckLineMastery,

@@ -38,15 +38,15 @@ export function LabBoardArea() {
   const isBlackOrientation = labState.orientation === 'black';
 
   return (
-    <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-[var(--border)] bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-[var(--glass-shadow)] [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
+    <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-(--border) bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-(--glass-shadow) [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
       <div className="relative grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)] gap-3.5 overflow-hidden max-[720px]:grid-cols-1">
         <div
-          className="z-[2] flex flex-col gap-2 self-center max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
+          className="z-2 flex flex-col gap-2 self-center max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
           role="toolbar"
           aria-label="Board tools"
         >
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] p-0 font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
             onClick={() => labState.setPgnDialogOpen(true)}
             title="Import PGN"
             type="button"
@@ -54,7 +54,7 @@ export function LabBoardArea() {
             <ImportIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] p-0 font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
             onClick={() => labState.setOrientation((value) => (value === 'white' ? 'black' : 'white'))}
             title="Flip board"
             type="button"
@@ -62,7 +62,7 @@ export function LabBoardArea() {
             <FlipIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] p-0 font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
             onClick={() => labState.setShowArrow((value) => !value)}
             disabled={Boolean(labState.activeDeckCard && !isTrainCardFinished)}
             title={
@@ -77,7 +77,7 @@ export function LabBoardArea() {
             <ArrowIcon off={!labState.showArrow || Boolean(labState.activeDeckCard && !isTrainCardFinished)} />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] p-0 font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
             onClick={() => void runTimelineAnalysis()}
             disabled={labState.timelineLoading || labState.moveHistory.length === 0}
             title="Refresh analysis"
@@ -86,7 +86,7 @@ export function LabBoardArea() {
             <RefreshIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] p-0 font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
             onClick={resetWorkspace}
             title="Reset board"
             type="button"
@@ -108,27 +108,27 @@ export function LabBoardArea() {
               style={{ ['--white-share' as string]: `${whiteAdvantage}%` }}
             >
               <div
-                className={`absolute w-full transition-[height,width] duration-[240ms] ease-linear bg-gradient-to-b from-[#04070c] to-[rgba(38,50,70,0.92)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${
+                className={`absolute w-full transition-[height,width] duration-240 ease-linear bg-linear-to-b from-[#04070c] to-[rgba(38,50,70,0.92)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${
                   isBlackOrientation
                     ? 'bottom-0 h-[calc(100%-var(--white-share,50%))]'
                     : 'top-0 h-[calc(100%-var(--white-share,50%))]'
                 }`}
               />
               <div
-                className={`absolute w-full transition-[height,width] duration-[240ms] ease-linear bg-gradient-to-b from-[#f5f8ff] to-[#bcc8da] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-[var(--white-share,50%)] ${
-                  isBlackOrientation ? 'top-0 h-[var(--white-share,50%)]' : 'bottom-0 h-[var(--white-share,50%)]'
+                className={`absolute w-full transition-[height,width] duration-240 ease-linear bg-linear-to-b from-[#f5f8ff] to-[#bcc8da] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-(--white-share,50%) ${
+                  isBlackOrientation ? 'top-0 h-(--white-share,50%)' : 'bottom-0 h-(--white-share,50%)'
                 }`}
               />
               <div
-                className={`absolute bg-[var(--accent)] shadow-[0_0_12px_rgba(152,184,255,0.76)] max-[980px]:bottom-0 max-[980px]:left-[var(--white-share,50%)] max-[980px]:h-full max-[980px]:w-[2px] max-[980px]:-translate-x-1/2 ${
+                className={`absolute bg-(--accent) shadow-[0_0_12px_rgba(152,184,255,0.76)] max-[980px]:bottom-0 max-[980px]:left-(--white-share,50%) max-[980px]:h-full max-[980px]:w-[2px] max-[980px]:-translate-x-1/2 ${
                   isBlackOrientation
                     ? 'bottom-[calc(100%-var(--white-share,50%))] left-0 h-[2px] w-full translate-y-1/2'
-                    : 'bottom-[var(--white-share,50%)] left-0 h-[2px] w-full translate-y-1/2'
+                    : 'bottom-(--white-share,50%) left-0 h-[2px] w-full translate-y-1/2'
                 }`}
               />
             </div>
             <div className="flex justify-center">
-              <span className="min-w-0 text-lg font-semibold leading-none text-[var(--text)] max-[720px]:min-w-[42px]">
+              <span className="min-w-0 text-lg font-semibold leading-none text-(--text) max-[720px]:min-w-[42px]">
                 {boardScoreLabel}
               </span>
             </div>
@@ -185,7 +185,7 @@ export function LabBoardArea() {
               {boardReviewBadge ? (
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute z-[5] h-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] w-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--board-review-badge-color)] bg-[length:contain] bg-center bg-no-repeat shadow-[0_10px_24px_rgba(8,13,21,0.34),0_0_0_1px_rgba(255,255,255,0.22)] drop-shadow-[0_2px_3px_rgba(0,0,0,0.34)]"
+                  className="pointer-events-none absolute z-5 h-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] w-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--board-review-badge-color) bg-contain bg-center bg-no-repeat shadow-[0_10px_24px_rgba(8,13,21,0.34),0_0_0_1px_rgba(255,255,255,0.22)] drop-shadow-[0_2px_3px_rgba(0,0,0,0.34)]"
                   style={
                     {
                       '--board-review-badge-url': `url(${boardReviewBadge.badge})`,

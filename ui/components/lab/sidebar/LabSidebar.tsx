@@ -18,13 +18,13 @@ export function LabSidebar() {
   return (
     <>
       <section
-        className={`min-w-0 min-h-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--panel-bg)] shadow-[var(--glass-shadow)] backdrop-blur-[22px] backdrop-saturate-[1.2] flex flex-col gap-3.5 p-[18px]`}
+        className={`min-w-0 min-h-0 overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) shadow-(--glass-shadow) backdrop-blur-[22px] backdrop-saturate-[1.2] flex flex-col gap-3.5 p-[18px]`}
       >
         <div className="grid grid-cols-3 gap-2">
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
             <button
               key={tabMode}
-              className={`${lab.labState.mode === tabMode ? 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] px-2 text-[11px] font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none' : 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-2 text-[11px] font-normal uppercase tracking-[0.04em] text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none'}`}
+              className={`${lab.labState.mode === tabMode ? 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] px-2 text-[11px] font-normal text-(--text) shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none' : 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-2 text-[11px] font-normal text-(--text-muted) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none'}`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
               type="button"
             >
@@ -34,7 +34,7 @@ export function LabSidebar() {
         </div>
 
         <div
-          className={`min-h-0 flex flex-1 flex-col gap-[var(--panel-scroll-gap)] overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${lab.labState.mode === 'review' && lab.hasLoadedGame ? 'overflow-hidden pr-0' : ''}`}
+          className={`min-h-0 flex flex-1 flex-col gap-(--panel-scroll-gap) overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${lab.labState.mode === 'review' && lab.hasLoadedGame ? 'overflow-hidden pr-0' : ''}`}
         >
           {lab.labState.mode === 'review' ? (
             <ReviewPanel
@@ -81,7 +81,7 @@ export function LabSidebar() {
               recentGamesLoading={lab.labState.recentChessGamesLoading}
               onChesscomUsernameChange={lab.labState.setChesscomUsername}
               onFetchRecentGames={() => void lab.fetchRecentChessGames()}
-              reviewSaveMoveSan={lab.deckOpponentBestSan ?? null}
+              reviewSaveMoveSan={lab.reviewSaveMoveSan}
               positionLoading={lab.labState.positionLoading}
               deckSummaries={lab.labState.deckSummaries}
               recentGameTimeClass={lab.labState.recentGameTimeClass}
