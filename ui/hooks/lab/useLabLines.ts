@@ -4,7 +4,12 @@ import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
 import type { ChessSoundKey } from '@/lib/chess-sounds';
-import { DRILL_OPPONENT_DELAY_MS, type OpeningTreesPayload, readJsonResponse } from '@/lib/lab-helpers';
+import {
+  DRILL_OPPONENT_DELAY_MS,
+  type OpeningTreesFullPayload,
+  type OpeningTreesPayload,
+  readJsonResponse,
+} from '@/lib/lab-helpers';
 import {
   buildDrillPath,
   buildOpeningDrillExpected,
@@ -176,7 +181,7 @@ export function useLabLines(
 
     try {
       const response = await fetch('/api/opening-trees?full=true', { credentials: 'same-origin' });
-      const payload = await readJsonResponse<OpeningTreesPayload>(response);
+      const payload = await readJsonResponse<OpeningTreesFullPayload>(response);
 
       if (!response.ok) {
         throw new Error(payload.error ?? `Opening trees fetch failed: HTTP ${response.status}`);
@@ -497,7 +502,7 @@ export function useLabLines(
       setOpeningDrillStatus('');
       setOpeningDrillExpected(null);
 
-      let tree = treeObj;
+      let tree: OpeningTreeDetail | null = treeObj ?? null;
       if (tree) {
         setActiveOpeningTree(tree);
         loadOpeningTreeRootOnBoard(tree);

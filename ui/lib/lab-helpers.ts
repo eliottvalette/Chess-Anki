@@ -370,6 +370,10 @@ export type OpeningTreesPayload = {
   error?: string;
 };
 
+export type OpeningTreesFullPayload = Omit<OpeningTreesPayload, 'trees'> & {
+  trees?: OpeningTreeDetail[];
+};
+
 export type CachedTimelineAnalysis = {
   quality: 'refined';
   version?: string;
