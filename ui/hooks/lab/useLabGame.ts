@@ -164,7 +164,16 @@ export function useLabGame(
         setOpeningDrillExpected(null);
 
         if (correct) {
-          setDeckFeedback(null);
+          setDeckFeedback({
+            correct: true,
+            exact: move.uci === (expectedUci ?? move.uci),
+            playedSan: move.san,
+            playedUci: move.uci,
+            expectedSan: expectedSan ?? move.san,
+            expectedUci: expectedUci ?? move.uci,
+            validationMode: 'strict_best',
+            pending: false,
+          });
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
         } else if (expectedSan && expectedUci) {

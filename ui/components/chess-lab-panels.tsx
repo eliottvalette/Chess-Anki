@@ -98,7 +98,6 @@ export function LinesPanel({
   activeTreeId,
   deckFeedback,
   drillActive,
-  drillStatus,
   expectedSan: _expectedSan,
   loading,
   onImportRecent,
@@ -123,7 +122,6 @@ export function LinesPanel({
   activeTreeId: string | null;
   deckFeedback: DeckFeedback | null;
   drillActive: boolean;
-  drillStatus: string;
   expectedSan: string | null;
   loading: boolean;
   onImportRecent: () => void;
@@ -270,7 +268,7 @@ export function LinesPanel({
                   Back
                 </button>
               </div>
-              <div className={styles.trainBackRow} style={{ marginTop: '-4px', marginBottom: '16px' }}>
+              <div className={styles.trainBackRow} style={{ marginTop: '-4px' }}>
                 <button
                   className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`}
                   onClick={() => onChangeTrainSide('white')}
@@ -316,30 +314,6 @@ export function LinesPanel({
               </div>
             )}
 
-            {drillActive && (drillStatus || deckFeedback) ? (
-              <div
-                className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`}
-                style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}
-              >
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <strong>
-                    {!deckFeedback
-                      ? 'Drill Step'
-                      : deckFeedback.pending
-                        ? 'Checking eval'
-                        : deckFeedback.correct
-                          ? 'Best move'
-                          : 'Miss'}
-                  </strong>
-                  <span>
-                    {!deckFeedback
-                      ? drillStatus
-                      : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
             <div className={styles.trainingCardMeta}>
               <span>depth {activeTree.targetDepth}</span>
               <span>{activeTree.nodeCount} nodes</span>
@@ -347,7 +321,7 @@ export function LinesPanel({
             </div>
 
             <div className={styles.openingTreeCanvas}>
-              <ReactFlowProvider>
+              <ReactFlowProvider key={activeTreeId ?? 'none'}>
                 <ReactFlow
                   edges={graph.edges}
                   fitView
@@ -355,10 +329,11 @@ export function LinesPanel({
                   minZoom={0.25}
                   nodes={graph.nodes}
                   nodesDraggable={false}
+                  panOnDrag
+                  selectNodesOnDrag={false}
                   zoomOnScroll={false}
                   panOnScroll={false}
                   zoomOnDoubleClick={false}
-                  panOnDrag={false}
                   nodesConnectable={false}
                   onNodeClick={(_, node) => onSelectNode(node.id)}
                   proOptions={{ hideAttribution: true }}
@@ -447,7 +422,7 @@ function buildOpeningTreeGraph(
           </button>
         ),
       },
-      draggable: true,
+      draggable: false,
       className: [
         styles.openingTreeNode,
         isActive ? styles.openingTreeNodeActive : '',

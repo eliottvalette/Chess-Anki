@@ -625,17 +625,30 @@ export function useLabOrchestrator() {
     [gameReview.keyMoments, reviewSide],
   );
   const activeReviewMoment = reviewMoments[reviewIndex] ?? null;
+  const linesBoardClassification = useMemo(() => {
+    if (mode !== 'lines' || !openingDrillActive || historyIndex !== moveHistory.length || deckFeedback == null) {
+      return null;
+    }
+
+    const classifiedMove =
+      currentMoves.find((move) => move.uci === deckFeedback.playedUci) ?? currentMoves[currentMoves.length - 1] ?? null;
+
+    if (!classifiedMove) {
+      return null;
+    }
+
+    return {
+      move: classifiedMove,
+      category: deckFeedback.correct ? ('best' as const) : ('miss' as const),
+    };
+  }, [currentMoves, deckFeedback, historyIndex, mode, moveHistory.length, openingDrillActive]);
   const boardSquareStyles = useMemo(() => {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
     const reviewCategory = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
-      : mode === 'lines' && openingDrillActive
-        ? historyIndex === moveHistory.length && deckFeedback != null
-          ? deckFeedback.correct
-            ? 'best'
-            : 'miss'
-          : null
+      : linesBoardClassification
+        ? linesBoardClassification.category
         : mode === 'lines' && historyIndex > 0
           ? historyIndex === moveHistory.length && deckFeedback != null
             ? deckFeedback.correct
@@ -645,11 +658,12 @@ export function useLabOrchestrator() {
           : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
             ? timelineReviews[historyIndex - 1]?.category
             : null;
+    const styledMove = linesBoardClassification?.move ?? lastMove;
     const lastMoveStyle = getReviewMoveStyle(reviewCategory);
 
-    if (lastMove) {
-      nextStyles[lastMove.from] = lastMoveStyle;
-      nextStyles[lastMove.to] = lastMoveStyle;
+    if (styledMove) {
+      nextStyles[styledMove.from] = lastMoveStyle;
+      nextStyles[styledMove.to] = lastMoveStyle;
     }
 
     return {
@@ -663,9 +677,9 @@ export function useLabOrchestrator() {
     deckFeedback,
     hasLoadedGame,
     historyIndex,
+    linesBoardClassification,
     mode,
     moveHistory.length,
-    openingDrillActive,
     squareStyles,
     timelineReviews,
     variationBaseIndex,
@@ -678,12 +692,8 @@ export function useLabOrchestrator() {
     const lastMove = currentMoves[currentMoves.length - 1];
     const category = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
-      : mode === 'lines' && openingDrillActive
-        ? historyIndex === moveHistory.length && deckFeedback != null
-          ? deckFeedback.correct
-            ? 'best'
-            : 'miss'
-          : null
+      : linesBoardClassification
+        ? linesBoardClassification.category
         : mode === 'lines' && historyIndex > 0
           ? historyIndex === moveHistory.length && deckFeedback != null
             ? deckFeedback.correct
@@ -694,12 +704,14 @@ export function useLabOrchestrator() {
             ? timelineReviews[historyIndex - 1]?.category
             : null;
 
-    if (!lastMove || !category) {
+    const badgeMove = linesBoardClassification?.move ?? lastMove;
+
+    if (!badgeMove || !category) {
       return null;
     }
 
     const meta = reviewCategoryMeta[category];
-    const placement = getBoardSquareCenter(lastMove.to, orientation, boardWidth);
+    const placement = getBoardSquareCenter(badgeMove.to, orientation, boardWidth);
 
     if (!meta?.badge || !placement) {
       return null;
@@ -718,9 +730,9 @@ export function useLabOrchestrator() {
     deckFeedback,
     hasLoadedGame,
     historyIndex,
+    linesBoardClassification,
     mode,
     moveHistory.length,
-    openingDrillActive,
     orientation,
     timelineReviews,
     variationBaseIndex,

@@ -131,7 +131,6 @@ export function LabSidebar() {
               activeTreeId={lab.labState.selectedOpeningTreeId}
               deckFeedback={lab.labState.deckFeedback}
               drillActive={lab.labState.openingDrillActive}
-              drillStatus={lab.labState.openingDrillStatus}
               expectedSan={
                 lab.labState.openingDrillExpected?.san ??
                 (lab.labState.openingDrillExpected?.uci
