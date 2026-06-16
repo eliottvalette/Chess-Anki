@@ -15,8 +15,66 @@ import {
 } from './analysis-profile';
 import { resolveOpeningBookFlagsLocal } from './opening-book';
 import type { DeckProgressMap } from './deck-progress';
-import type { DeckCard, DeckFeedback } from './opening-training';
+import type { OpeningTreeSummary, OpeningTreeDetail } from '@/lib/opening-tree';
+import type { TrainingDeckSummary } from '@/components/chess-lab-panels';
+import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
+import { parseCardMoveReviews } from '@/lib/card-move-reviews';
 import type { TrainSessionStats } from '../components/chess-lab-panels';
+
+
+export type TrainingDeckCardRow = {
+  id: string;
+  kind: string;
+  line_id: string | null;
+  line_name: string | null;
+  eco: string | null;
+  side: string;
+  ply: number;
+  fen: string;
+  answer_uci: string;
+  answer_san: string;
+  prompt: string;
+  context: string;
+  source_type: string;
+  validation_mode: string;
+  reference_eval_cp: number | null;
+  max_eval_loss_cp: number | null;
+  opponent_move_uci: string | null;
+  opponent_move_san: string | null;
+  score_swing_cp: number | null;
+  replay_from_start?: boolean | null;
+  initial_fen?: string | null;
+  setup_moves?: string[] | null;
+  move_reviews?: unknown;
+};
+
+export function mapTrainingDeckCard(card: TrainingDeckCardRow): DeckCard {
+  return {
+    id: String(card.id),
+    kind: card.kind === 'repertoire_choice' ? 'repertoire_choice' : 'punish_mistake',
+    lineId: card.line_id ? String(card.line_id) : '',
+    lineName: String(card.line_name),
+    eco: String(card.eco),
+    side: card.side === 'black' ? 'black' : 'white',
+    ply: Number(card.ply),
+    fen: String(card.fen),
+    answerUci: String(card.answer_uci),
+    answerSan: String(card.answer_san),
+    prompt: String(card.prompt),
+    context: String(card.context),
+    sourceType: card.source_type === 'recent_game' || card.source_type === 'review' ? card.source_type : 'opening_seed',
+    validationMode: card.validation_mode === 'within_eval_loss' ? 'within_eval_loss' : 'strict_best',
+    referenceEvalCp: typeof card.reference_eval_cp === 'number' ? card.reference_eval_cp : undefined,
+    maxEvalLossCp: typeof card.max_eval_loss_cp === 'number' ? card.max_eval_loss_cp : undefined,
+    opponentMoveUci: card.opponent_move_uci ? String(card.opponent_move_uci) : undefined,
+    opponentMoveSan: card.opponent_move_san ? String(card.opponent_move_san) : undefined,
+    scoreSwingCp: typeof card.score_swing_cp === 'number' ? card.score_swing_cp : undefined,
+    replayFromStart: Boolean(card.replay_from_start),
+    initialFen: card.initial_fen ? String(card.initial_fen) : null,
+    setupMoves: Array.isArray(card.setup_moves) ? card.setup_moves.map(move => String(move)) : [],
+    moveReviews: parseCardMoveReviews(card.move_reviews),
+  };
+}
 
 export type PositionAnalysisProfile = 'review' | 'training';
 
@@ -269,6 +327,44 @@ export function deleteCookie(name: string) {
 export function delay(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms));
 }
+
+export const DRILL_OPPONENT_DELAY_MS = 400;
+
+export function parseJsonResponse<T>(response: Response, bodyText: string): T {
+  if (!bodyText.trim()) {
+    throw new Error(`Empty response from ${response.url || 'API'} (HTTP ${response.status}).`);
+  }
+
+  try {
+    return JSON.parse(bodyText) as T;
+  } catch {
+    throw new Error(`Invalid JSON from ${response.url || 'API'} (HTTP ${response.status}).`);
+  }
+}
+
+export async function readJsonResponse<T>(response: Response) {
+  return parseJsonResponse<T>(response, await response.text());
+}
+
+export type TrainingDeckPayload = {
+  decks?: any[];
+  deck?: any | null;
+  lines?: Array<{ id: string; name: string; eco: string; side: string; moves: string[] | null }>;
+  cards?: any[];
+  error?: string;
+};
+
+export type OpeningTreesPayload = {
+  trees?: any[];
+  tree?: any;
+  imported?: number;
+  nodes?: number;
+  edges?: number;
+  nodeId?: string;
+  masteryScore?: number;
+  error?: string;
+};
+
 export type CachedTimelineAnalysis = {
   quality: 'refined';
   version?: string;

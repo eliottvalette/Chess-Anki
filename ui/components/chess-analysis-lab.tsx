@@ -94,8 +94,13 @@ import {
   isUsableCachedTimelineAnalysis,
   getRecentGameCacheKey,
   recentGameAnalysisMemoryCache,
-  loadCachedTimelineAnalysis
-
+  loadCachedTimelineAnalysis,
+  DRILL_OPPONENT_DELAY_MS,
+  parseJsonResponse,
+  readJsonResponse,
+  type TrainingDeckPayload,
+  type OpeningTreesPayload,
+  LAST_TRAINING_DECK_STORAGE_KEY,
 } from '../lib/lab-helpers';
 import {
   ImportIcon,
@@ -120,6 +125,13 @@ import { buildDrillPath, chooseWeightedOpponentEdge, type DrillPathStep, type Op
 import styles from './chess-analysis-lab.module.css';
 import { useRecentGames } from "../hooks/lab/useRecentGames";
 import { useTrainingProfile } from "../hooks/lab/useTrainingProfile";
+import { useLabAudio } from '../hooks/lab/useLabAudio';
+import { useLabEngine } from '../hooks/lab/useLabEngine';
+import { useLabGame } from '../hooks/lab/useLabGame';
+import { useLabDeckManager } from '../hooks/lab/useLabDeckManager';
+import { useLabReview } from '../hooks/lab/useLabReview';
+import { useLabLines } from '../hooks/lab/useLabLines';
+import { useLabTraining } from '../hooks/lab/useLabTraining';
 
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ssr: false,
@@ -142,14 +154,12 @@ const TRAINING_PASSWORD_COOKIE = 'training_profile_password';
 const TRAINING_USERNAME_STORAGE_KEY = 'chess-lab-training-username-v1';
 const TRAINING_PASSWORD_STORAGE_KEY = 'chess-lab-training-password-v1';
 const DECK_PROGRESS_STORAGE_KEY = 'chess-lab-deck-progress-v1';
-const LAST_TRAINING_DECK_STORAGE_KEY = 'chess-lab-last-training-deck-v1';
 const TRAINING_REPLAY_MOVE_MS = 200;
 const RECENT_GAMES_PAGE_SIZE = 10;
 const RECENT_GAMES_AUTO_REFRESH_MS = 90_000;
 const RECENT_GAMES_INTERACTION_IDLE_MS = 2_500;
 const RECENT_GAMES_PRELOAD_SCAN_MS = 1_000;
 const GAME_ANALYSIS_CACHE_VERSION = 6;
-const DRILL_OPPONENT_DELAY_MS = 400;
 const TIMELINE_ANALYSIS_PROFILE_KEY = `game-review-v${REVIEW_ANALYSIS_PROFILE.version}-d${REVIEW_ANALYSIS_PROFILE.depth}-pv${REVIEW_ANALYSIS_PROFILE.multipv}`;
 type PositionAnalysisProfile = 'review' | 'training';
 
@@ -253,34 +263,6 @@ function getCapturedMaterialValue(moves: StoredMove[], playerColor: 'white' | 'b
   }, 0);
 }
 
-function mapTrainingDeckCard(card: TrainingDeckCardRow): DeckCard {
-  return {
-    id: String(card.id),
-    kind: card.kind === 'repertoire_choice' ? 'repertoire_choice' : 'punish_mistake',
-    lineId: card.line_id ? String(card.line_id) : '',
-    lineName: String(card.line_name),
-    eco: String(card.eco),
-    side: card.side === 'black' ? 'black' : 'white',
-    ply: Number(card.ply),
-    fen: String(card.fen),
-    answerUci: String(card.answer_uci),
-    answerSan: String(card.answer_san),
-    prompt: String(card.prompt),
-    context: String(card.context),
-    sourceType: card.source_type === 'recent_game' || card.source_type === 'review' ? card.source_type : 'opening_seed',
-    validationMode: card.validation_mode === 'within_eval_loss' ? 'within_eval_loss' : 'strict_best',
-    referenceEvalCp: typeof card.reference_eval_cp === 'number' ? card.reference_eval_cp : undefined,
-    maxEvalLossCp: typeof card.max_eval_loss_cp === 'number' ? card.max_eval_loss_cp : undefined,
-    opponentMoveUci: card.opponent_move_uci ? String(card.opponent_move_uci) : undefined,
-    opponentMoveSan: card.opponent_move_san ? String(card.opponent_move_san) : undefined,
-    scoreSwingCp: typeof card.score_swing_cp === 'number' ? card.score_swing_cp : undefined,
-    replayFromStart: Boolean(card.replay_from_start),
-    initialFen: card.initial_fen ? String(card.initial_fen) : null,
-    setupMoves: Array.isArray(card.setup_moves) ? card.setup_moves.map(move => String(move)) : [],
-    moveReviews: parseCardMoveReviews(card.move_reviews),
-  };
-}
-
 function BoardPlayerBar({ player }: { player: BoardPlayerSummary }) {
   return (
     <div className={styles.boardPlayerBar}>
@@ -316,71 +298,11 @@ function getPgnHash(pgn: string) {
   return `pgn:${(hash >>> 0).toString(16)}`;
 }
 
-function parseJsonResponse<T>(response: Response, bodyText: string): T {
-  if (!bodyText.trim()) {
-    throw new Error(`Empty response from ${response.url || 'API'} (HTTP ${response.status}).`);
-  }
-
-  try {
-    return JSON.parse(bodyText) as T;
-  } catch {
-    throw new Error(`Invalid JSON from ${response.url || 'API'} (HTTP ${response.status}).`);
-  }
-}
-
-async function readJsonResponse<T>(response: Response) {
-  return parseJsonResponse<T>(response, await response.text());
-}
-
 export type TrainingProfile = {
   id: string;
   username: string;
 };
 
-type TrainingDeckPayload = {
-  decks?: TrainingDeckSummary[];
-  deck?: TrainingDeckSummary | null;
-  lines?: Array<{ id: string; name: string; eco: string; side: string; moves: string[] | null }>;
-  cards?: TrainingDeckCardRow[];
-  error?: string;
-};
-
-type OpeningTreesPayload = {
-  trees?: OpeningTreeSummary[];
-  tree?: OpeningTreeDetail;
-  imported?: number;
-  nodes?: number;
-  edges?: number;
-  nodeId?: string;
-  masteryScore?: number;
-  error?: string;
-};
-
-type TrainingDeckCardRow = {
-  id: string;
-  kind: string;
-  line_id: string | null;
-  line_name: string;
-  eco: string;
-  side: string;
-  ply: number;
-  fen: string;
-  answer_uci: string;
-  answer_san: string;
-  prompt: string;
-  context: string;
-  source_type?: string | null;
-  validation_mode?: string | null;
-  reference_eval_cp?: number | null;
-  max_eval_loss_cp?: number | null;
-  opponent_move_uci?: string | null;
-  opponent_move_san?: string | null;
-  score_swing_cp?: number | null;
-  replay_from_start?: boolean | null;
-  initial_fen?: string | null;
-  setup_moves?: string[] | null;
-  move_reviews?: unknown;
-};
 
 type TrainSessionStats = {
   completed: number;
@@ -457,14 +379,7 @@ export function ChessAnalysisLab() {
     timelineRefineRequestIdRef, reviewPlaybackRequestIdRef, deckPlaybackRequestIdRef,
     deckReplayMovesRef, deckReplayInitialFenRef
   } = labState;
-  const deckCardPromptStartedAtRef = useRef<number | null>(null);
-  const suppressSpaceKeyUpRef = useRef(false);
-  const deckProgressRef = useRef(deckProgress);
-  const deckFeedbackRef = useRef(deckFeedback);
-  const soundPlayersRef = useRef<Partial<Record<ChessSoundKey, HTMLAudioElement>>>({});
-  const positionCacheRef = useRef(new Map<string, AnalysisResult>());
-  const positionInFlightRef = useRef(new Map<string, Promise<AnalysisResult>>());
-  const timelineBatchInFlightRef = useRef(new Map<string, Promise<AnalysisResult[]>>());
+  
   const recentFetchRequestIdRef = useRef(0);
   const recentAutoFetchStartedRef = useRef(false);
   const recentPreloadBusyRef = useRef(false);
@@ -477,20 +392,46 @@ export function ChessAnalysisLab() {
   const lastReviewInteractionAtRef = useRef(Date.now());
   const progressHydratedRef = useRef(false);
   const progressSyncTimerRef = useRef<number | null>(null);
-  const selectedDeckIdRef = useRef<string | null>(null);
-  const loadTrainingDeckRef = useRef<(deckId?: string | null, options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean }) => Promise<void>>(async () => undefined);
   const lastDeckLibraryProfileIdRef = useRef<string | null>(null);
-  const deckLoadRequestIdRef = useRef(0);
+
   const reviewWorkspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(null);
   const trainWorkspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(null);
   const workspaceStateRef = useRef<WorkspaceSnapshot>(createEmptyWorkspaceSnapshot());
   const modeRef = useRef<WorkspaceMode>('review');
 
+  const currentFen = useMemo(() => game.fen(), [game]);
+  const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
+  const currentMoves = useMemo(() => {
+    if (variationBaseIndex != null) {
+      return [...moveHistory.slice(0, variationBaseIndex), ...variationMoves];
+    }
+
+    return moveHistory.slice(0, historyIndex);
+  }, [historyIndex, moveHistory, variationBaseIndex, variationMoves]);
+
+  const currentMoveList = useMemo(() => buildMoveUciHistory(currentMoves), [currentMoves]);
+  const currentLineKey = useMemo(() => getPositionCacheKey(initialFen, currentMoveList, activeDeckCard ? 'training' : 'review'), [activeDeckCard, currentMoveList, initialFen]);
+
+  const engineContext = useMemo(() => ({
+    currentFen,
+    currentMoveList,
+    currentLineKey,
+  }), [currentFen, currentLineKey, currentMoveList]);
+
+  const {
+    fetchCachedPositionAnalysis,
+    analyzeTimelineDeep,
+    clearEngineCache,
+    positionCacheRef,
+    positionInFlightRef,
+    timelineBatchInFlightRef,
+  } = useLabEngine(labState, engineContext);
+
   const recentGamesRefs = useMemo(() => ({
     modeRef,
     positionInFlightRef,
     lastReviewInteractionAtRef,
-  }), []);
+  }), [positionInFlightRef]);
 
   const {
     fetchRecentChessGames,
@@ -512,18 +453,9 @@ export function ChessAnalysisLab() {
         hydrateTrainingProgressRef,
       } = useTrainingProfile(labState, trainingProfileRefs);
 
+      const { playSound, playSoundSequence } = useLabAudio();
 
-  const currentFen = useMemo(() => game.fen(), [game]);
-  const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
-  const currentMoves = useMemo(() => {
-    if (variationBaseIndex != null) {
-      return [...moveHistory.slice(0, variationBaseIndex), ...variationMoves];
-    }
 
-    return moveHistory.slice(0, historyIndex);
-  }, [historyIndex, moveHistory, variationBaseIndex, variationMoves]);
-  const currentMoveList = useMemo(() => buildMoveUciHistory(currentMoves), [currentMoves]);
-  const currentLineKey = currentMoveList.join(' ');
   const trainAnswerFeedback = useMemo(
     () =>
       deckFeedback && !deckFeedback.pending
@@ -827,104 +759,9 @@ export function ChessAnalysisLab() {
     return pairs;
   }, [moveHistory]);
 
-  const playSound = useCallback((soundKey: ChessSoundKey) => {
-    const base = soundPlayersRef.current[soundKey];
 
-    if (!base) {
-      return;
-    }
 
-    const player = base.cloneNode(true) as HTMLAudioElement;
-    player.currentTime = 0;
-    void player.play().catch(() => undefined);
-  }, []);
 
-  const playSoundSequence = useCallback(
-    (soundKeys: ChessSoundKey[]) => {
-      soundKeys.forEach((soundKey, index) => {
-        window.setTimeout(() => playSound(soundKey), index * 110);
-      });
-    },
-    [playSound],
-  );
-
-  const fetchCachedPositionAnalysis = useCallback(
-    (
-      cacheKey: string,
-      fen: string,
-      moves: string[],
-      requestInitialFen = initialFen,
-      profile: PositionAnalysisProfile = 'review',
-    ) => {
-      const cachedAnalysis = positionCacheRef.current.get(cacheKey);
-
-      if (cachedAnalysis) {
-        return Promise.resolve(cachedAnalysis);
-      }
-
-      const inFlight = positionInFlightRef.current.get(cacheKey);
-
-      if (inFlight) {
-        return inFlight;
-      }
-
-      const buildRequest = profile === 'training' ? buildDeterministicAnalyzeRequest : buildReviewAnalyzeRequest;
-      const request = analyzeSinglePosition(
-        buildRequest({
-          fen,
-          initialFen: requestInitialFen,
-          moves,
-        }),
-      )
-        .then(analysis => {
-          positionCacheRef.current.set(cacheKey, analysis);
-          return analysis;
-        })
-        .finally(() => {
-          positionInFlightRef.current.delete(cacheKey);
-        });
-
-      positionInFlightRef.current.set(cacheKey, request);
-      return request;
-    },
-    [initialFen],
-  );
-
-  const analyzeTimelineDeep = useCallback(
-    async (
-      moves: StoredMove[],
-      requestInitialFen: string | null,
-      onProgress?: (progress: number) => void,
-      label = 'review',
-      signal?: AbortSignal,
-    ) => {
-      const positions = buildTimelineSequencePositions(moves, requestInitialFen);
-
-      return runTimelineAnalysisDedupe({
-        label,
-        positions,
-        signal,
-        cache: positionCacheRef.current,
-        positionInFlight: positionInFlightRef.current,
-        batchInFlight: timelineBatchInFlightRef.current,
-        batchSize: TIMELINE_ANALYSIS_BATCH_SIZE,
-        getCacheKey: position => getTimelinePositionCacheKey(requestInitialFen, position.moves ?? []),
-        buildRequest: position => buildReviewAnalyzeRequest({
-          ...position,
-          initialFen: requestInitialFen,
-        }),
-        analyzeBatch: async (batchPositions, batchSignal) => {
-          const response = await analyzeGamePositions({
-            positions: batchPositions,
-            depth: REVIEW_ANALYSIS_PROFILE.depth,
-          }, batchSignal);
-          return response.analyses ?? [];
-        },
-        onProgress,
-      });
-    },
-    [],
-  );
   useEffect(() => {
     const markInteraction = () => {
       lastReviewInteractionAtRef.current = Date.now();
@@ -950,537 +787,207 @@ export function ChessAnalysisLab() {
     return () => window.clearInterval(timer);
   }, [preloadRecentGameAnalysis, recentChessGames, recentPreloadTick, timelineAnalyses, timelineLoading, positionLoading]);
 
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
 
-    const players = Object.fromEntries(
-      Object.entries(CHESS_SOUND_URLS).map(([key, url]) => {
-        const audio = new Audio(url);
-        audio.preload = 'auto';
-        return [key, audio];
-      }),
-    ) as Partial<Record<ChessSoundKey, HTMLAudioElement>>;
 
-    soundPlayersRef.current = players;
-  }, []);
+  const suppressSpaceKeyUpRef = useRef(false);
+  const loadTrainingDeckRef = useRef<(deckId?: string | null, options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean }) => Promise<void>>(async () => undefined);
+  const deckCardPromptStartedAtRef = useRef<number | null>(null);
+  const advanceDrillToStepRef = useRef<(stepIndex: number) => void>(() => {});
 
-  const beginDeckCardSession = useCallback((card: DeckCard, lines: OpeningSeedLine[]) => {
-    persistReviewWorkspaceSnapshot();
-    deckCardPromptStartedAtRef.current = null;
-    const deckState = buildDeckCardStartState(card, lines);
+  const gameContext = useMemo(() => ({
+    advanceDrillToStepRef,
+    playSoundSequence,
+    playSound,
+    saveTrainingAttempt,
+    timelineRefineRequestIdRef,
+    deckCardPromptStartedAtRef,
+    modeRef,
+    drillPathRef,
+    drillPathIndexRef,
+  }), [advanceDrillToStepRef, playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, deckCardPromptStartedAtRef, modeRef, drillPathRef, drillPathIndexRef]);
 
-    setInitialFen(deckState.initialFen);
-    setMoveHistory(deckState.moveHistory);
-    setHistoryIndex(deckState.historyIndex);
-    clearVariation();
-    setGame(deckState.game);
-    setMetadata(null);
-    setFileName('');
-    setPreMoveAnalyses([]);
-    timelineRefineRequestIdRef.current += 1;
-    setMode('train');
-    modeRef.current = 'train';
-    setActiveDeckCard(card);
-    setDeckFeedback(null);
-    setDeckFeedbackArrowsVisible(false);
-    setOrientation(card.side);
-    setShowArrow(false);
-    setPositionAnalysis(null);
-    setTimelineAnalyses([]);
-    setTimelineError('');
-    clearSelection();
-    deckReplayMovesRef.current = deckState.moveHistory;
-    deckReplayInitialFenRef.current = deckState.initialFen;
-
-    if (deckState.replayTargetIndex > 0) {
-      playSound('game-start');
-      return deckState.replayTargetIndex;
-    }
-
-    playSound('game-start');
-    return 0;
-  }, [playSound]);
-
-  const playDeckReplayToIndex = useCallback(async (targetIndex: number, trainSide: DeckCard['side']) => {
-    const requestId = ++deckPlaybackRequestIdRef.current;
-    const moves = deckReplayMovesRef.current;
-    const startFen = deckReplayInitialFenRef.current;
-    const boundedTarget = Math.max(0, Math.min(targetIndex, moves.length));
-
-    if (boundedTarget === 0) {
-      return true;
-    }
-
-    setDeckPlaybackBusy(true);
-
-    for (let nextIndex = 1; nextIndex <= boundedTarget; nextIndex += 1) {
-      if (deckPlaybackRequestIdRef.current !== requestId) {
-        setDeckPlaybackBusy(false);
-        return false;
-      }
-
-      const nextGame = restoreGameFromHistory(moves, startFen, nextIndex);
-      const replayedMove = moves[nextIndex - 1];
-
-      if (replayedMove) {
-        const isSelfMove =
-          (trainSide === 'white' && replayedMove.color === 'w') || (trainSide === 'black' && replayedMove.color === 'b');
-
-        playSoundSequence(
-          getMoveSoundSequence({
-            move: replayedMove,
-            isSelfMove,
-            isCheck: nextGame.isCheck(),
-            isCheckmate: nextGame.isCheckmate(),
-            isGameOver: nextGame.isGameOver(),
-          }),
-        );
-      }
-
-      setHistoryIndex(nextIndex);
-      setDeckFeedbackArrowsVisible(false);
-      clearVariation();
-      setGame(nextGame);
-      clearSelection();
-      await delay(TRAINING_REPLAY_MOVE_MS);
-    }
-
-    if (deckPlaybackRequestIdRef.current === requestId) {
-      setDeckPlaybackBusy(false);
-      return true;
-    }
-
-    return false;
-  }, [clearSelection, playSoundSequence]);
-
-  const startDeckCardWithReplay = useCallback(async (card: DeckCard, lines: OpeningSeedLine[]) => {
-    deckPlaybackRequestIdRef.current += 1;
-    const replayTargetIndex = beginDeckCardSession(card, lines);
-
-    if (replayTargetIndex > 0) {
-      const replayCompleted = await playDeckReplayToIndex(replayTargetIndex, card.side);
-
-      if (!replayCompleted) {
-        return;
-      }
-    }
-
-    deckCardPromptStartedAtRef.current = Date.now();
-  }, [beginDeckCardSession, playDeckReplayToIndex]);
-
-  const loadTrainingDeck = useCallback(async (deckId?: string | null, options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean }) => {
-    const resolvedDeckId = deckId ?? selectedDeckIdRef.current;
-    const libraryLoading = options?.libraryLoading !== false;
-    const requestId = ++deckLoadRequestIdRef.current;
-
-    if (libraryLoading) {
-      setDeckLibraryLoading(true);
-    } else {
-      setDeckCardsLoading(true);
-    }
-
-    setDeckLoadError('');
-
-    try {
-      const query = options?.allDecks ? '?scope=all' : resolvedDeckId ? `?deckId=${encodeURIComponent(resolvedDeckId)}` : '';
-      const response = await fetch(`/api/training-deck${query}`, { credentials: 'same-origin' });
-      const payload = await readJsonResponse<TrainingDeckPayload>(response);
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? `Training deck fetch failed: HTTP ${response.status}`);
-      }
-
-      setDeckSummaries(payload.decks ?? []);
-
-      if (
-        typeof window !== 'undefined' &&
-        resolvedDeckId &&
-        !(payload.decks ?? []).some(deck => deck.id === resolvedDeckId)
-      ) {
-        window.localStorage.removeItem(LAST_TRAINING_DECK_STORAGE_KEY);
-      }
-
-      const lines = (payload.lines ?? []).map(line => ({
-        id: String(line.id),
-        name: String(line.name),
-        eco: String(line.eco),
-        side: (line.side === 'black' ? 'black' : 'white') as OpeningSeedLine['side'],
-        moves: Array.isArray(line.moves) ? line.moves.map(move => String(move)) : [],
-      }));
-      const cards = (payload.cards ?? []).map(mapTrainingDeckCard);
-
-      if (options?.allDecks) {
-        const mixedCards = buildMixedTrainingQueue(cards, deckProgressRef.current);
-        setTrainAllQueue(mixedCards);
-        setTrainSessionIndex(0);
-        setTrainSessionStats(createEmptyTrainSessionStats());
-        setOpeningLines(lines);
-        setDeckCards(cards);
-        setDeckIndex(0);
-
-        if (options.autoStart && mixedCards.length > 0) {
-          setTrainAllSession(true);
-          await startDeckCardWithReplay(mixedCards[0], lines);
-        }
-
-        return;
-      }
-
-      if (!payload.deck) {
-        setOpeningLines([]);
-        setDeckCards([]);
-        setSelectedDeckId(null);
-        return;
-      }
-
-      setSelectedDeckId(payload.deck.id);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(LAST_TRAINING_DECK_STORAGE_KEY, payload.deck.id);
-      }
-      setOpeningLines(lines);
-      setDeckCards(cards);
-      setDeckIndex(0);
-
-      if (options?.autoStart && cards.length > 0) {
-        const nextCard = getDeckStudyQueue(cards, deckProgressRef.current)[0] ?? null;
-
-        if (nextCard) {
-          await startDeckCardWithReplay(nextCard, lines);
-        }
-      }
-    } catch (error) {
-      setOpeningLines([]);
-      setDeckCards([]);
-
-      if (libraryLoading) {
-        setDeckSummaries([]);
-      }
-
-      setDeckLoadError(normalizeDeckLoadError(error instanceof Error ? error.message : 'Unable to load Supabase deck.'));
-    } finally {
-      if (requestId !== deckLoadRequestIdRef.current) {
-        return;
-      }
-
-      if (libraryLoading) {
-        setDeckLibraryLoading(false);
-      } else {
-        setDeckCardsLoading(false);
-      }
-    }
-  }, [startDeckCardWithReplay]);
-
-  function loadOpeningTreeRootOnBoard(tree: OpeningTreeDetail) {
-    const rootMoves = buildStoredMovesFromSanList(null, tree.rootSan);
-    const rootGame = restoreGameFromHistory(rootMoves, null, rootMoves.length);
-    const rootNode = tree.nodes.find(node => node.ply === tree.rootSan.length) ?? tree.nodes[0] ?? null;
-
+  const {
+    clearSelection,
+    clearVariation,
+    highlightMoves,
+    commitMove,
+    tryMove,
+    jumpToIndex,
+  } = useLabGame(labState, gameContext);
+  const applyWorkspaceSnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
     positionRequestIdRef.current += 1;
     timelineRequestIdRef.current += 1;
-    setMode('lines');
-    modeRef.current = 'lines';
-    setInitialFen(null);
-    setMoveHistory(rootMoves);
-    setHistoryIndex(rootMoves.length);
-    clearVariation();
-    setGame(rootGame);
-    setMetadata(null);
-    setFileName('');
-    setPositionAnalysis(null);
-    setPreMoveAnalyses([]);
-    setTimelineAnalyses([]);
-    setTimelineError('');
-    setServerError('');
-    setActiveOpeningNodeId(rootNode?.id ?? null);
-    setOpeningDrillExpected(rootNode && rootNode.sideToMove === rootNode.trainSide ? { nodeId: rootNode.id, uci: rootNode.bestUci, san: rootNode.bestSan } : null);
-    setOpeningDrillStatus('');
-    if (rootNode) {
-      setOrientation(rootNode.trainSide);
-    }
-    setShowArrow(false);
-    clearSelection();
-  }
+    timelineRefineRequestIdRef.current += 1;
+    const nextGame = restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
 
-  const loadOpeningTreeDetail = useCallback(async (treeId: string, options: { syncBoard?: boolean } = {}) => {
-    setOpeningTreeActionError('');
+    setInitialFen(snapshot.initialFen);
+    setMoveHistory(snapshot.moveHistory);
+    setHistoryIndex(snapshot.historyIndex);
+    setVariationBaseIndex(snapshot.variationBaseIndex);
+    setVariationMoves(snapshot.variationMoves);
+    setGame(nextGame);
+    setMetadata(snapshot.metadata);
+    setWhiteAvatarUrl(snapshot.whiteAvatarUrl);
+    setBlackAvatarUrl(snapshot.blackAvatarUrl);
+    setFileName(snapshot.fileName);
+    setOrientation(snapshot.orientation);
+    setShowArrow(snapshot.showArrow);
+    setReviewIndex(snapshot.reviewIndex);
+    setActiveDeckCard(snapshot.activeDeckCard);
+    setDeckFeedback(snapshot.deckFeedback);
+    setDeckFeedbackArrowsVisible(false);
+    setDeckIndex(snapshot.deckIndex);
+    setTrainAllSession(snapshot.trainAllSession);
+    setTrainAllQueue([...(snapshot.trainAllQueue ?? [])]);
+    setTrainSessionIndex(snapshot.trainSessionIndex ?? 0);
+    setTrainSessionStats({ ...(snapshot.trainSessionStats ?? createEmptyTrainSessionStats()) });
+    setPositionAnalysis(snapshot.positionAnalysis);
+    setPreMoveAnalyses(snapshot.preMoveAnalyses);
+    setTimelineAnalyses(snapshot.timelineAnalyses);
+    setTimelineReviews(
+      buildTimelineReviews(
+        snapshot.moveHistory,
+        snapshot.preMoveAnalyses,
+        snapshot.timelineAnalyses,
+        snapshot.initialFen,
+        snapshot.metadata,
+      ),
+    );
+    setPositionLoading(false);
+    setTimelineLoading(false);
+    setServerError(snapshot.serverError);
+    setTimelineError(snapshot.timelineError);
+    setSelectedSquare(null);
+    setSquareStyles({});
+  }, [clearSelection, clearVariation, setActiveDeckCard, setBlackAvatarUrl, setDeckFeedback, setDeckFeedbackArrowsVisible, setDeckIndex, setFileName, setGame, setHistoryIndex, setInitialFen, setMetadata, setMoveHistory, setOrientation, setPositionAnalysis, setPreMoveAnalyses, setReviewIndex, setServerError, setShowArrow, setTimelineAnalyses, setTimelineError, setTimelineReviews, setTrainAllQueue, setTrainAllSession, setTrainSessionIndex, setTrainSessionStats, setVariationBaseIndex, setVariationMoves, setWhiteAvatarUrl, setPositionLoading, setTimelineLoading, setSelectedSquare, setSquareStyles]);
 
-    try {
-      const response = await fetch(`/api/opening-trees?treeId=${encodeURIComponent(treeId)}`, { credentials: 'same-origin' });
-      const payload = await readJsonResponse<OpeningTreesPayload>(response);
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
-      }
-
-      const tree = payload.tree ?? null;
-      setActiveOpeningTree(tree);
-
-      if (tree && options.syncBoard) {
-        loadOpeningTreeRootOnBoard(tree);
-      } else {
-        setActiveOpeningNodeId(tree?.nodes[0]?.id ?? null);
-      }
-
-      return tree;
-    } catch (error) {
-      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening tree.');
-      setActiveOpeningTree(null);
-      return null;
-    }
-  }, []);
-
-  const loadOpeningTrees = useCallback(async () => {
-    setOpeningTreesLoading(true);
-    setOpeningTreeActionError('');
-
-    try {
-      const response = await fetch('/api/opening-trees', { credentials: 'same-origin' });
-      const payload = await readJsonResponse<OpeningTreesPayload>(response);
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? `Opening trees fetch failed: HTTP ${response.status}`);
-      }
-
-      const nextTrees = payload.trees ?? [];
-      setOpeningTrees(nextTrees);
-      const nextSelectedId = selectedOpeningTreeId && nextTrees.some(tree => tree.id === selectedOpeningTreeId)
-        ? selectedOpeningTreeId
-        : nextTrees[0]?.id ?? null;
-
-      setSelectedOpeningTreeId(nextSelectedId);
-
-      if (nextSelectedId) {
-        await loadOpeningTreeDetail(nextSelectedId);
-      } else {
-        setActiveOpeningTree(null);
-        setActiveOpeningNodeId(null);
-      }
-    } catch (error) {
-      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
-      setOpeningTrees([]);
-    } finally {
-      setOpeningTreesLoading(false);
-    }
-  }, [loadOpeningTreeDetail, selectedOpeningTreeId]);
-
-  const importRecentOpeningTrees = useCallback(async () => {
-    setOpeningTreeActionLoading(true);
-    setOpeningTreeActionError('');
-
-    try {
-      const response = await fetch('/api/opening-trees', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'import_recent' }),
-      });
-      const payload = await readJsonResponse<OpeningTreesPayload>(response);
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Unable to import opening trees.');
-      }
-
-      await loadOpeningTrees();
-    } catch (error) {
-      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to import opening trees.');
-
-
-    } finally {
-      setOpeningTreeActionLoading(false);
-    }
-  }, [loadOpeningTrees]);
-
-
-  const advanceDrillToStep = useCallback((stepIndex: number, isOpponentMovePlayback = false) => {
-    const path = drillPathRef.current;
-    const step = path[stepIndex];
-
-    if (!step) {
-      setOpeningDrillActive(false);
-      setOpeningDrillStatus('Branch complete. Click Drill to start another path.');
-      setOpeningDrillExpected(null);
+  function persistReviewWorkspaceSnapshot() {
+    if (modeRef.current !== 'review' || workspaceStateRef.current.metadata == null) {
       return;
     }
 
-    drillPathIndexRef.current = stepIndex;
-    const trainSteps = path.filter(pathStep => pathStep.isTrainTurn);
-    const trainStepNumber = trainSteps.findIndex(pathStep => pathStep.nodeId === step.nodeId) + 1;
-    const trainStepTotal = trainSteps.length;
+    reviewWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
+  }
 
-    setActiveOpeningNodeId(step.nodeId);
-    
-    if (isOpponentMovePlayback && step.edgeUciFromParent) {
-      setGame(prevGame => {
-        const nextGame = new Chess(prevGame.fen());
-        const move = nextGame.move({
-          from: step.edgeUciFromParent!.substring(0, 2),
-          to: step.edgeUciFromParent!.substring(2, 4),
-          promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
-        });
-        if (move) {
-          setMoveHistory(prev => [...prev, toStoredMove(move)]);
-          setHistoryIndex(prev => prev + 1);
-          playSoundSequence(
-            getMoveSoundSequence({
-              move: toStoredMove(move),
-              isSelfMove: false,
-              isCheck: nextGame.isCheck(),
-              isCheckmate: nextGame.isCheckmate(),
-              isGameOver: nextGame.isGameOver(),
-            }),
-          );
-        }
-        return nextGame;
-      });
+  function persistTrainWorkspaceSnapshot() {
+    if (modeRef.current !== 'train') {
+      return;
     }
 
-    setPositionAnalysis(null);
-    setServerError('');
-    if (step.isTrainTurn) {
+    trainWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
+  }
+
+  const switchWorkspaceMode = useCallback((nextMode: WorkspaceMode) => {
+    if (modeRef.current === nextMode) {
+      return;
+    }
+
+    if (modeRef.current === 'review') {
+      persistReviewWorkspaceSnapshot();
+    } else if (modeRef.current === 'train') {
+      persistTrainWorkspaceSnapshot();
+    }
+
+    if (nextMode === 'review' && reviewWorkspaceSnapshotRef.current) {
+      applyWorkspaceSnapshot(reviewWorkspaceSnapshotRef.current);
+    } else if (nextMode === 'train' && trainWorkspaceSnapshotRef.current) {
+      applyWorkspaceSnapshot(trainWorkspaceSnapshotRef.current);
+    } else if (nextMode !== 'review' && nextMode !== 'train') {
+      setActiveDeckCard(null);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
     }
-    clearSelection();
 
-    if (step.isTrainTurn) {
-      setOpeningDrillExpected({ nodeId: step.nodeId, uci: step.bestUci, san: step.bestSan });
-      setOpeningDrillStatus(`Your move (${trainStepNumber}/${trainStepTotal}). Find the best move.`);
-      setShowArrow(false);
-    } else {
-      setOpeningDrillExpected(null);
-      const nextIndex = stepIndex + 1;
-      const nextStep = path[nextIndex];
+    setMode(nextMode);
+  }, [applyWorkspaceSnapshot, setActiveDeckCard, setDeckFeedback, setDeckFeedbackArrowsVisible, setMode]);
 
-      if (nextStep) {
-        const edgeSan = nextStep.edgeSanFromParent;
-        setOpeningDrillStatus(edgeSan ? `Opponent plays ${edgeSan}...` : 'Opponent playing...');
-
-        window.setTimeout(() => {
-          advanceDrillToStep(nextIndex, true);
-        }, DRILL_OPPONENT_DELAY_MS);
-      } else {
-        setOpeningDrillActive(false);
-        setOpeningDrillStatus('Branch complete. Click Drill to start another path.');
-      }
-    }
-  }, [clearSelection, playSound]);
-
-  const startOpeningDrill = useCallback((overrideTree?: OpeningTreeDetail) => {
-    const tree = overrideTree ?? activeOpeningTree;
-
-    if (!tree) {
+  const openTrainCreateDeck = useCallback(() => {
+    if (!trainingProfile) {
+      setFocusTrainCreateDeck(true);
       return;
     }
 
-    const path = buildDrillPath(tree, { preferWeak: true, seed: Date.now() });
-    const firstTrainIndex = path.findIndex(step => step.isTrainTurn);
+    switchWorkspaceMode('train');
+    setFocusTrainCreateDeck(true);
+  }, [switchWorkspaceMode, trainingProfile]);
 
-    if (firstTrainIndex < 0) {
-      setOpeningDrillStatus('No trainable nodes in this tree yet.');
-      return;
-    }
-
-    drillPathRef.current = path;
-    drillPathIndexRef.current = 0;
-
-    positionRequestIdRef.current += 1;
-    timelineRequestIdRef.current += 1;
-    setMode('lines');
-    modeRef.current = 'lines';
-    setMetadata(null);
-    setFileName('');
-    setPreMoveAnalyses([]);
-    setTimelineAnalyses([]);
-    setTimelineError('');
-    setServerError('');
-    setOrientation(path[0]?.trainSide ?? 'white');
-    setShowArrow(false);
-    setOpeningDrillActive(true);
-    playSound('game-start');
-
-    if (firstTrainIndex === 0) {
-      const firstStep = path[0]!;
-      setActiveOpeningNodeId(firstStep.nodeId);
-      setInitialFen(firstStep.fen);
-      setMoveHistory([]);
-      setHistoryIndex(0);
-      clearVariation();
-      setGame(new Chess(firstStep.fen));
-      advanceDrillToStep(0);
-    } else {
-      const rootStep = path[0]!;
-      setActiveOpeningNodeId(rootStep.nodeId);
-      setInitialFen(rootStep.fen);
-      
-      const sans = path.slice(1, firstTrainIndex + 1).map(step => step.edgeSanFromParent).filter(Boolean) as string[];
-      try {
-        const moves = buildStoredMovesFromSanList(rootStep.fen, sans);
-        setMoveHistory(moves);
-        deckReplayInitialFenRef.current = rootStep.fen;
-        deckReplayMovesRef.current = moves;
-        setHistoryIndex(0);
-        clearVariation();
-        setGame(new Chess(rootStep.fen));
-        setOpeningDrillStatus('Playing opening moves...');
-        setOpeningDrillExpected(null);
-        clearSelection();
-
-        window.setTimeout(async () => {
-          await playDeckReplayToIndex(moves.length, rootStep.trainSide);
-          advanceDrillToStep(firstTrainIndex);
-        }, 500);
-      } catch (err) {
-        console.error('Failed to parse drill opening moves', err);
-        advanceDrillToStep(firstTrainIndex);
-      }
-    }
-  }, [activeOpeningTree, advanceDrillToStep, clearSelection, playSound]);
-
-  const stopOpeningDrill = useCallback(() => {
-    setOpeningDrillActive(false);
-    setOpeningDrillExpected(null);
-    setDeckFeedback(null);
-    setDeckFeedbackArrowsVisible(false);
-    setShowArrow(false);
-    setOpeningDrillStatus('');
-    drillPathRef.current = [];
-    drillPathIndexRef.current = 0;
+  const handleCreateDeckFocusHandled = useCallback(() => {
+    setFocusTrainCreateDeck(false);
   }, []);
+  const trainingContext = useMemo(() => ({
+    playSound,
+    playSoundSequence,
+    clearVariation,
+    clearSelection,
+    persistReviewWorkspaceSnapshot,
+    deckCardPromptStartedAtRef,
+    deckReplayInitialFenRef,
+    deckReplayMovesRef,
+    timelineRefineRequestIdRef,
+    modeRef,
+  }), [clearSelection, clearVariation, modeRef, persistReviewWorkspaceSnapshot, playSound, playSoundSequence, timelineRefineRequestIdRef, deckCardPromptStartedAtRef]);
 
-  const selectOpeningTree = useCallback(async (treeId: string) => {
-    setSelectedOpeningTreeId(treeId);
-    setOpeningDrillStatus('');
-    setOpeningDrillExpected(null);
-    const tree = await loadOpeningTreeDetail(treeId, { syncBoard: true });
+  const {
+    beginDeckCardSession,
+    playDeckReplayToIndex,
+    startDeckCardWithReplay,
+    loadTrainingDeck,
+    deckLoadRequestIdRef,
+    selectedDeckIdRef,
+  } = useLabTraining(labState, trainingContext);
 
-    if (tree) {
-      startOpeningDrill(tree);
-    }
-  }, [loadOpeningTreeDetail, startOpeningDrill]);
+  const deckProgressRef = useRef(deckProgress);
+  const deckFeedbackRef = useRef(deckFeedback);
 
+  const linesContext = useMemo(() => ({
+    playSound,
+    playSoundSequence,
+    playDeckReplayToIndex,
+    clearSelection,
+    clearVariation,
+    positionRequestIdRef,
+    timelineRequestIdRef,
+    deckReplayInitialFenRef,
+    deckReplayMovesRef,
+    modeRef,
+  }), [clearSelection, clearVariation, modeRef, playDeckReplayToIndex, playSound, playSoundSequence, positionRequestIdRef, timelineRequestIdRef]);
 
-  const selectOpeningNode = useCallback((nodeId: string) => {
-    const node = activeOpeningTree?.nodes.find(candidate => candidate.id === nodeId);
+  const {
+    loadOpeningTrees,
+    importRecentOpeningTrees,
+    advanceDrillToStep,
+    startOpeningDrill,
+    stopOpeningDrill,
+    selectOpeningTree,
+    selectOpeningNode,
+  } = useLabLines(labState, linesContext);
 
-    setActiveOpeningNodeId(nodeId);
-    setOpeningDrillActive(false);
-    drillPathRef.current = [];
-    drillPathIndexRef.current = 0;
+  useEffect(() => {
+    advanceDrillToStepRef.current = advanceDrillToStep;
+  }, [advanceDrillToStep]);
 
-    if (node) {
-      setInitialFen(node.fen);
-      setMoveHistory([]);
-      setHistoryIndex(0);
-      clearVariation();
-      setGame(new Chess(node.fen));
-      setOpeningDrillExpected(node.sideToMove === node.trainSide ? { nodeId: node.id, uci: node.bestUci, san: node.bestSan } : null);
-      setOpeningDrillStatus(node.sideToMove === node.trainSide ? 'Find the best move from this node.' : 'Opponent node selected.');
-      setOrientation(node.trainSide);
-      clearSelection();
-    }
-  }, [activeOpeningTree, clearSelection]);
+  const {
+    createTrainingDeck,
+    generateRecentTrainingDeck,
+    renameTrainingDeck,
+    deleteTrainingDeck,
+  } = useLabDeckManager(labState, { loadTrainingDeck });
+
+  const {
+    playToHistoryIndex,
+    goToReviewMoment,
+  } = useLabReview(labState, {
+    reviewPlaybackRequestIdRef,
+    playSoundSequence,
+    jumpToIndex,
+    activeDeckCard,
+    reviewPlayerSide,
+    orientation,
+  });
+
+  const handleGoToReviewMoment = useCallback((index: number) => {
+    goToReviewMoment(index, reviewMoments, { clearVariation, clearSelection });
+  }, [clearSelection, clearVariation, goToReviewMoment, reviewMoments]);
 
   loadTrainingDeckRef.current = loadTrainingDeck;
 
@@ -1528,528 +1035,9 @@ export function ChessAnalysisLab() {
   }, [loadOpeningTrees, trainingProfile?.id, trainingProfileBootstrapping]);
 
   useEffect(() => {
-    const requestId = ++positionRequestIdRef.current;
-    const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
-    const cacheKey = getPositionCacheKey(initialFen, currentMoveList, positionProfile);
-    const cachedAnalysis = positionCacheRef.current.get(cacheKey);
-
-    if (cachedAnalysis) {
-      setPositionAnalysis(cachedAnalysis);
-      setPositionLoading(false);
-      setServerError('');
-      return undefined;
-    }
-
-    setPositionLoading(true);
-    setServerError('');
-    setPositionAnalysis(null);
-
-    fetchCachedPositionAnalysis(cacheKey, currentFen, currentMoveList, initialFen, positionProfile)
-      .then(analysis => {
-        if (positionRequestIdRef.current === requestId) {
-          setPositionAnalysis(analysis);
-        }
-      })
-      .catch(error => {
-        if (positionRequestIdRef.current === requestId) {
-          setPositionAnalysis(null);
-          setServerError(error.message);
-        }
-      })
-      .finally(() => {
-        if (positionRequestIdRef.current === requestId) {
-          setPositionLoading(false);
-        }
-      });
-
-    return undefined;
-  }, [activeDeckCard, currentFen, currentLineKey, currentMoveList, fetchCachedPositionAnalysis, initialFen]);
-
-  useEffect(() => {
-    if (!activeDeckCard || historyIndex <= 0) {
-      return undefined;
-    }
-
-    const moveIndex = historyIndex - 1;
-    const answerFeedback =
-      deckFeedback && !deckFeedback.pending
-        ? {
-            correct: deckFeedback.correct,
-            playedUci: deckFeedback.playedUci,
-            evalLossCp: deckFeedback.evalLossCp,
-          }
-        : null;
-
-    if (!shouldUseLiveTrainMoveReview(activeDeckCard, currentMoves, moveIndex, answerFeedback)) {
-      return undefined;
-    }
-
-    const beforeMoveList = buildMoveUciHistory(currentMoves.slice(0, moveIndex));
-    const beforeKey = getPositionCacheKey(initialFen, beforeMoveList, 'training');
-
-    if (positionCacheRef.current.has(beforeKey)) {
-      return undefined;
-    }
-
-    const beforeGame = restoreGameFromHistory(currentMoves, initialFen, moveIndex);
-
-    void fetchCachedPositionAnalysis(beforeKey, beforeGame.fen(), beforeMoveList, initialFen, 'training')
-      .then(() => {
-        setTrainAnalysisTick(tick => tick + 1);
-      })
-      .catch(() => undefined);
-
-    return undefined;
-  }, [activeDeckCard, currentMoves, deckFeedback, fetchCachedPositionAnalysis, historyIndex, initialFen]);
-
-  useEffect(() => {
-    if (!activeDeckCard || !deckFeedback || deckFeedback.pending) {
-      return undefined;
-    }
-
-    for (let index = 0; index <= moveHistory.length; index += 1) {
-      const moves = buildMoveUciHistory(moveHistory.slice(0, index));
-      const cacheKey = getPositionCacheKey(initialFen, moves, 'training');
-
-      if (positionCacheRef.current.has(cacheKey) || positionInFlightRef.current.has(cacheKey)) {
-        continue;
-      }
-
-      const game = restoreGameFromHistory(moveHistory, initialFen, index);
-
-      void fetchCachedPositionAnalysis(cacheKey, game.fen(), moves, initialFen, 'training')
-        .then(() => {
-          setTrainAnalysisTick(tick => tick + 1);
-        })
-        .catch(() => undefined);
-    }
-
-    return undefined;
-  }, [activeDeckCard, deckFeedback, fetchCachedPositionAnalysis, initialFen, moveHistory]);
-
-  useEffect(() => {
-    if (timelineLoading || moveHistory.length === 0 || historyIndex >= moveHistory.length) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
-
-      for (let index = historyIndex + 1; index <= Math.min(moveHistory.length, historyIndex + PRELOAD_AHEAD); index += 1) {
-        const moves = buildMoveUciHistory(moveHistory.slice(0, index));
-        const cacheKey = getPositionCacheKey(initialFen, moves, positionProfile);
-
-        if (positionCacheRef.current.has(cacheKey) || positionInFlightRef.current.has(cacheKey)) {
-          continue;
-        }
-
-        const nextGame = restoreGameFromHistory(moveHistory, initialFen, index);
-        void fetchCachedPositionAnalysis(cacheKey, nextGame.fen(), moves, initialFen, positionProfile).catch(() => undefined);
-      }
-    }, 180);
-
-    return () => window.clearTimeout(timer);
-  }, [activeDeckCard, fetchCachedPositionAnalysis, historyIndex, initialFen, moveHistory, timelineLoading]);
-
-  useEffect(() => {
     setReviewIndex(value => Math.max(0, Math.min(value, Math.max(0, reviewMoments.length - 1))));
   }, [reviewMoments.length]);
 
-  function clearSelection() {
-    setSelectedSquare(null);
-    setSquareStyles({});
-  }
-
-  function clearVariation() {
-    setVariationBaseIndex(null);
-    setVariationMoves([]);
-  }
-
-  const applyWorkspaceSnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
-    positionRequestIdRef.current += 1;
-    timelineRequestIdRef.current += 1;
-    timelineRefineRequestIdRef.current += 1;
-    const nextGame = restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
-
-    setInitialFen(snapshot.initialFen);
-    setMoveHistory(snapshot.moveHistory);
-    setHistoryIndex(snapshot.historyIndex);
-    setVariationBaseIndex(snapshot.variationBaseIndex);
-    setVariationMoves(snapshot.variationMoves);
-    setGame(nextGame);
-    setMetadata(snapshot.metadata);
-    setWhiteAvatarUrl(snapshot.whiteAvatarUrl);
-    setBlackAvatarUrl(snapshot.blackAvatarUrl);
-    setFileName(snapshot.fileName);
-    setOrientation(snapshot.orientation);
-    setShowArrow(snapshot.showArrow);
-    setReviewIndex(snapshot.reviewIndex);
-    setActiveDeckCard(snapshot.activeDeckCard);
-    setDeckFeedback(snapshot.deckFeedback);
-    setDeckFeedbackArrowsVisible(false);
-    setDeckIndex(snapshot.deckIndex);
-    setTrainAllSession(snapshot.trainAllSession);
-    setTrainAllQueue([...(snapshot.trainAllQueue ?? [])]);
-    setTrainSessionIndex(snapshot.trainSessionIndex ?? 0);
-    setTrainSessionStats({ ...(snapshot.trainSessionStats ?? createEmptyTrainSessionStats()) });
-    setPositionAnalysis(snapshot.positionAnalysis);
-    setPreMoveAnalyses(snapshot.preMoveAnalyses);
-    setTimelineAnalyses(snapshot.timelineAnalyses);
-    setTimelineReviews(
-      buildTimelineReviews(
-        snapshot.moveHistory,
-        snapshot.preMoveAnalyses,
-        snapshot.timelineAnalyses,
-        snapshot.initialFen,
-        snapshot.metadata,
-      ),
-    );
-    setPositionLoading(false);
-    setTimelineLoading(false);
-    setServerError(snapshot.serverError);
-    setTimelineError(snapshot.timelineError);
-    setSelectedSquare(null);
-    setSquareStyles({});
-  }, []);
-
-  const switchWorkspaceMode = useCallback((nextMode: WorkspaceMode) => {
-    if (nextMode === modeRef.current) {
-      return;
-    }
-
-    const snapshot = normalizeWorkspaceSnapshot(workspaceStateRef.current);
-
-    if (modeRef.current === 'review') {
-      reviewWorkspaceSnapshotRef.current = snapshot;
-    } else if (modeRef.current === 'train') {
-      trainWorkspaceSnapshotRef.current = snapshot;
-    }
-
-    const restoreTarget =
-      nextMode === 'review'
-        ? reviewWorkspaceSnapshotRef.current
-        : nextMode === 'train'
-          ? trainWorkspaceSnapshotRef.current
-          : null;
-
-    setMode(nextMode);
-    modeRef.current = nextMode;
-    applyWorkspaceSnapshot(restoreTarget ?? createEmptyWorkspaceSnapshot());
-  }, [applyWorkspaceSnapshot]);
-
-  const openTrainCreateDeck = useCallback(() => {
-    if (modeRef.current !== 'train') {
-      switchWorkspaceMode('train');
-    }
-
-    setActiveDeckCard(null);
-    setDeckFeedback(null);
-    setDeckFeedbackArrowsVisible(false);
-    setFocusTrainCreateDeck(true);
-  }, [switchWorkspaceMode]);
-
-  const handleCreateDeckFocusHandled = useCallback(() => {
-    setFocusTrainCreateDeck(false);
-  }, []);
-
-  function persistReviewWorkspaceSnapshot() {
-    if (modeRef.current !== 'review' || workspaceStateRef.current.metadata == null) {
-      return;
-    }
-
-    reviewWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
-  }
-
-  function persistTrainWorkspaceSnapshot() {
-    if (modeRef.current !== 'train') {
-      return;
-    }
-
-    trainWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
-  }
-
-  function highlightMoves(square: string) {
-    const nextStyles: Record<string, CSSProperties> = {
-      [square]: {
-        boxShadow: 'inset 0 0 0 3px rgba(152, 184, 255, 0.9)',
-        backgroundColor: 'rgba(152, 184, 255, 0.18)',
-      },
-    };
-
-    const moves = game.moves({ square: square as Square, verbose: true });
-
-    for (const move of moves) {
-      nextStyles[move.to] = game.get(move.to)
-        ? {
-            boxShadow: 'inset 0 0 0 2px rgba(242, 243, 245, 0.34)',
-            background:
-              'radial-gradient(circle, rgba(152, 184, 255, 0.28) 0%, rgba(152, 184, 255, 0.08) 54%, transparent 56%)',
-          }
-        : {
-            background:
-              'radial-gradient(circle, rgba(242, 243, 245, 0.5) 0%, rgba(242, 243, 245, 0.32) 16%, transparent 18%)',
-          };
-    }
-
-    setSquareStyles(nextStyles);
-  }
-
-  const commitMove = useCallback(
-    (nextGame: Chess, move: StoredMove) => {
-      if (deckPlaybackBusy) {
-        return;
-      }
-
-      if (modeRef.current === 'lines' && activeOpeningNodeId) {
-        let expectedUci = openingDrillExpected?.uci ?? positionAnalysis?.bestMove ?? null;
-        let expectedSan = openingDrillExpected?.san ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
-        let correct = expectedUci ? move.uci === expectedUci : true;
-        const nodeId = activeOpeningNodeId;
-        let isAlternativeValid = false;
-        let newActiveNodeId = nodeId;
-
-        if (activeOpeningTree && activeOpeningNodeId && !correct) {
-          const outgoing = activeOpeningTree.edges.filter(e => e.fromNodeId === activeOpeningNodeId);
-          const altEdge = outgoing.find(e => e.uci === move.uci);
-          if (altEdge) {
-            const targetNode = activeOpeningTree.nodes.find(n => n.id === altEdge.toNodeId);
-            if (targetNode) {
-              isAlternativeValid = true;
-              correct = true;
-              expectedUci = move.uci;
-              expectedSan = move.san;
-              newActiveNodeId = targetNode.id;
-            }
-          }
-        }
-
-        setMoveHistory(prev => [...prev, move]);
-        setHistoryIndex(prev => prev + 1);
-        clearVariation();
-        setGame(nextGame);
-        setPositionAnalysis(null);
-        setServerError('');
-        setSelectedSquare(null);
-        setSquareStyles({});
-        setOpeningDrillExpected(null);
-
-        if (correct) {
-          setDeckFeedback(null);
-          setDeckFeedbackArrowsVisible(false);
-          setShowArrow(false);
-        } else if (expectedSan && expectedUci) {
-          setDeckFeedback({
-            correct: false,
-            exact: false,
-            playedSan: move.san,
-            playedUci: move.uci,
-            expectedSan,
-            expectedUci,
-            validationMode: 'strict_best',
-            pending: false,
-          });
-          setDeckFeedbackArrowsVisible(true);
-          setShowArrow(true);
-        }
-        playSoundSequence(
-          getMoveSoundSequence({
-            move,
-            isSelfMove: true,
-            isCheck: nextGame.isCheck(),
-            isCheckmate: nextGame.isCheckmate(),
-            isGameOver: nextGame.isGameOver(),
-          }),
-        );
-
-        void fetch('/api/opening-trees', {
-          method: 'POST',
-          credentials: 'same-origin',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ action: 'attempt', nodeId, playedUci: move.uci, expectedUci, correct }),
-        });
-
-        if (openingDrillActive && drillPathRef.current.length > 0) {
-          let currentPathIndex = drillPathIndexRef.current;
-          let nextStepIndex = currentPathIndex + 1;
-
-          if (isAlternativeValid && activeOpeningTree) {
-            const newPath = buildDrillPath(activeOpeningTree, { seed: Date.now(), startNodeId: newActiveNodeId });
-            if (newPath.length > 0) {
-              drillPathRef.current = newPath;
-              drillPathIndexRef.current = 0;
-              currentPathIndex = 0;
-              nextStepIndex = 1;
-            }
-          }
-
-          if (correct) {
-            setOpeningDrillStatus(isAlternativeValid ? 'Alternative valid.' : 'Correct.');
-
-            window.setTimeout(() => {
-              advanceDrillToStep(nextStepIndex);
-            }, DRILL_OPPONENT_DELAY_MS);
-          } else {
-            setOpeningDrillStatus(`Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Continuing...`);
-
-            window.setTimeout(() => {
-              advanceDrillToStep(nextStepIndex);
-            }, DRILL_OPPONENT_DELAY_MS + 500);
-          }
-        } else {
-          const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === (expectedUci ?? move.uci));
-          const nextNode = nextNodeEdge ? activeOpeningTree?.nodes.find(node => node.id === nextNodeEdge.toNodeId) ?? null : null;
-
-          setOpeningDrillStatus(correct ? 'Correct.' : `Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}.`);
-
-          if (nextNode) {
-            setActiveOpeningNodeId(nextNode.id);
-
-            if (nextNode.sideToMove === nextNode.trainSide) {
-              window.setTimeout(() => {
-                setInitialFen(nextNode.fen);
-                setMoveHistory([]);
-                setHistoryIndex(0);
-                setGame(new Chess(nextNode.fen));
-                setOpeningDrillExpected({ nodeId: nextNode.id, uci: nextNode.bestUci, san: nextNode.bestSan });
-                setOpeningDrillStatus('Next node. Find the best move.');
-              }, DRILL_OPPONENT_DELAY_MS);
-            } else {
-              const opponentEdges = activeOpeningTree?.edges.filter(edge => edge.fromNodeId === nextNode.id) ?? [];
-              const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
-              const afterOpponent = opponentEdge ? activeOpeningTree?.nodes.find(node => node.id === opponentEdge.toNodeId) ?? null : null;
-
-              if (afterOpponent) {
-                window.setTimeout(() => {
-                  setInitialFen(afterOpponent.fen);
-                  setMoveHistory([]);
-                  setHistoryIndex(0);
-                  setGame(new Chess(afterOpponent.fen));
-                  setActiveOpeningNodeId(afterOpponent.id);
-                  setOpeningDrillExpected({ nodeId: afterOpponent.id, uci: afterOpponent.bestUci, san: afterOpponent.bestSan });
-                  setOpeningDrillStatus(`Opponent played ${opponentEdge?.san ?? 'a branch'}. Find the best move.`);
-                }, DRILL_OPPONENT_DELAY_MS);
-              }
-            }
-          }
-        }
-
-        return;
-      }
-
-      if (hasLoadedGame && !activeDeckCard) {
-        const baseIndex = variationBaseIndex ?? historyIndex;
-        const nextVariationMoves = [...variationMoves, move];
-
-        setVariationBaseIndex(baseIndex);
-        setVariationMoves(nextVariationMoves);
-        setGame(nextGame);
-        setPositionAnalysis(null);
-        setServerError('');
-        setSelectedSquare(null);
-        setSquareStyles({});
-        playSoundSequence(
-          getMoveSoundSequence({
-            move,
-            isSelfMove: true,
-            isCheck: nextGame.isCheck(),
-            isCheckmate: nextGame.isCheckmate(),
-            isGameOver: nextGame.isGameOver(),
-          }),
-        );
-        return;
-      }
-
-      const nextHistory = [...moveHistory.slice(0, historyIndex), move];
-
-      setMoveHistory(nextHistory);
-      setHistoryIndex(nextHistory.length);
-      clearVariation();
-      setGame(nextGame);
-      setPositionAnalysis(null);
-      setTimelineAnalyses([]);
-      timelineRefineRequestIdRef.current += 1;
-      setServerError('');
-      setTimelineError('');
-      setSelectedSquare(null);
-      setSquareStyles({});
-      if (activeDeckCard && deckFeedback != null && !deckFeedback.pending) {
-        setDeckFeedbackArrowsVisible(false);
-      }
-      playSoundSequence(
-        getMoveSoundSequence({
-          move,
-          isSelfMove: true,
-          isCheck: nextGame.isCheck(),
-          isCheckmate: nextGame.isCheckmate(),
-          isGameOver: nextGame.isGameOver(),
-        }),
-      );
-
-      if (activeDeckCard && deckFeedback == null) {
-        const nextFeedback = buildPendingDeckFeedback(activeDeckCard, move.uci, move.san);
-        const gradedFeedback = finalizeDeckFeedback(activeDeckCard, nextFeedback);
-        setDeckFeedback(gradedFeedback);
-        setDeckFeedbackArrowsVisible(!gradedFeedback.correct);
-        setShowArrow(true);
-        if (!trainAllSession) {
-          const promptStartedAt = deckCardPromptStartedAtRef.current;
-          const responseMs = promptStartedAt == null ? null : Date.now() - promptStartedAt;
-          const attemptQuality = {
-            responseMs,
-            exact: gradedFeedback.exact,
-            evalLossCp: gradedFeedback.evalLossCp ?? null,
-          };
-          const seenAt = new Date().toISOString();
-          setDeckProgress(progress => applyDeckAttempt(progress, activeDeckCard.id, gradedFeedback.correct, seenAt, attemptQuality));
-        }
-        void saveTrainingAttempt(activeDeckCard, gradedFeedback);
-      }
-    },
-    [activeDeckCard, activeOpeningNodeId, activeOpeningTree, advanceDrillToStep, currentFen, deckFeedback, deckPlaybackBusy, hasLoadedGame, historyIndex, moveHistory, openingDrillActive, openingDrillExpected, playSoundSequence, positionAnalysis?.bestMove, saveTrainingAttempt, trainAllSession, variationBaseIndex, variationMoves],
-  );
-
-  const tryMove = useCallback(
-    (from: string, to: string, promotion = 'q') => {
-      if (deckPlaybackBusy) {
-        return false;
-      }
-
-      if (openingDrillActive && historyIndex < moveHistory.length) {
-        return false;
-      }
-
-      const nextGame = new Chess(currentFen);
-      const move = (() => {
-        try {
-          return nextGame.move({ from, to, promotion });
-        } catch {
-          return null;
-        }
-      })();
-
-      if (!move) {
-        playSound('illegal');
-        return false;
-      }
-
-      commitMove(nextGame, toStoredMove(move));
-      return true;
-    },
-    [commitMove, currentFen, deckPlaybackBusy, playSound],
-  );
-
-  function jumpToIndex(index: number) {
-    const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
-    const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
-
-    setHistoryIndex(boundedIndex);
-    if (activeDeckCard) {
-      setDeckFeedbackArrowsVisible(false);
-    }
-    clearVariation();
-    setGame(nextGame);
-    clearSelection();
-  }
 
   const loadDeckCard = useCallback(async (card: DeckCard | null) => {
     if (!card) {
@@ -2415,70 +1403,7 @@ export function ChessAnalysisLab() {
     };
   }, [activeDeckCard, advanceDeckCard, deckFeedback, historyIndex, initialFen, mode, moveHistory, orientation, pgnDialogOpen, playSoundSequence, positionAnalysis?.bestMove, reviewPlayerSide, tryMove]);
 
-  function goToReviewMoment(index: number) {
-    if (index >= reviewMoments.length) {
-      setMode('review');
-      setReviewIndex(Math.max(0, reviewMoments.length - 1));
-      void playToHistoryIndex(moveHistory.length);
-      return;
-    }
 
-    const boundedIndex = Math.max(0, Math.min(index, Math.max(0, reviewMoments.length - 1)));
-    const moment = reviewMoments[boundedIndex] ?? null;
-
-    setMode('review');
-    setReviewIndex(boundedIndex);
-
-    if (!moment) {
-      return;
-    }
-
-    void playToHistoryIndex(moment.ply);
-  }
-
-  async function playToHistoryIndex(targetIndex: number) {
-    const requestId = ++reviewPlaybackRequestIdRef.current;
-    const boundedTarget = Math.max(0, Math.min(targetIndex, moveHistory.length));
-
-    if (boundedTarget <= historyIndex) {
-      jumpToIndex(boundedTarget);
-      return;
-    }
-
-    for (let nextIndex = historyIndex + 1; nextIndex <= boundedTarget; nextIndex += 1) {
-      if (reviewPlaybackRequestIdRef.current !== requestId) {
-        return;
-      }
-
-      const nextGame = restoreGameFromHistory(moveHistory, initialFen, nextIndex);
-      const replayedMove = moveHistory[nextIndex - 1];
-
-      if (replayedMove) {
-        const playerSide = activeDeckCard?.side ?? reviewPlayerSide;
-        const isSelfMove =
-          playerSide == null
-            ? orientation === 'white'
-            : (playerSide === 'white' && replayedMove.color === 'w') || (playerSide === 'black' && replayedMove.color === 'b');
-
-        playSoundSequence(
-          getMoveSoundSequence({
-            move: replayedMove,
-            isSelfMove,
-            isCheck: nextGame.isCheck(),
-            isCheckmate: nextGame.isCheckmate(),
-            isGameOver: nextGame.isGameOver(),
-          }),
-        );
-      }
-
-      setHistoryIndex(nextIndex);
-      clearVariation();
-      setGame(nextGame);
-      clearSelection();
-
-      await delay(210);
-    }
-  }
 
   async function runTimelineAnalysis(
     nextMoves = moveHistory,
@@ -2519,7 +1444,7 @@ export function ChessAnalysisLab() {
       setPreMoveAnalyses(nextPreMoveAnalyses);
       setTimelineAnalyses(nextTimelineAnalyses);
 
-      if (timelineRequestIdRef.current === requestId) {
+      if (timelineRequestIdRef.current !== requestId) {
         setTimelineProgress(96);
       }
 
@@ -2527,7 +1452,7 @@ export function ChessAnalysisLab() {
         buildTimelineReviews(nextMoves, nextPreMoveAnalyses, nextTimelineAnalyses, nextInitialFen, nextMetadata),
       );
 
-      if (timelineRequestIdRef.current === requestId) {
+      if (timelineRequestIdRef.current !== requestId) {
         setTimelineProgress(100);
       }
 
@@ -2550,7 +1475,7 @@ export function ChessAnalysisLab() {
       setTimelineReviews([]);
       setTimelineError(error instanceof Error ? error.message : 'Unable to analyze the line.');
     } finally {
-      if (timelineRequestIdRef.current === requestId) {
+      if (timelineRequestIdRef.current !== requestId) {
         setTimelineLoading(false);
         setTimelineProgress(null);
       }
@@ -2761,134 +1686,6 @@ export function ChessAnalysisLab() {
     }
   }
 
-  async function createTrainingDeck() {
-    setDeckActionLoading(true);
-    setDeckActionError('');
-
-    try {
-      const response = await fetch('/api/training-deck', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'create', name: newDeckTitle }),
-      });
-      const payload = (await response.json()) as { deck?: TrainingDeckSummary; error?: string };
-
-      if (!response.ok || !payload.deck) {
-        throw new Error(payload.error ?? 'Unable to create deck.');
-      }
-
-      setNewDeckTitle('');
-      setSelectedDeckId(payload.deck.id);
-      if (typeof window !== 'undefined') {
-        window.localStorage.setItem(LAST_TRAINING_DECK_STORAGE_KEY, payload.deck.id);
-      }
-      await loadTrainingDeck(payload.deck.id);
-    } catch (error) {
-      setDeckActionError(error instanceof Error ? error.message : 'Unable to create deck.');
-    } finally {
-      setDeckActionLoading(false);
-    }
-  }
-
-  async function generateRecentTrainingDeck() {
-    setDeckActionLoading(true);
-    setDeckActionError('');
-
-    try {
-      const response = await fetch('/api/training-deck', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_recent',
-          username: chesscomUsername || trainingProfile?.username || trainingUsername,
-          count: 50,
-          timeClass: recentGameTimeClass,
-        }),
-      });
-      const payload = (await response.json()) as { deckId?: string; error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Unable to generate deck.');
-      }
-
-      if (payload.deckId) {
-        setSelectedDeckId(payload.deckId);
-        if (typeof window !== 'undefined') {
-          window.localStorage.setItem(LAST_TRAINING_DECK_STORAGE_KEY, payload.deckId);
-        }
-      }
-      await loadTrainingDeck(payload.deckId ?? selectedDeckId);
-    } catch (error) {
-      setDeckActionError(error instanceof Error ? error.message : 'Unable to generate deck.');
-    } finally {
-      setDeckActionLoading(false);
-    }
-  }
-
-  async function renameTrainingDeck(deckId: string, name: string) {
-    setDeckActionLoading(true);
-    setDeckActionError('');
-
-    try {
-      const response = await fetch('/api/training-deck', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'rename_deck', deckId, name }),
-      });
-      const payload = (await response.json()) as { deck?: TrainingDeckSummary; error?: string };
-
-      if (!response.ok || !payload.deck) {
-        throw new Error(payload.error ?? 'Unable to rename deck.');
-      }
-
-      await loadTrainingDeck(selectedDeckId === deckId ? deckId : selectedDeckId);
-    } catch (error) {
-      setDeckActionError(error instanceof Error ? error.message : 'Unable to rename deck.');
-    } finally {
-      setDeckActionLoading(false);
-    }
-  }
-
-  async function deleteTrainingDeck(deckId: string) {
-    setDeckActionLoading(true);
-    setDeckActionError('');
-
-    try {
-      const response = await fetch('/api/training-deck', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action: 'delete_deck', deckId }),
-      });
-      const payload = (await response.json()) as { deckId?: string; error?: string };
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? 'Unable to delete deck.');
-      }
-
-      if (selectedDeckId === deckId) {
-        setSelectedDeckId(null);
-        setActiveDeckCard(null);
-        setDeckFeedback(null);
-        setDeckFeedbackArrowsVisible(false);
-        setDeckCards([]);
-        setOpeningLines([]);
-
-        if (typeof window !== 'undefined') {
-          window.localStorage.removeItem(LAST_TRAINING_DECK_STORAGE_KEY);
-        }
-      }
-
-      await loadTrainingDeck(selectedDeckId === deckId ? null : selectedDeckId);
-    } catch (error) {
-      setDeckActionError(error instanceof Error ? error.message : 'Unable to delete deck.');
-    } finally {
-      setDeckActionLoading(false);
-    }
-  }
 
   async function saveReviewPositionToDeck() {
     setReviewDeckSaveStatus('Saving');
@@ -2984,7 +1781,7 @@ export function ChessAnalysisLab() {
     setActiveDeckCard(null);
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
-    positionCacheRef.current.clear();
+    clearEngineCache();
     positionInFlightRef.current.clear();
     timelineBatchInFlightRef.current.clear();
     clearSelection();
@@ -3164,7 +1961,7 @@ export function ChessAnalysisLab() {
                 activeReviewMoment={activeReviewMoment}
                 blackReviewName={blackReviewName}
                 chesscomUsername={chesscomUsername}
-                goToReviewMoment={goToReviewMoment}
+                goToReviewMoment={handleGoToReviewMoment}
                 hasLoadedGame={hasLoadedGame}
                 historyIndex={historyIndex}
                 jumpToIndex={jumpToIndex}
@@ -3347,7 +2144,7 @@ export function ChessAnalysisLab() {
                     void loadTrainingDeck(restoreDeckId, { autoStart: false, libraryLoading: false });
                   }
                 }}
-                onCreateDeck={() => void createTrainingDeck()}
+                onCreateDeck={() => void createTrainingDeck(newDeckTitle)}
                 onGenerateRecentDeck={() => void generateRecentTrainingDeck()}
                 onDeleteCard={() => void deleteActiveDeckCard()}
                 onNext={advanceDeckCard}
