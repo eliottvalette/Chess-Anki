@@ -4,10 +4,20 @@ import test from 'node:test';
 import {
   buildOpeningTrees,
   chooseWeightedOpponentEdge,
+  formatOpeningTreeDisplayName,
   normalizeOpeningFen,
   parseSanMoves,
   resolveOpeningLibrary,
 } from './opening-tree.ts';
+
+test('formatOpeningTreeDisplayName strips move suffixes and eco prefixes', () => {
+  assert.equal(
+    formatOpeningTreeDisplayName('Italian Game Two Knights Modern Bishops Opening 4...D5 5.Exd5 Nxd5 6.O O'),
+    'Italian Game Two Knights Modern Bishops Opening',
+  );
+  assert.equal(formatOpeningTreeDisplayName('C50: Italian Game 4.e4 e5'), 'Italian Game');
+  assert.equal(formatOpeningTreeDisplayName('Sicilian Defense'), 'Sicilian Defense');
+});
 
 test('buildOpeningTrees groups openings by normalized position after 4 plies', () => {
   const trees = buildOpeningTrees(

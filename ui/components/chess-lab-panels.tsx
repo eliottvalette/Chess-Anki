@@ -52,7 +52,12 @@ import {
   getMasteryGrade,
   type MasteryGrade,
 } from '@/lib/deck-progress';
-import type { OpeningLibrary, OpeningTreeDetail, OpeningTreeSummary } from '@/lib/opening-tree';
+import {
+  formatOpeningTreeDisplayName,
+  type OpeningLibrary,
+  type OpeningTreeDetail,
+  type OpeningTreeSummary,
+} from '@/lib/opening-tree';
 
 export type TrainSessionStats = {
   completed: number;
@@ -224,7 +229,7 @@ export function LinesPanel({
                           type="button"
                         >
                           <span className={styles.openingTreeItemHead}>
-                            <strong>{tree.name}</strong>
+                            <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
                             <span className={styles.openingTreeMastery}>{tree.masteryScore}/100</span>
                           </span>
                           <span className={styles.openingTreeItemRoot}>
@@ -257,62 +262,40 @@ export function LinesPanel({
 
       {activeTree ? (
         <>
-          {drillActive ? (
-            <>
-              <div className={styles.trainBackRow}>
-                <button
-                  className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
-                  onClick={() => onSelectTree('')}
-                  type="button"
-                >
-                  Back
-                </button>
-              </div>
-              <div className={styles.trainBackRow} style={{ marginTop: '-4px' }}>
-                <button
-                  className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`}
-                  onClick={() => onChangeTrainSide('white')}
-                  type="button"
-                >
-                  White
-                </button>
-                <button
-                  className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'black' ? styles.primary : ''}`}
-                  onClick={() => onChangeTrainSide('black')}
-                  type="button"
-                >
-                  Black
-                </button>
-              </div>
-            </>
-          ) : (
-            <div className={styles.trainBackRow} style={{ marginBottom: '16px' }}>
-              <button
-                className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
-                onClick={() => onSelectTree('')}
-                type="button"
-              >
-                Back
-              </button>
-            </div>
-          )}
+          <div className={styles.trainBackRow}>
+            <button
+              className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
+              onClick={() => onSelectTree('')}
+              type="button"
+            >
+              Back
+            </button>
+          </div>
+          <div className={styles.trainBackRow} style={{ marginTop: '-4px' }}>
+            <button
+              className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'white' ? styles.primary : ''}`}
+              onClick={() => onChangeTrainSide('white')}
+              type="button"
+            >
+              White
+            </button>
+            <button
+              className={`${styles.action} ${styles.fullWidthAction} ${trainSide === 'black' ? styles.primary : ''}`}
+              onClick={() => onChangeTrainSide('black')}
+              type="button"
+            >
+              Black
+            </button>
+          </div>
 
           <section
             className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}
           >
-            {!drillActive ? (
-              <div className={styles.panelHeader}>
-                <h2 className={styles.sectionTitle}>{activeTree.name}</h2>
-                <span className={styles.statusText}>{formatOpeningLibrary(activeTree.library)}</span>
+            <div className={styles.trainingCardHead}>
+              <div className={styles.trainingCardTitleBlock}>
+                <strong className={styles.trainingCardTitle}>{formatOpeningTreeDisplayName(activeTree.name)}</strong>
               </div>
-            ) : (
-              <div className={styles.trainingCardHead}>
-                <div className={styles.trainingCardTitleBlock}>
-                  <strong className={styles.trainingCardTitle}>{activeTree.name}</strong>
-                  <span className={styles.trainingCardEco}>{formatOpeningLibrary(activeTree.library)}</span>
-                </div>
-              </div>
-            )}
+            </div>
 
             <div className={styles.trainingCardMeta}>
               <span>depth {activeTree.targetDepth}</span>

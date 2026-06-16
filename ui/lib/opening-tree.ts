@@ -131,6 +131,21 @@ export type OpeningDrillStep = {
 export const DEFAULT_OPENING_ROOT_PLY = 0;
 export const DEFAULT_OPENING_TARGET_DEPTH = 10;
 
+export function formatOpeningTreeDisplayName(name: string) {
+  const cleanName = String(name ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleanName) {
+    return 'Opening';
+  }
+
+  const withoutEco = cleanName.replace(/^[A-E]\d{2}(?:-\d{2})?\s*:\s*/i, '').trim();
+  const withoutMoves = withoutEco.replace(/\s+\d+\.(?:\.{2})?.+$/, '').trim();
+
+  return withoutMoves || withoutEco || cleanName;
+}
+
 export function normalizeOpeningFen(fen: string) {
   return fen.trim().split(' ').slice(0, 4).join(' ');
 }
@@ -584,12 +599,10 @@ function buildTreeForGroup(
 }
 
 function deriveOpeningName(name: string, rootMoves: OpeningMove[]) {
-  const cleanName = String(name ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const formattedName = formatOpeningTreeDisplayName(name);
 
-  if (cleanName && cleanName !== 'Opening') {
-    return cleanName.slice(0, 96);
+  if (formattedName && formattedName !== 'Opening') {
+    return formattedName.slice(0, 96);
   }
 
   return (

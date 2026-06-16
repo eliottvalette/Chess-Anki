@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
@@ -219,6 +219,7 @@ export function useLabLines(
   }, [loadOpeningTrees, setOpeningTreeActionError, setOpeningTreeActionLoading]);
 
   const drillTimeoutRef = useRef<number | null>(null);
+  const restartOpeningDrillRef = useRef<() => void>(() => {});
 
   const cancelDrillOpponentMove = useCallback(() => {
     if (drillTimeoutRef.current) {
@@ -226,6 +227,15 @@ export function useLabLines(
       drillTimeoutRef.current = null;
     }
   }, []);
+
+  const scheduleOpeningDrillRestart = useCallback(() => {
+    setOpeningDrillExpected(null);
+    setOpeningDrillStatus('Branch complete. Starting another path...');
+    cancelDrillOpponentMove();
+    drillTimeoutRef.current = window.setTimeout(() => {
+      restartOpeningDrillRef.current();
+    }, DRILL_OPPONENT_DELAY_MS);
+  }, [cancelDrillOpponentMove, setOpeningDrillExpected, setOpeningDrillStatus]);
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -235,9 +245,7 @@ export function useLabLines(
       const step = path[stepIndex];
 
       if (!step) {
-        setOpeningDrillActive(false);
-        setOpeningDrillStatus('Branch complete. Click Drill to start another path.');
-        setOpeningDrillExpected(null);
+        scheduleOpeningDrillRestart();
         return;
       }
 
@@ -309,8 +317,7 @@ export function useLabLines(
             advanceDrillToStep(nextIndex, { isOpponentMovePlayback: true });
           }, DRILL_OPPONENT_DELAY_MS);
         } else {
-          setOpeningDrillActive(false);
-          setOpeningDrillStatus('Branch complete. Click Drill to start another path.');
+          scheduleOpeningDrillRestart();
         }
       } else {
         setOpeningDrillExpected(null);
@@ -324,13 +331,13 @@ export function useLabLines(
       drillPathIndexRef,
       drillPathRef,
       playSound,
+      scheduleOpeningDrillRestart,
       setActiveOpeningNodeId,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
       setGame,
       setHistoryIndex,
       setMoveHistory,
-      setOpeningDrillActive,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
       setPositionAnalysis,
@@ -443,6 +450,12 @@ export function useLabLines(
       timelineRequestIdRef,
     ],
   );
+
+  useEffect(() => {
+    restartOpeningDrillRef.current = () => {
+      startOpeningDrill();
+    };
+  }, [startOpeningDrill]);
 
   const stopOpeningDrill = useCallback(() => {
     setOpeningDrillActive(false);
