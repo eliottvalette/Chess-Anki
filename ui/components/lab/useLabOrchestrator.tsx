@@ -701,9 +701,11 @@ export function useLabOrchestrator() {
   const loadTrainingDeckRef = useRef<(deckId?: string | null, options?: { autoStart?: boolean; allDecks?: boolean; libraryLoading?: boolean }) => Promise<void>>(async () => undefined);
   const deckCardPromptStartedAtRef = useRef<number | null>(null);
   const advanceDrillToStepRef = useRef<(stepIndex: number) => void>(() => {});
+  const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
 
   const gameContext = useMemo(() => ({
     advanceDrillToStepRef,
+    cancelDrillOpponentMoveRef,
     playSoundSequence,
     playSound,
     saveTrainingAttempt,
@@ -712,7 +714,7 @@ export function useLabOrchestrator() {
     modeRef,
     drillPathRef,
     drillPathIndexRef,
-  }), [advanceDrillToStepRef, playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, deckCardPromptStartedAtRef, modeRef, drillPathRef, drillPathIndexRef]);
+  }), [advanceDrillToStepRef, cancelDrillOpponentMoveRef, playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, deckCardPromptStartedAtRef, modeRef, drillPathRef, drillPathIndexRef]);
 
   const {
     clearSelection,
@@ -864,9 +866,14 @@ export function useLabOrchestrator() {
     advanceDrillToStep,
     startOpeningDrill,
     stopOpeningDrill,
+    cancelDrillOpponentMove,
     selectOpeningTree,
     selectOpeningNode,
   } = useLabLines(labState, linesContext);
+
+  useEffect(() => {
+    cancelDrillOpponentMoveRef.current = cancelDrillOpponentMove;
+  }, [cancelDrillOpponentMove]);
 
   useEffect(() => {
     advanceDrillToStepRef.current = advanceDrillToStep;

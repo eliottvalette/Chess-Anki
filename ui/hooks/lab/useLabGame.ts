@@ -23,6 +23,7 @@ export function useLabGame(
   state: LabState,
   context: {
     advanceDrillToStepRef: React.MutableRefObject<(stepIndex: number) => void>;
+    cancelDrillOpponentMoveRef?: React.MutableRefObject<() => void>;
     playSoundSequence: (keys: any[]) => void;
     playSound: (key: any) => void;
     saveTrainingAttempt: (card: any, feedback: any) => Promise<void>;
@@ -72,6 +73,7 @@ export function useLabGame(
 
   const {
     advanceDrillToStepRef,
+    cancelDrillOpponentMoveRef,
     playSoundSequence,
     playSound,
     saveTrainingAttempt,
@@ -205,7 +207,7 @@ export function useLabGame(
               drillPathRef.current = newPath;
               drillPathIndexRef.current = 0;
               currentPathIndex = 0;
-              nextStepIndex = 1;
+              nextStepIndex = 0;
             }
           }
 
@@ -367,6 +369,8 @@ export function useLabGame(
     const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
     const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
 
+    cancelDrillOpponentMoveRef?.current?.();
+
     setHistoryIndex(boundedIndex);
     if (activeDeckCard) {
       setDeckFeedbackArrowsVisible(false);
@@ -374,13 +378,24 @@ export function useLabGame(
     clearVariation();
     setGame(nextGame);
     clearSelection();
-  }, [activeDeckCard, clearSelection, clearVariation, initialFen, moveHistory, setDeckFeedbackArrowsVisible, setGame, setHistoryIndex]);
+
+    if (openingDrillActive && drillPathRef.current.length > 0) {
+      const activeTree = activeOpeningTree;
+      const rootLength = activeTree?.rootSan.length ?? 0;
+      if (boundedIndex >= rootLength) {
+        const stepIndex = boundedIndex - rootLength;
+        advanceDrillToStepRef.current(stepIndex);
+      }
+    }
+  }, [activeDeckCard, clearSelection, clearVariation, initialFen, moveHistory, setDeckFeedbackArrowsVisible, setGame, setHistoryIndex, cancelDrillOpponentMoveRef, openingDrillActive, drillPathRef, activeOpeningTree, advanceDrillToStepRef]);
 
   const undoMove = useCallback(() => {
     if (moveHistory.length === 0) {
       return;
     }
     
+    cancelDrillOpponentMoveRef?.current?.();
+
     const newHistory = moveHistory.slice(0, -1);
     const nextGame = restoreGameFromHistory(newHistory, initialFen, newHistory.length);
     
@@ -392,7 +407,16 @@ export function useLabGame(
     clearVariation();
     setGame(nextGame);
     clearSelection();
-  }, [moveHistory, initialFen, activeDeckCard, setMoveHistory, setHistoryIndex, setDeckFeedbackArrowsVisible, clearVariation, setGame, clearSelection]);
+
+    if (openingDrillActive && drillPathRef.current.length > 0) {
+      const activeTree = activeOpeningTree;
+      const rootLength = activeTree?.rootSan.length ?? 0;
+      if (newHistory.length >= rootLength) {
+        const stepIndex = newHistory.length - rootLength;
+        advanceDrillToStepRef.current(stepIndex);
+      }
+    }
+  }, [moveHistory, initialFen, activeDeckCard, setMoveHistory, setHistoryIndex, setDeckFeedbackArrowsVisible, clearVariation, setGame, clearSelection, cancelDrillOpponentMoveRef, openingDrillActive, drillPathRef, activeOpeningTree, advanceDrillToStepRef]);
 
   return {
     clearSelection,

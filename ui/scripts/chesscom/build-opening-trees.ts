@@ -6,11 +6,12 @@ import {
   DEFAULT_OPENING_TARGET_DEPTH,
   buildOpeningTrees,
   type OpeningTreeDraft,
+  normalizeOpeningFen,
+  ensureDraftEdge,
 } from '../../lib/opening-tree';
 import { getStockfishSession } from '../../lib/stockfish-session';
 import { fetchLichessOpeningExplorer } from '../../lib/opening-book';
 import { Chess } from 'chess.js';
-import { ensureDraftEdge } from '../../app/api/opening-trees/route';
 
 const MAX_ENGINE_IMPORT_NODES = 60;
 const MAX_LICHESS_IMPORT_NODES = 120;

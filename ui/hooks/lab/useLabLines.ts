@@ -8,6 +8,7 @@ import {
 } from '@/lib/chess-analysis-client';
 import {
   buildDrillPath,
+  findPathToNode,
   type DrillPathStep,
   type OpeningTreeDetail,
   type OpeningTreeSummary,
@@ -185,6 +186,15 @@ export function useLabLines(
     }
   }, [loadOpeningTrees, setOpeningTreeActionError, setOpeningTreeActionLoading]);
 
+  const drillTimeoutRef = useRef<number | null>(null);
+
+  const cancelDrillOpponentMove = useCallback(() => {
+    if (drillTimeoutRef.current) {
+      window.clearTimeout(drillTimeoutRef.current);
+      drillTimeoutRef.current = null;
+    }
+  }, []);
+
   const advanceDrillToStep = useCallback((stepIndex: number, isOpponentMovePlayback = false) => {
     const path = drillPathRef.current;
     const step = path[stepIndex];
@@ -260,7 +270,8 @@ export function useLabLines(
         const edgeSan = nextStep.edgeSanFromParent;
         setOpeningDrillStatus(edgeSan ? `Opponent plays ${edgeSan}...` : 'Opponent playing...');
 
-        window.setTimeout(() => {
+        cancelDrillOpponentMove();
+        drillTimeoutRef.current = window.setTimeout(() => {
           advanceDrillToStep(nextIndex, true);
         }, DRILL_OPPONENT_DELAY_MS);
       } else {
@@ -325,7 +336,8 @@ export function useLabLines(
       setOpeningDrillExpected(null);
       clearSelection();
 
-      window.setTimeout(async () => {
+      cancelDrillOpponentMove();
+      drillTimeoutRef.current = window.setTimeout(async () => {
         await playDeckReplayToIndex(moves.length, activeTrainSide);
         advanceDrillToStep(firstTrainIndex);
       }, 500);
@@ -378,14 +390,20 @@ export function useLabLines(
   }, [loadOpeningTreeDetail, loadOpeningTreeRootOnBoard, setActiveOpeningTree, setOpeningDrillExpected, setOpeningDrillStatus, setSelectedOpeningTreeId, startOpeningDrill]);
 
   const selectOpeningNode = useCallback((nodeId: string) => {
-    const node = activeOpeningTree?.nodes.find(candidate => candidate.id === nodeId);
+    const tree = activeOpeningTree;
+    if (!tree) return;
+
+    const node = tree.nodes.find(candidate => candidate.id === nodeId);
+    if (!node) return;
 
     setActiveOpeningNodeId(nodeId);
-    setOpeningDrillActive(false);
-    drillPathRef.current = [];
-    drillPathIndexRef.current = 0;
 
-    if (node) {
+    const path = findPathToNode(tree, nodeId);
+    if (path.length === 0) {
+      // Fallback
+      setOpeningDrillActive(false);
+      drillPathRef.current = [];
+      drillPathIndexRef.current = 0;
       setInitialFen(node.fen);
       setMoveHistory([]);
       setHistoryIndex(0);
@@ -395,8 +413,55 @@ export function useLabLines(
       setOpeningDrillStatus(node.sideToMove === activeTrainSide ? 'Find the best move from this node.' : 'Opponent node selected.');
       setOrientation(activeTrainSide);
       clearSelection();
+      return;
     }
-  }, [activeOpeningTree?.nodes, activeTrainSide, clearSelection, clearVariation, setActiveOpeningNodeId, setGame, setHistoryIndex, setInitialFen, setMoveHistory, setOpeningDrillActive, setOpeningDrillExpected, setOpeningDrillStatus, setOrientation]);
+
+    const fullSans = [...tree.rootSan];
+    const sans = path.slice(1).map(step => step.edgeSanFromParent).filter(Boolean) as string[];
+    fullSans.push(...sans);
+
+    try {
+      const moves = buildStoredMovesFromSanList(null, fullSans);
+      setInitialFen(null);
+      setMoveHistory(moves);
+      deckReplayInitialFenRef.current = null;
+      deckReplayMovesRef.current = moves;
+      setHistoryIndex(0);
+      clearVariation();
+      setGame(new Chess());
+      setOpeningDrillExpected(null);
+      clearSelection();
+      setOrientation(activeTrainSide);
+      
+      const nextPath = buildDrillPath(tree, { trainSide: activeTrainSide, preferWeak: true, seed: Date.now(), startNodeId: nodeId });
+      const fullDrillPath = [...path, ...nextPath.slice(1)];
+      drillPathRef.current = fullDrillPath;
+      const targetNodeIndex = path.length - 1;
+      drillPathIndexRef.current = targetNodeIndex;
+      
+      if (nextPath.length > 0) {
+        setOpeningDrillActive(true);
+        setOpeningDrillStatus('Playing to selected node...');
+        
+        cancelDrillOpponentMove();
+        drillTimeoutRef.current = window.setTimeout(async () => {
+          await playDeckReplayToIndex(moves.length, activeTrainSide);
+          advanceDrillToStep(targetNodeIndex);
+        }, 500);
+      } else {
+        setOpeningDrillActive(false);
+        setOpeningDrillExpected(node.sideToMove === activeTrainSide ? { nodeId: node.id, uci: node.bestUci, san: node.bestSan } : null);
+        setOpeningDrillStatus(node.sideToMove === activeTrainSide ? 'Find the best move from this node.' : 'Opponent node selected.');
+        cancelDrillOpponentMove();
+        drillTimeoutRef.current = window.setTimeout(async () => {
+          await playDeckReplayToIndex(moves.length, activeTrainSide);
+        }, 500);
+      }
+    } catch (err) {
+      console.error('Failed to parse selected node path', err);
+    }
+  }, [activeOpeningTree, activeTrainSide, clearSelection, clearVariation, setActiveOpeningNodeId, setGame, setHistoryIndex, setInitialFen, setMoveHistory, setOpeningDrillExpected, setOpeningDrillStatus, setOrientation, cancelDrillOpponentMove, playDeckReplayToIndex, advanceDrillToStep, deckReplayInitialFenRef, deckReplayMovesRef, drillPathRef, drillPathIndexRef, setOpeningDrillActive]);
+
 
   return {
     loadOpeningTrees,
@@ -404,6 +469,7 @@ export function useLabLines(
     advanceDrillToStep,
     startOpeningDrill,
     stopOpeningDrill,
+    cancelDrillOpponentMove,
     selectOpeningTree,
     selectOpeningNode,
   };

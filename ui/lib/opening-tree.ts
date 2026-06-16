@@ -397,6 +397,87 @@ export function buildDrillPath(
   return path;
 }
 
+export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): DrillPathStep[] {
+  const rootPly = tree.rootSan.length;
+  const rootNodes = tree.nodes.filter(n => n.ply === rootPly);
+  const queue: { nodeId: string; path: string[] }[] = [];
+  const visited = new Set<string>();
+
+  for (const root of rootNodes) {
+    if (root.id === targetNodeId) {
+      return [{ 
+        nodeId: root.id, 
+        fen: root.fen, 
+        isTrainTurn: false, 
+        edgeSanFromParent: null, 
+        edgeUciFromParent: null, 
+        trainSide: 'white',
+        sideToMove: root.sideToMove,
+        bestUci: root.bestUci,
+        bestSan: root.bestSan,
+        masteryScore: root.masteryScore,
+      }];
+    }
+    queue.push({ nodeId: root.id, path: [root.id] });
+    visited.add(root.id);
+  }
+
+  let finalPathIds: string[] | null = null;
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    
+    if (current.nodeId === targetNodeId) {
+      finalPathIds = current.path;
+      break;
+    }
+
+    const outgoing = tree.edges.filter(e => e.fromNodeId === current.nodeId);
+    for (const edge of outgoing) {
+      if (!visited.has(edge.toNodeId)) {
+        visited.add(edge.toNodeId);
+        queue.push({ nodeId: edge.toNodeId, path: [...current.path, edge.toNodeId] });
+      }
+    }
+  }
+
+  if (!finalPathIds) {
+    return [];
+  }
+
+  const path: DrillPathStep[] = [];
+  for (let i = 0; i < finalPathIds.length; i++) {
+    const stepNode = tree.nodes.find(n => n.id === finalPathIds![i]);
+    if (!stepNode) continue;
+    
+    path.push({
+      nodeId: stepNode.id,
+      fen: stepNode.fen,
+      isTrainTurn: false, // will be overridden by caller if needed
+      trainSide: 'white',
+      sideToMove: stepNode.sideToMove,
+      bestUci: stepNode.bestUci,
+      bestSan: stepNode.bestSan,
+      masteryScore: stepNode.masteryScore,
+      edgeSanFromParent: null,
+      edgeUciFromParent: null,
+    });
+  }
+
+  for (let index = 1; index < path.length; index += 1) {
+    const step = path[index]!;
+    const parentStep = path[index - 1]!;
+    const connectingEdge = tree.edges.find(
+      edge => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
+    );
+    step.edgeSanFromParent = connectingEdge?.san ?? null;
+    step.edgeUciFromParent = connectingEdge?.uci ?? null;
+  }
+
+  return path;
+}
+
+
 function buildTreeForGroup(
   group: { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[],
   options: { ownerProfileId: string; rootPly: number; targetDepth: number },
@@ -600,4 +681,71 @@ export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: 
   }
 
   return sliced.sort((a, b) => b.sourceCount - a.sourceCount);
+}
+
+export function ensureDraftEdge(
+  draft: OpeningTreeDraft,
+  fromNode: OpeningTreeDraft['nodes'][number],
+  uci: string,
+  source: 'lichess_masters' | 'engine_best',
+  options: { mastersGames?: number; priority?: number; isEngineBest?: boolean },
+) {
+  const chess = new Chess(fromNode.fen);
+  const move = (() => {
+    try {
+      return chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        ...(uci[4] ? { promotion: uci[4] } : {}),
+      });
+    } catch {
+      return null;
+    }
+  })();
+
+  if (!move) {
+    return;
+  }
+
+  const toFen = chess.fen();
+  const toFenKey = normalizeOpeningFen(toFen);
+  let toNode = draft.nodes.find(node => node.fenKey === toFenKey);
+
+  if (!toNode) {
+    toNode = {
+      id: `opening-node-${shortHash(`${draft.id}:${toFenKey}`)}`,
+      fen: toFen,
+      fenKey: toFenKey,
+      ply: fromNode.ply + 1,
+      sideToMove: toFen.split(' ')[1] === 'b' ? 'black' : 'white',
+      recentGames: 0,
+      cardCount: 0,
+    };
+    draft.nodes.push(toNode);
+  }
+
+  let edge = draft.edges.find(candidate => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
+
+  if (!edge) {
+    edge = {
+      id: `opening-edge-${shortHash(`${draft.id}:${fromNode.id}:${uci}`)}`,
+      fromNodeId: fromNode.id,
+      toNodeId: toNode.id,
+      uci,
+      san: move.san,
+      moveBy: fromNode.sideToMove,
+      source,
+      recentCount: 0,
+      cardCount: 0,
+      mastersGames: 0,
+      priority: 0,
+      isEngineBest: false,
+    };
+    draft.edges.push(edge);
+  }
+
+  edge.source = edge.source === source ? source : edge.source === 'recent_game' || edge.source === 'card' ? 'mixed' : edge.source;
+  edge.mastersGames += options.mastersGames ?? 0;
+  edge.priority += options.priority ?? 0;
+  edge.isEngineBest ||= Boolean(options.isEngineBest);
 }

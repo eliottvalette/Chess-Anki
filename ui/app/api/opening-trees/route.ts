@@ -18,6 +18,7 @@ import {
   type OpeningTreeEdge,
   type OpeningTreeNode,
   type OpeningTreeSummary,
+  ensureDraftEdge,
 } from '@/lib/opening-tree';
 import { getStockfishSession } from '@/lib/stockfish-session';
 import { TRAINING_SESSION_COOKIE, hashTrainingSessionToken, parseTrainingSessionCookie } from '@/lib/training-profile';
@@ -306,72 +307,6 @@ async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
   }
 }
 
-export function ensureDraftEdge(
-  draft: OpeningTreeDraft,
-  fromNode: OpeningTreeDraft['nodes'][number],
-  uci: string,
-  source: 'lichess_masters' | 'engine_best',
-  options: { mastersGames?: number; priority?: number; isEngineBest?: boolean },
-) {
-  const chess = new Chess(fromNode.fen);
-  const move = (() => {
-    try {
-      return chess.move({
-        from: uci.slice(0, 2),
-        to: uci.slice(2, 4),
-        ...(uci[4] ? { promotion: uci[4] } : {}),
-      });
-    } catch {
-      return null;
-    }
-  })();
-
-  if (!move) {
-    return;
-  }
-
-  const toFen = chess.fen();
-  const toFenKey = normalizeOpeningFen(toFen);
-  let toNode = draft.nodes.find(node => node.fenKey === toFenKey);
-
-  if (!toNode) {
-    toNode = {
-      id: `opening-node-${shortHash(`${draft.id}:${toFenKey}`)}`,
-      fen: toFen,
-      fenKey: toFenKey,
-      ply: fromNode.ply + 1,
-      sideToMove: toFen.split(' ')[1] === 'b' ? 'black' : 'white',
-      recentGames: 0,
-      cardCount: 0,
-    };
-    draft.nodes.push(toNode);
-  }
-
-  let edge = draft.edges.find(candidate => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
-
-  if (!edge) {
-    edge = {
-      id: `opening-edge-${shortHash(`${draft.id}:${fromNode.id}:${uci}`)}`,
-      fromNodeId: fromNode.id,
-      toNodeId: toNode.id,
-      uci,
-      san: move.san,
-      moveBy: fromNode.sideToMove,
-      source,
-      recentCount: 0,
-      cardCount: 0,
-      mastersGames: 0,
-      priority: 0,
-      isEngineBest: false,
-    };
-    draft.edges.push(edge);
-  }
-
-  edge.source = edge.source === source ? source : edge.source === 'recent_game' || edge.source === 'card' ? 'mixed' : edge.source;
-  edge.mastersGames += options.mastersGames ?? 0;
-  edge.priority += options.priority ?? 0;
-  edge.isEngineBest ||= Boolean(options.isEngineBest);
-}
 
 async function fetchTreeSummaries(supabase: ReturnType<typeof createAdminClient>, profileId: string): Promise<OpeningTreeSummary[]> {
   const { data: trees, error } = await supabase
