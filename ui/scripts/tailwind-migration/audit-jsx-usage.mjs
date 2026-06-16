@@ -10,7 +10,6 @@ import {
   printHeader,
   readCssSource,
   scanStylesUsage,
-  summarizeRiskBuckets,
   writeJsonReport,
 } from './lib.mjs';
 

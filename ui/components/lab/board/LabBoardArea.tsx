@@ -8,7 +8,7 @@ import { BoardPlayerBar } from './BoardPlayerBar';
 const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full min-h-[150px] w-full items-center justify-center rounded-[10px] border border-dashed border-[rgba(214,226,244,0.22)] p-[18px] text-center text-[var(--text-soft)]">
+    <div className="flex h-full min-h-[150px] w-full items-center justify-center rounded-[10px] border border-dashed border-[rgba(214,226,244,0.22)] p-[18px] text-center text-(--text-soft)">
       Loading board...
     </div>
   ),

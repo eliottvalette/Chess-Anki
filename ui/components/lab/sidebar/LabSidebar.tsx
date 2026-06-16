@@ -24,7 +24,7 @@ export function LabSidebar() {
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
             <button
               key={tabMode}
-              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[38px] min-w-0 truncate px-2 text-[11px] font-normal uppercase tracking-[0.04em] text-[var(--text-muted)] ${lab.labState.mode === tabMode ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]' : ''}`}
+              className={`${lab.labState.mode === tabMode ? 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] px-2 text-[11px] font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none' : 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-2 text-[11px] font-normal uppercase tracking-[0.04em] text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none'}`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
               type="button"
             >
@@ -186,8 +186,7 @@ export function LabSidebar() {
                   lab.labState.selectedDeckId ??
                   (typeof window !== 'undefined' ? window.localStorage.getItem(LAST_TRAINING_DECK_STORAGE_KEY) : null);
 
-                lab.labState.positionRequestIdRef.current += 1;
-                lab.labState.timelineRequestIdRef.current += 1;
+                lab.cancelPendingAnalysisRequests();
                 lab.labState.setGame(new Chess());
                 lab.labState.setInitialFen(null);
                 lab.labState.setMoveHistory([]);

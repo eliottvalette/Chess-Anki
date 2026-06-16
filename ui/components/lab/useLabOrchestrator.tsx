@@ -1,35 +1,5 @@
 'use client';
 
-const masteryGradeClassByGrade = {
-  F: 'bg-[#d94b62] text-[#fff7f8]',
-  E: 'bg-[#d94b62] text-[#fff7f8]',
-  D: 'bg-[#d98a35] text-[#fff7ec]',
-  C: 'bg-[#d98a35] text-[#fff7ec]',
-  B: 'bg-[#4e93d8] text-[#f5fbff]',
-  A: 'bg-[#35a979] text-[#f4fff9]',
-  S: 'bg-[#35a979] text-[#f4fff9]',
-} as const satisfies Record<string, string>;
-
-const masteryToneClassByGrade = {
-  F: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
-  E: 'border-[rgba(255,92,108,0.42)] bg-[rgba(130,38,54,0.2)]',
-  D: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
-  C: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
-  B: 'border-[rgba(138,198,255,0.34)] bg-[rgba(42,82,126,0.18)]',
-  A: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
-  S: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
-} as const satisfies Record<string, string>;
-
-const masteryDistributionClassByGrade = {
-  F: 'bg-[rgba(217,75,98,0.62)]',
-  E: 'bg-[rgba(217,75,98,0.48)]',
-  D: 'bg-[rgba(217,138,53,0.58)]',
-  C: 'bg-[rgba(217,138,53,0.44)]',
-  B: 'bg-[rgba(78,147,216,0.56)]',
-  A: 'bg-[rgba(53,169,121,0.58)]',
-  S: 'bg-[rgba(53,169,121,0.72)]',
-} as const satisfies Record<string, string>;
-
 import { Chess } from 'chess.js';
 import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceMode } from '@/components/chess-lab-panels';
@@ -313,7 +283,6 @@ export function useLabOrchestrator() {
     openingLines,
     deckCards,
     setDeckCards,
-    deckSummaries,
     selectedDeckId,
     setSelectedDeckId,
     deckLibraryLoading,
@@ -440,7 +409,6 @@ export function useLabOrchestrator() {
         : null,
     [deckFeedback],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: trainAnalysisTick invalidates cache reads from positionCacheRef
   const trainPositionAnalyses = useMemo(() => {
     const analyses: Array<AnalysisResult | null> = [];
 
@@ -455,7 +423,8 @@ export function useLabOrchestrator() {
     }
 
     return analyses;
-  }, [currentMoves, historyIndex, initialFen, positionAnalysis, trainAnalysisTick]);
+    // trainAnalysisTick busts stale reads from positionCacheRef after async analysis completes.
+  }, [currentMoves, historyIndex, initialFen, positionAnalysis, trainAnalysisTick, positionCacheRef]); // eslint-disable-line react-hooks/exhaustive-deps
   const activeTrainMoveReview = useMemo(() => {
     if (!activeDeckCard || historyIndex <= 0) {
       return null;
@@ -616,10 +585,6 @@ export function useLabOrchestrator() {
       );
   const nextDeckCard = availableDeckCards[deckIndex % Math.max(1, availableDeckCards.length)] ?? null;
   const viewedDeckCard = activeDeckCard ?? nextDeckCard;
-  const _selectedDeck = useMemo(
-    () => deckSummaries.find((deck) => deck.id === selectedDeckId) ?? null,
-    [deckSummaries, selectedDeckId],
-  );
   const activeDeckProgress = useMemo(
     () => (viewedDeckCard ? getDeckProgressEntry(deckProgress, viewedDeckCard.id) : null),
     [deckProgress, viewedDeckCard],
@@ -993,9 +958,6 @@ export function useLabOrchestrator() {
     setFocusTrainCreateDeck(true);
   }, [switchWorkspaceMode, trainingProfile, setFocusTrainCreateDeck]);
 
-  const _handleCreateDeckFocusHandled = useCallback(() => {
-    setFocusTrainCreateDeck(false);
-  }, [setFocusTrainCreateDeck]);
   const trainingContext = useMemo(
     () => ({
       playSound,
@@ -1997,9 +1959,13 @@ export function useLabOrchestrator() {
     }
   }
 
-  function resetWorkspace() {
+  function cancelPendingAnalysisRequests() {
     positionRequestIdRef.current += 1;
     timelineRequestIdRef.current += 1;
+  }
+
+  function resetWorkspace() {
+    cancelPendingAnalysisRequests();
     timelineRefineRequestIdRef.current += 1;
     reviewWorkspaceSnapshotRef.current = null;
     trainWorkspaceSnapshotRef.current = null;
@@ -2158,6 +2124,7 @@ export function useLabOrchestrator() {
     switchWorkspaceMode,
     openTrainCreateDeck,
     resetWorkspace,
+    cancelPendingAnalysisRequests,
     runTimelineAnalysis,
     loadPgnText,
     handleUpload,

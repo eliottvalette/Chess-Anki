@@ -13,7 +13,23 @@ const eslintConfig = defineConfig([
     'build/**',
     'next-env.d.ts',
     'public/stockfish/**',
+    'chop_helpers.js',
+    'split_*.js',
+    'scripts/tailwind-migration/**',
+    'scripts/chesscom/**',
   ]),
+  {
+    rules: {
+      '@typescript-eslint/no-unused-vars': [
+        'warn',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

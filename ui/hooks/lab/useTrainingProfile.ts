@@ -260,7 +260,6 @@ export function useTrainingProfile(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     setTrainingUsername,
     setTrainingProfile,

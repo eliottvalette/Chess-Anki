@@ -213,7 +213,7 @@ export function buildOpeningDrillExpected(
   };
 }
 
-export function isAcceptedOpeningDrillMove(fenBefore: string, playedUci: string, acceptedUcis: string[]) {
+export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string, acceptedUcis: string[]) {
   return acceptedUcis.includes(playedUci);
 }
 

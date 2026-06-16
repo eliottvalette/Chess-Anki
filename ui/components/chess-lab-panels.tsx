@@ -132,15 +132,12 @@ export function LinesPanel({
   activeTreeId,
   deckFeedback,
   drillActive,
-  expectedSan: _expectedSan,
   loading,
   onImportRecent,
   onSelectNode,
   onSelectTree,
-  onStartDrill: _onStartDrill,
   trainSide,
   onChangeTrainSide,
-  undoMove: _undoMove,
   trees,
   minForcedPlies,
   setMinForcedPlies,
@@ -178,10 +175,6 @@ export function LinesPanel({
     [trees, minNodes, minDepth],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
-  const _selectedNode = useMemo(
-    () => activeTree?.nodes.find((node) => node.id === activeNodeId) ?? null,
-    [activeNodeId, activeTree],
-  );
   const graph = useMemo(
     () => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive),
     [activeTree, activeNodeId, trainSide, onSelectNode, drillActive],
@@ -191,29 +184,29 @@ export function LinesPanel({
     <>
       {!activeTree ? (
         <section
-          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
         >
           <div className="flex min-w-0 items-center justify-between gap-3.5">
-            <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-[560] leading-[1.15] tracking-normal text-[var(--text)]">
+            <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-[560] leading-[1.15] tracking-normal text-(--text)">
               Lines
             </h2>
-            <span className="text-sm leading-[1.45] text-[var(--text-muted)]">
+            <span className="text-sm leading-[1.45] text-(--text-muted)">
               {loading ? 'loading' : `${trees.length} openings`}
             </span>
           </div>
           {trees.length === 0 ? (
-            <p className="m-0 text-sm leading-[1.45] text-[var(--text-muted)]">
+            <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
               Import your recent games to build opening trees grouped by the position after 4 plies.
             </p>
           ) : (
             <div className="flex max-h-[300px] min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="flex flex-row gap-3 rounded-[10px] border border-[var(--border-soft)] bg-[var(--surface-strong)] px-3 py-2.5">
+              <div className="flex flex-row gap-3 rounded-[10px] border border-(--border-soft) bg-[var(--surface-strong)] px-3 py-2.5">
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-(--text-soft)">
                     Min forced plies (X)
                   </span>
                   <input
-                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
+                    className="w-full rounded-md border border-(--border-soft) bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-forced-plies"
                     min={1}
                     onChange={(event) => setMinForcedPlies(Math.max(1, Number(event.target.value) || 1))}
@@ -222,9 +215,9 @@ export function LinesPanel({
                   />
                 </label>
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">Min nodes</span>
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-(--text-soft)">Min nodes</span>
                   <input
-                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
+                    className="w-full rounded-md border border-(--border-soft) bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-nodes"
                     min={0}
                     onChange={(event) => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
@@ -233,9 +226,9 @@ export function LinesPanel({
                   />
                 </label>
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
-                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">Min depth</span>
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-(--text-soft)">Min depth</span>
                   <input
-                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
+                    className="w-full rounded-md border border-(--border-soft) bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-depth"
                     min={0}
                     onChange={(event) => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
@@ -244,7 +237,7 @@ export function LinesPanel({
                   />
                 </label>
               </div>
-              <span className="text-[11px] text-[var(--text-soft)]">
+              <span className="text-[11px] text-(--text-soft)">
                 {filteredTrees.length} / {trees.length} openings
               </span>
               {OPENING_LIBRARY_ORDER.map((library) => {
@@ -256,27 +249,27 @@ export function LinesPanel({
 
                 return (
                   <section className="flex min-w-0 flex-col gap-2" key={library}>
-                    <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-soft)]">
+                    <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-(--text-soft)">
                       {formatOpeningLibrary(library)}
                     </h3>
                     <div className="flex min-h-0 flex-col gap-2">
                       {libraryTrees.map((tree) => (
                         <button
-                          className={`flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-[10px] border border-[rgba(214,226,244,0.18)] bg-[rgba(9,14,23,0.4)] px-3 py-[11px] text-left text-[var(--text-muted)] transition-[border-color,background-color] duration-150 hover:border-[rgba(214,226,244,0.28)] ${tree.id === activeTreeId ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]' : ''}`}
+                          className={`flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-[10px] border px-3 py-[11px] text-left transition-[border-color,background-color] duration-150 ${tree.id === activeTreeId ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]' : 'border-[rgba(214,226,244,0.18)] bg-[rgba(9,14,23,0.4)] text-[var(--text-muted)] hover:border-[rgba(214,226,244,0.28)]'}`}
                           key={tree.id}
                           onClick={() => onSelectTree(tree.id)}
                           type="button"
                         >
                           <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-[var(--text)] [overflow-wrap:anywhere]">
                             <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
-                            <span className="flex-none text-[11px] font-medium uppercase leading-none text-[var(--text-soft)] [&+strong]:min-w-0">
+                            <span className="flex-none text-[11px] font-medium uppercase leading-none text-(--text-soft) [&+strong]:min-w-0">
                               {tree.masteryScore}/100
                             </span>
                           </span>
                           <span className="block font-mono text-[11px] leading-[1.35] text-[var(--text-muted)] [overflow-wrap:anywhere]">
                             {tree.rootSan.join(' ') || 'Starting position'}
                           </span>
-                          <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-medium uppercase leading-none tracking-[0.03em] text-[var(--text-soft)]">
+                          <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-medium uppercase leading-none tracking-[0.03em] text-(--text-soft)">
                             <span>{tree.sourceCount} sources</span>
                             <span>{tree.nodeCount} nodes</span>
                             <span>{tree.dueCount} weak</span>
@@ -290,7 +283,7 @@ export function LinesPanel({
             </div>
           )}
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
             disabled={actionLoading}
             onClick={onImportRecent}
             type="button"
@@ -305,7 +298,7 @@ export function LinesPanel({
         <>
           <div className="flex w-full items-stretch gap-2">
             <button
-              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+              className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
               onClick={() => onSelectTree('')}
               type="button"
             >
@@ -314,14 +307,14 @@ export function LinesPanel({
           </div>
           <div className="flex w-full items-stretch gap-2" style={{ marginTop: '-4px' }}>
             <button
-              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch ${trainSide === 'white' ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : ''}`}
+              className={`${trainSide === 'white' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch'}`}
               onClick={() => onChangeTrainSide('white')}
               type="button"
             >
               White
             </button>
             <button
-              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch ${trainSide === 'black' ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : ''}`}
+              className={`${trainSide === 'black' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch'}`}
               onClick={() => onChangeTrainSide('black')}
               type="button"
             >
@@ -330,7 +323,7 @@ export function LinesPanel({
           </div>
 
           <section
-            className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
+            className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
           >
             <div className="flex min-w-0 items-center justify-between gap-2.5">
               <div className="flex min-w-0 flex-col gap-1">
@@ -340,7 +333,7 @@ export function LinesPanel({
               </div>
             </div>
 
-            <div className="flex items-center justify-between gap-2.5 text-xs text-[var(--text-soft)]">
+            <div className="flex items-center justify-between gap-2.5 text-xs text-(--text-soft)">
               <span>depth {activeTree.targetDepth}</span>
               <span>{activeTree.nodeCount} nodes</span>
               <span>{activeTree.dueCount} weak</span>
@@ -443,7 +436,7 @@ function buildOpeningTreeGraph(
       data: {
         label: (
           <button
-            className="flex min-h-[58px] w-full cursor-pointer flex-col justify-center gap-1 border-0 bg-transparent px-2.5 py-2 text-left text-inherit [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-[550] uppercase text-[var(--text-soft)]"
+            className="flex min-h-[58px] w-full cursor-pointer flex-col justify-center gap-1 border-0 bg-transparent px-2.5 py-2 text-left text-inherit [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-[550] uppercase text-(--text-soft)"
             onClick={() => onSelectNode(node.id)}
             type="button"
           >
@@ -618,7 +611,7 @@ export function ReviewPanel({
     <div className="min-h-0 h-full grid grid-rows-[auto_minmax(0,1fr)] gap-[10px]">
       <section className="min-h-0 flex-[0_0_auto]">
         <button
-          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+          className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
           onClick={onBack}
           type="button"
         >
@@ -728,7 +721,7 @@ export function TrainPanel({
     <>
       <div className="flex w-full items-stretch gap-[8px]">
         <button
-          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+          className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
           onClick={onBack}
           type="button"
         >
@@ -783,7 +776,7 @@ export function TrainingProfilePanel({
 
   return (
     <section
-      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+      className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
     >
       <div className="min-w-0 flex items-center justify-between gap-[14px]">
         <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
@@ -799,7 +792,7 @@ export function TrainingProfilePanel({
         }}
       >
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'col-span-full'}`}
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
@@ -810,7 +803,7 @@ export function TrainingProfilePanel({
           spellCheck={false}
         />
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'col-span-full'}`}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
@@ -820,7 +813,7 @@ export function TrainingProfilePanel({
           type="password"
         />
         <button
-          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] col-span-full`}
+          className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none col-span-full w-full`}
           disabled={profileBusy || username.trim().length < 3 || password.length < 4}
           type="submit"
         >
@@ -866,7 +859,7 @@ export function AnalyzePanel({
         />
       ) : null}
       <section
-        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
+        className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
       >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
           <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
@@ -884,7 +877,7 @@ export function AnalyzePanel({
           ) : (
             <>
               <div
-                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-0 min-h-[30px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.1)] bg-[rgba(255,255,255,0.03)] text-[var(--text-soft)] text-[11px] font-[400] tracking-[0.08em] uppercase"
+                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-0 min-h-[30px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.1)] bg-[rgba(255,255,255,0.03)] text-(--text-soft) text-[11px] font-[400] tracking-[0.08em] uppercase"
                 aria-hidden="true"
               >
                 <span />
@@ -896,7 +889,7 @@ export function AnalyzePanel({
                   className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] gap-0 items-center min-h-[42px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.07)] border-b-0"
                   key={pair.moveNumber}
                 >
-                  <span className="text-[14px] leading-[1.45] text-[13px] font-[400] text-[var(--text-soft)]">
+                  <span className="text-[14px] leading-[1.45] text-[13px] font-[400] text-(--text-soft)">
                     {pair.moveNumber}.
                   </span>
                   <button
@@ -1032,7 +1025,7 @@ export function GameReviewPanel({
     return (
       <>
         <section
-          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
         >
           <div className="min-w-0 flex items-center justify-between gap-[14px]">
             <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
@@ -1047,7 +1040,7 @@ export function GameReviewPanel({
           </p>
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
             <input
-              className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
+              className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)"
               value={chesscomUsername}
               onChange={(event) => onChesscomUsernameChange(event.target.value)}
               autoComplete="off"
@@ -1057,7 +1050,7 @@ export function GameReviewPanel({
               spellCheck={false}
             />
             <button
-              className="box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em]"
+              className="box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
               onClick={() => onChesscomUsernameChange('')}
               disabled={!chesscomUsername}
               type="button"
@@ -1065,7 +1058,7 @@ export function GameReviewPanel({
               Clear
             </button>
             <button
-              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] col-span-full ${chesscomUsername.trim() && !recentGamesLoading ? 'border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)]' : ''}`}
+              className={`${chesscomUsername.trim() && !recentGamesLoading ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.28)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(138,227,193,0.58)] hover:bg-[rgba(56,148,115,0.38)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none col-span-full w-full' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none col-span-full w-full'}`}
               disabled={!chesscomUsername.trim() || recentGamesLoading}
               onClick={onFetchRecentGames}
               type="button"
@@ -1076,7 +1069,7 @@ export function GameReviewPanel({
           <div className="grid gap-[8px] grid-cols-3">
             {(['bullet', 'blitz', 'rapid'] as const).map((timeClass) => (
               <button
-                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] ${recentGameTimeClass === timeClass ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : 'w-full'}`}
+                className={`${recentGameTimeClass === timeClass ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full'}`}
                 key={timeClass}
                 onClick={() => onRecentGameTimeClassChange(timeClass)}
                 type="button"
@@ -1091,7 +1084,7 @@ export function GameReviewPanel({
         </section>
         {recentGames.length ? (
           <section
-            className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[calc(100svh-250px)] flex-[0_1_auto] flex-col gap-2.5`}
+            className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[calc(100svh-250px)] flex-[0_1_auto] flex-col gap-2.5`}
           >
             <div className="flex min-w-0 items-center justify-between gap-3.5">
               <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-[560] leading-[1.15] tracking-normal text-[var(--text)]">
@@ -1113,13 +1106,13 @@ export function GameReviewPanel({
                   onClick={() => loadRecentGame(game)}
                   type="button"
                 >
-                  <span className="col-start-1 row-span-2 self-center text-xs text-[var(--text-soft)]">
+                  <span className="col-start-1 row-span-2 self-center text-xs text-(--text-soft)">
                     {formatRecentGameAge(game)}
                   </span>
                   <strong className="col-start-2 row-start-1 justify-self-center text-[13px] normal-case tracking-normal text-[var(--text)]">
                     {formatRecentGamePlayers(game)}
                   </strong>
-                  <span className="col-start-3 row-span-2 self-center justify-self-end text-xs text-[var(--text-soft)]">
+                  <span className="col-start-3 row-span-2 self-center justify-self-end text-xs text-(--text-soft)">
                     {game.moveCount ? `${game.moveCount} moves` : '-'}
                   </span>
                   <span className="col-start-2 row-start-2 text-xs text-[var(--text-muted)]">
@@ -1130,7 +1123,7 @@ export function GameReviewPanel({
             </div>
             {recentGamesHasMore ? (
               <button
-                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch`}
+                className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
                 onClick={onLoadMoreRecentGames}
                 disabled={recentGamesLoading}
                 type="button"
@@ -1170,7 +1163,7 @@ export function GameReviewPanel({
         ) : null}
         <div className="grid grid-cols-2 gap-[8px] mt-auto min-h-[36px]">
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] border border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)] disabled:opacity-[0.42]`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.28)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(138,227,193,0.58)] hover:bg-[rgba(56,148,115,0.38)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none disabled:opacity-[0.42]`}
             onClick={() => {
               setShowArrow(true);
               if (coachReview) {
@@ -1183,7 +1176,7 @@ export function GameReviewPanel({
             Show Best
           </button>
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none`}
             onClick={() => goToReviewMoment(nextMomentIndex >= 0 ? nextMomentIndex : reviewMoments.length)}
             disabled={!hasNextReviewStep}
             type="button"
@@ -1199,7 +1192,7 @@ export function GameReviewPanel({
             {movePairs.map((pair) => (
               <tr className="h-[38px] bg-[rgba(255,255,255,0.026)]" key={pair.moveNumber}>
                 <th
-                  className="text-[var(--text-soft)] text-[12px] font-[550] text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
+                  className="text-(--text-soft) text-[12px] font-[550] text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
                   scope="row"
                 >
                   {pair.moveNumber}.
@@ -1303,7 +1296,7 @@ function ReviewSaveDeckPanel({
 
   return (
     <section
-      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+      className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
     >
       {positionLoading ? (
         <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
@@ -1312,7 +1305,7 @@ function ReviewSaveDeckPanel({
       ) : reviewSaveMoveSan ? (
         <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
           Create a training card where the answer is{' '}
-          <span className="inline-block border-[1px] border-solid border-[rgba(184,247,161,0.42)] rounded-[6px] bg-[rgba(184,247,161,0.1)] text-[#d8f5cc] font-[550] px-[7px] py-[1px]">
+          <span className="inline-block rounded-[6px] border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] px-[7px] py-px text-[11px] font-medium uppercase tracking-[0.04em] text-[#f8fbff]">
             {reviewSaveMoveSan}
           </span>
           .
@@ -1325,11 +1318,9 @@ function ReviewSaveDeckPanel({
 
       {hasOwnedDeck ? (
         <label className="flex flex-col gap-[6px] min-w-0">
-          <span className="text-[var(--text-soft)] text-[11px] font-[400] tracking-[0.04em] uppercase">
-            Target deck
-          </span>
+          <span className="text-(--text-soft) text-[11px] font-[400] tracking-[0.04em] uppercase">Target deck</span>
           <select
-            className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'appearance-none bg-[linear-gradient(45deg,transparent_50%,rgba(214,226,244,0.72)_50%),linear-gradient(135deg,rgba(214,226,244,0.72)_50%,transparent_50%)] bg-[position:calc(100%-18px)_calc(50%+2px),calc(100%-12px)_calc(50%+2px)] bg-[length:6px_6px,6px_6px] bg-no-repeat cursor-pointer pr-[34px] outline-none border-[rgba(198,215,255,0.42)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.12)]'}`}
+            className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'appearance-none bg-[linear-gradient(45deg,transparent_50%,rgba(214,226,244,0.72)_50%),linear-gradient(135deg,rgba(214,226,244,0.72)_50%,transparent_50%)] bg-[position:calc(100%-18px)_calc(50%+2px),calc(100%-12px)_calc(50%+2px)] bg-[length:6px_6px,6px_6px] bg-no-repeat cursor-pointer pr-[34px] outline-none border-[rgba(198,215,255,0.42)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.12)]'}`}
             onChange={(event: ChangeEvent<HTMLSelectElement>) => onSelectSaveDeck(event.target.value)}
             value={activeDeckId}
           >
@@ -1348,7 +1339,7 @@ function ReviewSaveDeckPanel({
 
       {hasOwnedDeck ? (
         <button
-          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch ${reviewDeckSaveStatus === 'Saved' ? 'border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] text-[#d8f5cc]' : ''}`}
+          className={`${reviewDeckSaveStatus === 'Saved' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(138,227,193,0.52)] hover:bg-[rgba(56,148,115,0.22)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch'}`}
           disabled={!canSaveReviewCard}
           onClick={onSaveReviewCard}
           type="button"
@@ -1357,7 +1348,7 @@ function ReviewSaveDeckPanel({
         </button>
       ) : (
         <button
-          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
+          className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
           onClick={onGoCreateDeck}
           type="button"
         >
@@ -1862,15 +1853,15 @@ function DeckLibraryItem({
     <div className="relative min-w-0">
       <button
         aria-current={isSelected ? 'true' : undefined}
-        className={`flex w-full min-w-0 flex-col gap-[9px] rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] py-[11px] pl-3 pr-11 text-left text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] ${isSelected ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] hover:border-[rgba(198,215,255,0.72)] hover:bg-[rgba(52,68,98,0.66)]' : ''}`}
+        className={`flex w-full min-w-0 flex-col gap-[9px] rounded-[10px] border py-[11px] pl-3 pr-11 text-left shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] ${isSelected ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] hover:border-[rgba(198,215,255,0.72)] hover:bg-[rgba(52,68,98,0.66)]' : 'border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text-muted)] hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)]'}`}
         disabled={selectDisabled}
         onClick={() => onTrainDeck(deck.id)}
         type="button"
       >
-        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_strong]:min-w-0 [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-sm [&_strong]:leading-[1.15] [&_strong]:text-[var(--text)] [&_span]:text-[11px] uppercase text-[var(--text-soft)]">
+        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_strong]:min-w-0 [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-sm [&_strong]:leading-[1.15] [&_strong]:text-[var(--text)] [&_span]:text-[11px] uppercase text-(--text-soft)">
           {renaming ? (
             <input
-              className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'min-h-[34px] px-[10px] py-0 text-[14px] font-[550]'}`}
+              className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'min-h-[34px] px-[10px] py-0 text-[14px] font-[550]'}`}
               onBlur={submitRename}
               onChange={(event) => setRenameDraft(event.target.value)}
               onClick={(event) => event.stopPropagation()}
@@ -1894,7 +1885,7 @@ function DeckLibraryItem({
           )}
           <span>{deck.cardCount} cards</span>
         </span>
-        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_span]:whitespace-nowrap [&_span]:text-[11px] uppercase text-[var(--text-soft)]">
+        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_span]:whitespace-nowrap [&_span]:text-[11px] uppercase text-(--text-soft)">
           <span>{deck.newCount} new</span>
           <span>{deck.learningCount} learning</span>
           <span>{deck.dueCount} due</span>
@@ -1932,7 +1923,7 @@ function DeckLibraryItem({
                 Rename
               </button>
               <button
-                className={`min-h-[34px] rounded-lg border border-transparent bg-transparent px-2.5 text-left text-xs tracking-[0.03em] text-[var(--text)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.16)] hover:bg-[rgba(4,8,15,0.72)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.28)] hover:bg-[rgba(120,28,28,0.22)] hover:text-[#ffe0df]`}
+                className="min-h-[34px] rounded-lg border border-transparent bg-transparent px-2.5 text-left text-xs tracking-[0.03em] text-[#ffc8c6] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(255,120,120,0.28)] hover:bg-[rgba(120,28,28,0.22)] hover:text-[#ffe0df]"
                 onClick={handleDeleteDeck}
                 role="menuitem"
                 type="button"
@@ -2017,7 +2008,7 @@ export function LearnPanel({
   return (
     <>
       <section
-        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+        className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
       >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
           <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
@@ -2054,7 +2045,7 @@ export function LearnPanel({
         {deckLoadError ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{deckLoadError}</p> : null}
         {deckSummaries.length > 0 ? (
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
             disabled={!canTrainAll}
             onClick={onTrainAll}
             type="button"
@@ -2064,7 +2055,7 @@ export function LearnPanel({
         ) : null}
       </section>
       <section
-        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible ${focusCreateDeck ? 'border-[rgba(198,215,255,0.58)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_0_1px_rgba(198,215,255,0.14)]' : ''}`}
+        className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible ${focusCreateDeck ? 'border-[rgba(198,215,255,0.58)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_0_1px_rgba(198,215,255,0.14)]' : ''}`}
         ref={createDeckSectionRef}
       >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
@@ -2075,14 +2066,14 @@ export function LearnPanel({
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
           <input
-            className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
+            className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)"
             onChange={(event) => onNewDeckTitleChange(event.target.value)}
             placeholder="Deck title"
             ref={createDeckInputRef}
             value={newDeckTitle}
           />
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] col-span-full ${newDeckTitle.trim() && !deckActionLoading ? 'border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)]' : ''}`}
+            className={`${newDeckTitle.trim() && !deckActionLoading ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.28)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(138,227,193,0.58)] hover:bg-[rgba(56,148,115,0.38)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none col-span-full w-full' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none col-span-full w-full'}`}
             disabled={deckActionLoading || !newDeckTitle.trim()}
             onClick={onCreateDeck}
             type="button"
@@ -2092,7 +2083,7 @@ export function LearnPanel({
         </div>
       </section>
       <button
-        className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
+        className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full min-w-0 self-stretch`}
         onClick={onGenerateRecentDeck}
         disabled={deckActionLoading}
         type="button"
@@ -2157,7 +2148,7 @@ export function DeckPanel({
   return (
     <>
       <section
-        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex max-h-none flex-col gap-2.5 overflow-visible rounded-[10px] p-3 ${getMasteryToneClass(cardGrade)}`}
+        className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex max-h-none flex-col gap-2.5 overflow-visible rounded-[10px] p-3 ${getMasteryToneClass(cardGrade)}`}
       >
         {card ? (
           <>
@@ -2186,7 +2177,7 @@ export function DeckPanel({
                 style={{ width: `${cardScore}%` }}
               />
             </div>
-            <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
+            <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
               <span>Card {cardScore}/100</span>
               <span>
                 {trainAllSession
@@ -2231,7 +2222,7 @@ export function DeckPanel({
             ) : null}
             <div className="grid grid-cols-2 gap-[6px] min-h-[38px] px-[8px] py-0 text-[11px] grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-w-0 min-h-[34px] overflow-hidden text-ellipsis whitespace-nowrap">
               <button
-                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+                className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none`}
                 disabled={!card || !canDeleteCard || deckActionLoading}
                 onClick={onDeleteCard}
                 type="button"
@@ -2239,7 +2230,7 @@ export function DeckPanel({
                 {deleteCardLabel}
               </button>
               <button
-                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
+                className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none`}
                 disabled={deckPlaybackBusy}
                 onClick={onNext}
                 type="button"
@@ -2263,7 +2254,7 @@ export function DeckPanel({
       </section>
       {!trainAllSession && activeLineMastery ? (
         <section
-          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] p-3 ${getMasteryToneClass(activeLineMastery.grade)}`}
+          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] p-3 ${getMasteryToneClass(activeLineMastery.grade)}`}
         >
           <div className="flex items-center justify-between gap-[10px] min-w-0">
             <div className="flex min-w-0 flex-col gap-[4px]">
@@ -2288,7 +2279,7 @@ export function DeckPanel({
               style={{ width: `${activeLineMastery.masteryScore}%` }}
             />
           </div>
-          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
+          <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
             <span>Opening {activeLineMastery.masteryScore}/100</span>
             <span>{activeLineMastery.newCount + activeLineMastery.dueCount} due/new</span>
           </div>
@@ -2296,9 +2287,9 @@ export function DeckPanel({
       ) : null}
       {!trainAllSession && gradeDistribution.length > 0 ? (
         <section
-          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] bg-[rgba(9,14,23,0.34)] p-3`}
+          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] bg-[rgba(9,14,23,0.34)] p-3`}
         >
-          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[var(--text-muted)] text-[11px]">
+          <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[var(--text-muted)] text-[11px]">
             <span>Opening spread</span>
             <span>{deckLineMastery.length} openings</span>
           </div>
@@ -2319,7 +2310,7 @@ export function DeckPanel({
           <div className="flex flex-wrap gap-8px 12px">
             {gradeDistribution.map((segment) => (
               <span
-                className="inline-flex items-center gap-[6px] text-[var(--text-soft)] text-[11px] text-[var(--text-muted)]"
+                className="inline-flex items-center gap-[6px] text-(--text-soft) text-[11px] text-[var(--text-muted)]"
                 key={segment.grade}
               >
                 <span
@@ -2392,13 +2383,13 @@ export function PgnImportDialog({
         </div>
         <div className="grid gap-[8px] grid-cols-2 grid-cols-1fr">
           <label
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none`}
             htmlFor="pgn-upload"
           >
             Load file
           </label>
           <button
-            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full`}
+            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal uppercase tracking-[0.04em] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none w-full`}
             onClick={() => void handlePgnPaste()}
             disabled={!pgnDraft.trim()}
             type="button"
@@ -2435,7 +2426,7 @@ function EngineLinesSection({
 }) {
   return (
     <section
-      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
+      className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
     >
       <div className="min-w-0 flex items-center justify-between gap-[14px]">
         <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">

@@ -15,7 +15,8 @@
       "!**/public/review-badges",
       "!**/next-env.d.ts",
       "!chop_helpers.js",
-      "!split_*.js"
+      "!split_*.js",
+      "!scripts/tailwind-migration"
     ]
   },
   "formatter": {
