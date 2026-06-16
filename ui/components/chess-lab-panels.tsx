@@ -10,8 +10,6 @@ import {
 } from '@xyflow/react';
 import dagre from 'dagre';
 import { type ChangeEvent, type ReactNode, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
-import { lab } from '@/components/lab/lab-ui-classes';
-import '@/components/lab/opening-tree-flow.css';
 import '@xyflow/react/dist/style.css';
 
 function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
@@ -192,22 +190,30 @@ export function LinesPanel({
   return (
     <>
       {!activeTree ? (
-        <section className={`${lab.card} ${lab.emptyStateCard}`}>
-          <div className={lab.panelHeader}>
-            <h2 className={lab.sectionTitle}>Lines</h2>
-            <span className={lab.statusText}>{loading ? 'loading' : `${trees.length} openings`}</span>
+        <section
+          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+        >
+          <div className="flex min-w-0 items-center justify-between gap-3.5">
+            <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-[560] leading-[1.15] tracking-normal text-[var(--text)]">
+              Lines
+            </h2>
+            <span className="text-sm leading-[1.45] text-[var(--text-muted)]">
+              {loading ? 'loading' : `${trees.length} openings`}
+            </span>
           </div>
           {trees.length === 0 ? (
-            <p className={lab.copy}>
+            <p className="m-0 text-sm leading-[1.45] text-[var(--text-muted)]">
               Import your recent games to build opening trees grouped by the position after 4 plies.
             </p>
           ) : (
-            <div className={lab.linesLibrary}>
-              <div className={lab.linesFilters}>
-                <label className={lab.linesFilterItem}>
-                  <span className={lab.linesFilterLabel}>Min forced plies (X)</span>
+            <div className="flex max-h-[300px] min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="flex flex-row gap-3 rounded-[10px] border border-[var(--border-soft)] bg-[var(--surface-strong)] px-3 py-2.5">
+                <label className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">
+                    Min forced plies (X)
+                  </span>
                   <input
-                    className={lab.linesFilterInput}
+                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-forced-plies"
                     min={1}
                     onChange={(event) => setMinForcedPlies(Math.max(1, Number(event.target.value) || 1))}
@@ -215,10 +221,10 @@ export function LinesPanel({
                     value={minForcedPlies}
                   />
                 </label>
-                <label className={lab.linesFilterItem}>
-                  <span className={lab.linesFilterLabel}>Min nodes</span>
+                <label className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">Min nodes</span>
                   <input
-                    className={lab.linesFilterInput}
+                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-nodes"
                     min={0}
                     onChange={(event) => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
@@ -226,10 +232,10 @@ export function LinesPanel({
                     value={minNodes}
                   />
                 </label>
-                <label className={lab.linesFilterItem}>
-                  <span className={lab.linesFilterLabel}>Min depth</span>
+                <label className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="text-[10px] font-medium tracking-[0.04em] text-[var(--text-soft)]">Min depth</span>
                   <input
-                    className={lab.linesFilterInput}
+                    className="w-full rounded-md border border-[var(--border-soft)] bg-transparent px-2 py-1 text-[13px] text-[var(--text)] outline-none transition-[border-color] duration-150 focus:border-[var(--accent)]"
                     id="filter-min-depth"
                     min={0}
                     onChange={(event) => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
@@ -238,7 +244,7 @@ export function LinesPanel({
                   />
                 </label>
               </div>
-              <span className={lab.linesFilterCount}>
+              <span className="text-[11px] text-[var(--text-soft)]">
                 {filteredTrees.length} / {trees.length} openings
               </span>
               {OPENING_LIBRARY_ORDER.map((library) => {
@@ -249,24 +255,28 @@ export function LinesPanel({
                 }
 
                 return (
-                  <section className={lab.linesLibraryGroup} key={library}>
-                    <h3 className={lab.linesLibraryTitle}>{formatOpeningLibrary(library)}</h3>
-                    <div className={lab.openingTreeList}>
+                  <section className="flex min-w-0 flex-col gap-2" key={library}>
+                    <h3 className="m-0 text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--text-soft)]">
+                      {formatOpeningLibrary(library)}
+                    </h3>
+                    <div className="flex min-h-0 flex-col gap-2">
                       {libraryTrees.map((tree) => (
                         <button
-                          className={`${lab.openingTreeItem} ${tree.id === activeTreeId ? lab.openingTreeItemActive : ''}`}
+                          className={`flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-[10px] border border-[rgba(214,226,244,0.18)] bg-[rgba(9,14,23,0.4)] px-3 py-[11px] text-left text-[var(--text-muted)] transition-[border-color,background-color] duration-150 hover:border-[rgba(214,226,244,0.28)] ${tree.id === activeTreeId ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]' : ''}`}
                           key={tree.id}
                           onClick={() => onSelectTree(tree.id)}
                           type="button"
                         >
-                          <span className={lab.openingTreeItemHead}>
+                          <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-[var(--text)] [overflow-wrap:anywhere]">
                             <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
-                            <span className={lab.openingTreeMastery}>{tree.masteryScore}/100</span>
+                            <span className="flex-none text-[11px] font-medium uppercase leading-none text-[var(--text-soft)] [&+strong]:min-w-0">
+                              {tree.masteryScore}/100
+                            </span>
                           </span>
-                          <span className={lab.openingTreeItemRoot}>
+                          <span className="block font-mono text-[11px] leading-[1.35] text-[var(--text-muted)] [overflow-wrap:anywhere]">
                             {tree.rootSan.join(' ') || 'Starting position'}
                           </span>
-                          <span className={lab.openingTreeItemStats}>
+                          <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-medium uppercase leading-none tracking-[0.03em] text-[var(--text-soft)]">
                             <span>{tree.sourceCount} sources</span>
                             <span>{tree.nodeCount} nodes</span>
                             <span>{tree.dueCount} weak</span>
@@ -280,38 +290,38 @@ export function LinesPanel({
             </div>
           )}
           <button
-            className={`${lab.action} ${lab.primary} ${lab.fullWidthAction}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
             disabled={actionLoading}
             onClick={onImportRecent}
             type="button"
           >
             {actionLoading ? 'Loading...' : 'Refresh opening trees'}
           </button>
-          {actionError ? <p className={lab.error}>{actionError}</p> : null}
+          {actionError ? <p className="m-0 text-sm leading-[1.45] text-[#ffb4b2]">{actionError}</p> : null}
         </section>
       ) : null}
 
       {activeTree ? (
         <>
-          <div className={lab.trainBackRow}>
+          <div className="flex w-full items-stretch gap-2">
             <button
-              className={`${lab.action} ${lab.fullWidthAction} ${lab.backAction}`}
+              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
               onClick={() => onSelectTree('')}
               type="button"
             >
               Back
             </button>
           </div>
-          <div className={lab.trainBackRow} style={{ marginTop: '-4px' }}>
+          <div className="flex w-full items-stretch gap-2" style={{ marginTop: '-4px' }}>
             <button
-              className={`${lab.action} ${lab.fullWidthAction} ${trainSide === 'white' ? lab.primary : ''}`}
+              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch ${trainSide === 'white' ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : ''}`}
               onClick={() => onChangeTrainSide('white')}
               type="button"
             >
               White
             </button>
             <button
-              className={`${lab.action} ${lab.fullWidthAction} ${trainSide === 'black' ? lab.primary : ''}`}
+              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch ${trainSide === 'black' ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : ''}`}
               onClick={() => onChangeTrainSide('black')}
               type="button"
             >
@@ -320,21 +330,23 @@ export function LinesPanel({
           </div>
 
           <section
-            className={`${lab.card} ${lab.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? lab.feedbackGood : deckFeedback?.pending === false ? lab.feedbackBad : lab.feedbackPending) : ''}`}
+            className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
           >
-            <div className={lab.trainingCardHead}>
-              <div className={lab.trainingCardTitleBlock}>
-                <strong className={lab.trainingCardTitle}>{formatOpeningTreeDisplayName(activeTree.name)}</strong>
+            <div className="flex min-w-0 items-center justify-between gap-2.5">
+              <div className="flex min-w-0 flex-col gap-1">
+                <strong className="text-base leading-[1.2] tracking-normal text-[var(--text)] [overflow-wrap:anywhere]">
+                  {formatOpeningTreeDisplayName(activeTree.name)}
+                </strong>
               </div>
             </div>
 
-            <div className={lab.trainingCardMeta}>
+            <div className="flex items-center justify-between gap-2.5 text-xs text-[var(--text-soft)]">
               <span>depth {activeTree.targetDepth}</span>
               <span>{activeTree.nodeCount} nodes</span>
               <span>{activeTree.dueCount} weak</span>
             </div>
 
-            <div className={lab.openingTreeCanvas}>
+            <div className="w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-[var(--border)] bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-medium [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:[stroke-width:1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-[var(--text)]">
               <ReactFlowProvider key={activeTreeId ?? 'none'}>
                 <ReactFlow
                   edges={graph.edges}
@@ -430,7 +442,11 @@ function buildOpeningTreeGraph(
       position: { x: point.x - 78, y: point.y - 29 },
       data: {
         label: (
-          <button className={lab.openingTreeNodeButton} onClick={() => onSelectNode(node.id)} type="button">
+          <button
+            className="flex min-h-[58px] w-full cursor-pointer flex-col justify-center gap-1 border-0 bg-transparent px-2.5 py-2 text-left text-inherit [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-[550] uppercase text-[var(--text-soft)]"
+            onClick={() => onSelectNode(node.id)}
+            type="button"
+          >
             <strong>{isTrainTurn && showAnswer ? `Best: ${node.bestSan}` : `Ply ${node.ply}`}</strong>
             <span>{isTrainTurn ? `${node.masteryScore}/100` : 'Opponent'}</span>
           </button>
@@ -438,10 +454,14 @@ function buildOpeningTreeGraph(
       },
       draggable: false,
       className: [
-        lab.openingTreeNode,
-        isActive ? lab.openingTreeNodeActive : '',
-        isTrainTurn ? lab.openingTreeNodeTrain : lab.openingTreeNodeOpponent,
-        isWeak ? lab.openingTreeNodeWeak : '',
+        'w-[156px] rounded-[10px] border border-[rgba(214,226,244,0.24)] bg-[rgba(13,20,32,0.94)] text-[var(--text)] shadow-[0_8px_20px_rgba(0,0,0,0.24)]',
+        isActive
+          ? '!border-[rgba(198,215,255,0.78)] shadow-[0_8px_22px_rgba(0,0,0,0.28),0_0_0_2px_rgba(198,215,255,0.16)]'
+          : '',
+        isTrainTurn
+          ? '!border-[rgba(138,198,255,0.34)] !bg-[rgba(42,82,126,0.2)]'
+          : '!border-[rgba(214,226,244,0.2)] !bg-[rgba(13,20,32,0.94)]',
+        isWeak ? '!border-[rgba(255,176,84,0.36)] !bg-[rgba(130,82,32,0.18)]' : '',
       ]
         .filter(Boolean)
         .join(' '),
@@ -456,7 +476,7 @@ function buildOpeningTreeGraph(
         target: edge.toNodeId,
         animated: edge.isEngineBest,
         label: edge.san,
-        className: edge.isEngineBest ? lab.openingTreeEdgeBest : undefined,
+        style: edge.isEngineBest ? { stroke: 'rgba(138, 227, 193, 0.95)', strokeWidth: 2.8 } : undefined,
         labelBgPadding: [6, 4],
         labelBgBorderRadius: 6,
         labelShowBg: true,
@@ -597,7 +617,11 @@ export function ReviewPanel({
   return (
     <div className="min-h-0 h-full grid grid-rows-[auto_minmax(0,1fr)] gap-[10px]">
       <section className="min-h-0 flex-[0_0_auto]">
-        <button className={`${lab.action} ${lab.fullWidthAction} ${lab.backAction}`} onClick={onBack} type="button">
+        <button
+          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+          onClick={onBack}
+          type="button"
+        >
           Back
         </button>
       </section>
@@ -703,7 +727,11 @@ export function TrainPanel({
   return (
     <>
       <div className="flex w-full items-stretch gap-[8px]">
-        <button className={`${lab.action} ${lab.fullWidthAction} ${lab.backAction}`} onClick={onBack} type="button">
+        <button
+          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
+          onClick={onBack}
+          type="button"
+        >
           Back
         </button>
       </div>
@@ -754,12 +782,14 @@ export function TrainingProfilePanel({
   const statusText = bootstrapping ? 'syncing' : submitting ? 'signing in' : 'required';
 
   return (
-    <section className={`${lab.card} ${lab.emptyStateCard}`}>
+    <section
+      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+    >
       <div className="min-w-0 flex items-center justify-between gap-[14px]">
-        <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+        <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
           Training Profile
         </h2>
-        <span className="text-[14px] leading-[1.45] text-[--text-muted)]">{statusText}</span>
+        <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">{statusText}</span>
       </div>
       <form
         className="grid grid-cols-2 gap-[8px] grid-cols-1fr"
@@ -769,7 +799,7 @@ export function TrainingProfilePanel({
         }}
       >
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]'} ${'col-span-full'}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
@@ -780,7 +810,7 @@ export function TrainingProfilePanel({
           spellCheck={false}
         />
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]'} ${'col-span-full'}`}
+          className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'col-span-full'}`}
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
@@ -790,7 +820,7 @@ export function TrainingProfilePanel({
           type="password"
         />
         <button
-          className={`${lab.action} ${lab.primary} ${lab.profileFormWide}`}
+          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] col-span-full`}
           disabled={profileBusy || username.trim().length < 3 || password.length < 4}
           type="submit"
         >
@@ -835,22 +865,26 @@ export function AnalyzePanel({
           positionLoading={positionLoading}
         />
       ) : null}
-      <section className={`${lab.card}`}>
+      <section
+        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
+      >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
-          <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
             Line
           </h2>
-          <span className="text-[14px] leading-[1.45] text-[--text-muted)]">
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
             {movePairs.length ? `${movePairs.length} moves` : 'manual board'}
           </span>
         </div>
-        <div className={lab.moveList}>
+        <div className="flex min-h-0 flex-1 flex-col gap-0 overflow-y-auto overflow-x-hidden rounded-xl border border-[rgba(214,226,244,0.12)] bg-[rgba(6,10,17,0.38)] pr-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {movePairs.length === 0 ? (
-            <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">Play on the board or import a PGN.</p>
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
+              Play on the board or import a PGN.
+            </p>
           ) : (
             <>
               <div
-                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-0 min-h-[30px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.1)] bg-[rgba(255,255,255,0.03)] text-[--text-soft)] text-[11px] font-[400] tracking-[0.08em] uppercase"
+                className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-0 min-h-[30px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.1)] bg-[rgba(255,255,255,0.03)] text-[var(--text-soft)] text-[11px] font-[400] tracking-[0.08em] uppercase"
                 aria-hidden="true"
               >
                 <span />
@@ -862,18 +896,18 @@ export function AnalyzePanel({
                   className="grid grid-cols-[44px_minmax(0,1fr)_minmax(0,1fr)] gap-0 items-center min-h-[42px] px-[10px] py-0 border-b-[1px] border-b-[rgba(214,226,244,0.07)] border-b-0"
                   key={pair.moveNumber}
                 >
-                  <span className="text-[14px] leading-[1.45] text-[13px] font-[400] text-[--text-soft)]">
+                  <span className="text-[14px] leading-[1.45] text-[13px] font-[400] text-[var(--text-soft)]">
                     {pair.moveNumber}.
                   </span>
                   <button
-                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[--text)] text-[15px] font-[650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.whitePly ? 'bg-[rgba(198,215,255,0.14)] text-[--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
+                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[var(--text)] text-[15px] font-[650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.whitePly ? 'bg-[rgba(198,215,255,0.14)] text-[var(--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
                     onClick={() => jumpToIndex(pair.whitePly)}
                     type="button"
                   >
                     {pair.white ? renderMoveFigurine(pair.white.san) : '...'}
                   </button>
                   <button
-                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[--text)] text-[15px] font-[650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.blackPly ? 'bg-[rgba(198,215,255,0.14)] text-[--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
+                    className={`${'min-w-0 min-h-[42px] grid grid-cols-[1.5em_0.72em_minmax(0,1fr)] items-center px-[12px] py-0 border-0 rounded-[0] bg-transparent text-[var(--text)] text-[15px] font-[650] text-left overflow-hidden text-ellipsis whitespace-nowrap shadow-[none] bg-[rgba(255,255,255,0.035)] op-34'} ${historyIndex === pair.blackPly ? 'bg-[rgba(198,215,255,0.14)] text-[var(--accent-strong)] shadow-[inset_0_-2px_0_rgba(198,215,255,0.7)]' : ''}`}
                     onClick={() => jumpToIndex(pair.blackPly)}
                     disabled={!pair.black}
                     type="button"
@@ -997,21 +1031,23 @@ export function GameReviewPanel({
   if (!hasLoadedGame) {
     return (
       <>
-        <section className={`${lab.card} ${lab.emptyStateCard}`}>
+        <section
+          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+        >
           <div className="min-w-0 flex items-center justify-between gap-[14px]">
-            <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+            <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
               Game Review
             </h2>
-            <span className="text-[14px] leading-[1.45] text-[--text-muted)]">
+            <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
               {recentGamesLoading ? 'loading' : recentGames.length ? `${recentGames.length} games` : 'ready'}
             </span>
           </div>
-          <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+          <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
             Use your Chess.com username to pull recent public games.
           </p>
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
             <input
-              className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]"
+              className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
               value={chesscomUsername}
               onChange={(event) => onChesscomUsernameChange(event.target.value)}
               autoComplete="off"
@@ -1021,7 +1057,7 @@ export function GameReviewPanel({
               spellCheck={false}
             />
             <button
-              className={lab.action}
+              className="box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em]"
               onClick={() => onChesscomUsernameChange('')}
               disabled={!chesscomUsername}
               type="button"
@@ -1029,7 +1065,7 @@ export function GameReviewPanel({
               Clear
             </button>
             <button
-              className={`${lab.action} ${lab.inlineFormWide} ${chesscomUsername.trim() && !recentGamesLoading ? lab.confirmAction : ''}`}
+              className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] col-span-full ${chesscomUsername.trim() && !recentGamesLoading ? 'border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)]' : ''}`}
               disabled={!chesscomUsername.trim() || recentGamesLoading}
               onClick={onFetchRecentGames}
               type="button"
@@ -1040,7 +1076,7 @@ export function GameReviewPanel({
           <div className="grid gap-[8px] grid-cols-3">
             {(['bullet', 'blitz', 'rapid'] as const).map((timeClass) => (
               <button
-                className={`${lab.action} ${recentGameTimeClass === timeClass ? lab.primary : lab.secondary}`}
+                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] ${recentGameTimeClass === timeClass ? 'flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]' : 'w-full'}`}
                 key={timeClass}
                 onClick={() => onRecentGameTimeClassChange(timeClass)}
                 type="button"
@@ -1054,35 +1090,47 @@ export function GameReviewPanel({
           ) : null}
         </section>
         {recentGames.length ? (
-          <section className={`${lab.card} ${lab.openingListCard}`}>
-            <div className={lab.panelHeader}>
-              <h2 className={lab.sectionTitle}>Recent {capitalizeRecentGameTimeClass(recentGameTimeClass)}</h2>
-              <span className={lab.statusText}>click to review</span>
+          <section
+            className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex min-h-0 max-h-[calc(100svh-250px)] flex-[0_1_auto] flex-col gap-2.5`}
+          >
+            <div className="flex min-w-0 items-center justify-between gap-3.5">
+              <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-[560] leading-[1.15] tracking-normal text-[var(--text)]">
+                Recent {capitalizeRecentGameTimeClass(recentGameTimeClass)}
+              </h2>
+              <span className="text-sm leading-[1.45] text-[var(--text-muted)]">click to review</span>
             </div>
-            <div className={lab.openingList}>
+            <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {recentGames.map((game) => (
                 <button
-                  className={`${lab.openingButton} ${lab.recentGameButton} ${
+                  className={`grid min-h-[44px] min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2.5 rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] px-3 text-[13px] text-[var(--text-muted)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] min-h-[62px] grid-cols-[minmax(0,112px)_minmax(0,1fr)_auto] grid-rows-[auto_auto] items-center gap-x-3 gap-y-1 px-3 py-2.5 text-left ${
                     game.outcome === 'win'
-                      ? lab.recentGameWin
+                      ? 'border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.12)] hover:border-[rgba(138,227,193,0.56)] hover:bg-[rgba(56,148,115,0.24)]'
                       : game.outcome === 'loss'
-                        ? lab.recentGameLoss
-                        : lab.recentGameDraw
+                        ? 'border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.12)] hover:border-[rgba(255,141,145,0.56)] hover:bg-[rgba(180,58,66,0.24)]'
+                        : 'border-[rgba(152,184,255,0.28)] hover:border-[rgba(152,184,255,0.44)] hover:bg-[rgba(46,58,82,0.34)]'
                   }`}
                   key={game.link}
                   onClick={() => loadRecentGame(game)}
                   type="button"
                 >
-                  <span className={lab.recentGameDate}>{formatRecentGameAge(game)}</span>
-                  <strong className={lab.recentGamePlayers}>{formatRecentGamePlayers(game)}</strong>
-                  <span className={lab.recentGameMoves}>{game.moveCount ? `${game.moveCount} moves` : '-'}</span>
-                  <span className={lab.recentGameMeta}>{formatRecentGameMeta(game)}</span>
+                  <span className="col-start-1 row-span-2 self-center text-xs text-[var(--text-soft)]">
+                    {formatRecentGameAge(game)}
+                  </span>
+                  <strong className="col-start-2 row-start-1 justify-self-center text-[13px] normal-case tracking-normal text-[var(--text)]">
+                    {formatRecentGamePlayers(game)}
+                  </strong>
+                  <span className="col-start-3 row-span-2 self-center justify-self-end text-xs text-[var(--text-soft)]">
+                    {game.moveCount ? `${game.moveCount} moves` : '-'}
+                  </span>
+                  <span className="col-start-2 row-start-2 text-xs text-[var(--text-muted)]">
+                    {formatRecentGameMeta(game)}
+                  </span>
                 </button>
               ))}
             </div>
             {recentGamesHasMore ? (
               <button
-                className={`${lab.action} ${lab.fullWidthAction}`}
+                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch`}
                 onClick={onLoadMoreRecentGames}
                 disabled={recentGamesLoading}
                 type="button"
@@ -1099,10 +1147,10 @@ export function GameReviewPanel({
   return (
     <section className="min-h-0 h-full grid grid-rows-[clamp(132px,16svh,148px)_minmax(0,1fr)_clamp(44px,8svh,62px)] gap-[10px] overflow-hidden">
       <div className="border-[1px] border-solid border-[rgba(214,226,244,0.14)] rounded-[10px] bg-[rgba(8,12,19,0.78)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] min-h-0 flex flex-col gap-[7px] p-[9px] overflow-hidden">
-        <div className="min-w-0 flex items-center justify-between gap-[14px] text-[--text)] text-[15px] overflow-hidden text-ellipsis whitespace-nowrap">
-          <div className="min-w-0 flex items-center gap-[8px] text-[--text)] text-[15px] font-[550] overflow-hidden text-ellipsis whitespace-nowrap">
+        <div className="min-w-0 flex items-center justify-between gap-[14px] text-[var(--text)] text-[15px] overflow-hidden text-ellipsis whitespace-nowrap">
+          <div className="min-w-0 flex items-center gap-[8px] text-[var(--text)] text-[15px] font-[550] overflow-hidden text-ellipsis whitespace-nowrap">
             <span
-              className="flex-[0_0_auto] px-[8px] py-[5px] rounded-[999px] bg-color-mix(in bg-srgb,var(--review-color) bg-[rgba(9,14,23,0.42)] border-[1px] border-solid border-color-mix(in border-srgb,var(--review-color) border-50%,rgba(214,226,244,0.18)) text-[--text)] text-[11px] font-[550] tracking-[0.06em] uppercase"
+              className="flex-[0_0_auto] px-[8px] py-[5px] rounded-[999px] bg-color-mix(in bg-srgb,var(--review-color) bg-[rgba(9,14,23,0.42)] border-[1px] border-solid border-color-mix(in border-srgb,var(--review-color) border-50%,rgba(214,226,244,0.18)) text-[var(--text)] text-[11px] font-[550] tracking-[0.06em] uppercase"
               style={{ ['--review-color' as string]: coachReview?.colorHex ?? '#98b8ff' }}
             >
               {coachReview?.label ?? 'Review'}
@@ -1111,18 +1159,18 @@ export function GameReviewPanel({
               {coachReview ? `${coachReview.moveLabel} ${coachReview.san}` : `${whiteReviewName} vs ${blackReviewName}`}
             </strong>
           </div>
-          <span className="text-[14px] leading-[1.45] text-[--text-muted)]">
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
             {timelineLoading ? formatTimelineProgress(timelineProgress) : `${reviewMoments.length} moments`}
           </span>
         </div>
         {coachReview ? (
-          <p className="m-0 min-h-[calc(12.5px*1.2*2)] text-[--text-muted)] text-[12.5px] leading-[1.2] box line-clamp-2 [-webkit-box-orient:vertical] overflow-hidden">
+          <p className="m-0 min-h-[calc(12.5px*1.2*2)] text-[var(--text-muted)] text-[12.5px] leading-[1.2] box line-clamp-2 [-webkit-box-orient:vertical] overflow-hidden">
             {compactCoachText(coachReview)}
           </p>
         ) : null}
         <div className="grid grid-cols-2 gap-[8px] mt-auto min-h-[36px]">
           <button
-            className={`${lab.action} ${lab.actionBest}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] border border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)] disabled:opacity-[0.42]`}
             onClick={() => {
               setShowArrow(true);
               if (coachReview) {
@@ -1135,7 +1183,7 @@ export function GameReviewPanel({
             Show Best
           </button>
           <button
-            className={`${lab.action} ${lab.primary}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
             onClick={() => goToReviewMoment(nextMomentIndex >= 0 ? nextMomentIndex : reviewMoments.length)}
             disabled={!hasNextReviewStep}
             type="button"
@@ -1145,13 +1193,13 @@ export function GameReviewPanel({
         </div>
       </div>
 
-      <div className={lab.reviewMoveTableScroller}>
-        <table className={lab.reviewMoveTable} aria-label="Reviewed moves">
+      <div className="min-h-0 overflow-y-auto overflow-x-hidden px-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <table className="w-full table-fixed border-collapse" aria-label="Reviewed moves">
           <tbody>
             {movePairs.map((pair) => (
               <tr className="h-[38px] bg-[rgba(255,255,255,0.026)]" key={pair.moveNumber}>
                 <th
-                  className="text-[--text-soft)] text-[12px] font-[550] text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
+                  className="text-[var(--text-soft)] text-[12px] font-[550] text-right w-[34px] pt-0 pb-0 pl-[2px] pr-[8px] align-middle"
                   scope="row"
                 >
                   {pair.moveNumber}.
@@ -1254,13 +1302,15 @@ function ReviewSaveDeckPanel({
   }, [activeDeckId, hasOwnedDeck, onSelectSaveDeck, selectedDeckId]);
 
   return (
-    <section className={`${lab.card} ${lab.emptyStateCard}`}>
+    <section
+      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+    >
       {positionLoading ? (
-        <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
           Engine is finding the best move for this position.
         </p>
       ) : reviewSaveMoveSan ? (
-        <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
           Create a training card where the answer is{' '}
           <span className="inline-block border-[1px] border-solid border-[rgba(184,247,161,0.42)] rounded-[6px] bg-[rgba(184,247,161,0.1)] text-[#d8f5cc] font-[550] px-[7px] py-[1px]">
             {reviewSaveMoveSan}
@@ -1268,16 +1318,18 @@ function ReviewSaveDeckPanel({
           .
         </p>
       ) : (
-        <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
           No best move is available for this position yet.
         </p>
       )}
 
       {hasOwnedDeck ? (
         <label className="flex flex-col gap-[6px] min-w-0">
-          <span className="text-[--text-soft)] text-[11px] font-[400] tracking-[0.04em] uppercase">Target deck</span>
+          <span className="text-[var(--text-soft)] text-[11px] font-[400] tracking-[0.04em] uppercase">
+            Target deck
+          </span>
           <select
-            className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]'} ${'appearance-none bg-[linear-gradient(45deg,transparent_50%,rgba(214,226,244,0.72)_50%),linear-gradient(135deg,rgba(214,226,244,0.72)_50%,transparent_50%)] bg-[position:calc(100%-18px)_calc(50%+2px),calc(100%-12px)_calc(50%+2px)] bg-[length:6px_6px,6px_6px] bg-no-repeat cursor-pointer pr-[34px] outline-none border-[rgba(198,215,255,0.42)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.12)]'}`}
+            className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'appearance-none bg-[linear-gradient(45deg,transparent_50%,rgba(214,226,244,0.72)_50%),linear-gradient(135deg,rgba(214,226,244,0.72)_50%,transparent_50%)] bg-[position:calc(100%-18px)_calc(50%+2px),calc(100%-12px)_calc(50%+2px)] bg-[length:6px_6px,6px_6px] bg-no-repeat cursor-pointer pr-[34px] outline-none border-[rgba(198,215,255,0.42)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.12)]'}`}
             onChange={(event: ChangeEvent<HTMLSelectElement>) => onSelectSaveDeck(event.target.value)}
             value={activeDeckId}
           >
@@ -1289,14 +1341,14 @@ function ReviewSaveDeckPanel({
           </select>
         </label>
       ) : (
-        <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
           Create a personal deck in Train, then come back here to save this position.
         </p>
       )}
 
       {hasOwnedDeck ? (
         <button
-          className={`${lab.action} ${lab.primary} ${lab.fullWidthAction} ${reviewDeckSaveStatus === 'Saved' ? lab.saveAdded : ''}`}
+          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch ${reviewDeckSaveStatus === 'Saved' ? 'border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] text-[#d8f5cc]' : ''}`}
           disabled={!canSaveReviewCard}
           onClick={onSaveReviewCard}
           type="button"
@@ -1305,7 +1357,7 @@ function ReviewSaveDeckPanel({
         </button>
       ) : (
         <button
-          className={`${lab.action} ${lab.primary} ${lab.fullWidthAction}`}
+          className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
           onClick={onGoCreateDeck}
           type="button"
         >
@@ -1340,7 +1392,7 @@ function ReviewMoveButton({
 
   return (
     <button
-      className={`${'w-full min-w-0 min-h-[30px] relative inline-flex items-center justify-start gap-[6px] border-[1px] border-solid border-transparent rounded-[7px] bg-transparent text-[--text-muted)] pt-0 pb-0 pl-[2px] pr-[8px] font-inherit text-[15px] font-[550] text-left cursor-pointer bg-[rgba(255,255,255,0.06)] text-[--text)]'} ${moveColor ? 'text-[--move-dot-color,var(--text))]' : ''} ${isActive ? 'bg-[rgba(198,215,255,0.14)] text-[--text)] text-[--move-dot-color,var(--text))]' : ''}`}
+      className={`${'w-full min-w-0 min-h-[30px] relative inline-flex items-center justify-start gap-[6px] border-[1px] border-solid border-transparent rounded-[7px] bg-transparent text-[var(--text-muted)] pt-0 pb-0 pl-[2px] pr-[8px] font-inherit text-[15px] font-[550] text-left cursor-pointer bg-[rgba(255,255,255,0.06)] text-[var(--text)]'} ${moveColor ? 'text-[var(--move-dot-color,var(--text))]' : ''} ${isActive ? 'bg-[rgba(198,215,255,0.14)] text-[var(--text)] text-[var(--move-dot-color,var(--text))]' : ''}`}
       onClick={() => jumpToIndex(ply)}
       ref={isActive ? activeMoveButtonRef : undefined}
       style={{
@@ -1363,7 +1415,7 @@ function ReviewMoveBadgeCell({ review }: { review: TimelineReview | null }) {
       {badgeSrc ? (
         <span
           aria-hidden="true"
-          className="inline-block w-[17px] h-[17px] align-middle bg-[--review-badge-url)] bg-[position:center] bg-no-repeat bg-[length:contain] drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)] pointer-events-none"
+          className="inline-block w-[17px] h-[17px] align-middle bg-[var(--review-badge-url)] bg-[position:center] bg-no-repeat bg-[length:contain] drop-shadow-[0_2px_3px_rgba(0,0,0,0.28)] pointer-events-none"
           style={{ ['--review-badge-url' as string]: `url(${badgeSrc})` }}
         />
       ) : null}
@@ -1492,7 +1544,7 @@ function ReviewTimelineStrip({
         </div>
       ) : null}
       {timelineError ? (
-        <span className="absolute left-[10px] right-[10px] bottom-[8px] text-[--danger)] text-[11px] leading-[1.2] overflow-hidden text-ellipsis whitespace-nowrap">
+        <span className="absolute left-[10px] right-[10px] bottom-[8px] text-[var(--danger)] text-[11px] leading-[1.2] overflow-hidden text-ellipsis whitespace-nowrap">
           {timelineError}
         </span>
       ) : null}
@@ -1807,18 +1859,18 @@ function DeckLibraryItem({
   }
 
   return (
-    <div className={`${lab.deckLibraryItemWrap} ${isSelected ? lab.activeDeckLibraryItemWrap : ''}`}>
+    <div className="relative min-w-0">
       <button
         aria-current={isSelected ? 'true' : undefined}
-        className={`${lab.deckLibraryItem} ${isSelected ? lab.activeDeckLibraryItem : ''}`}
+        className={`flex w-full min-w-0 flex-col gap-[9px] rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] py-[11px] pl-3 pr-11 text-left text-[var(--text-muted)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] ${isSelected ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-[var(--text)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] hover:border-[rgba(198,215,255,0.72)] hover:bg-[rgba(52,68,98,0.66)]' : ''}`}
         disabled={selectDisabled}
         onClick={() => onTrainDeck(deck.id)}
         type="button"
       >
-        <span className={lab.deckLibraryHead}>
+        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_strong]:min-w-0 [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-sm [&_strong]:leading-[1.15] [&_strong]:text-[var(--text)] [&_span]:text-[11px] uppercase text-[var(--text-soft)]">
           {renaming ? (
             <input
-              className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]'} ${'min-h-[34px] px-[10px] py-0 text-[14px] font-[550]'}`}
+              className={`${'w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]'} ${'min-h-[34px] px-[10px] py-0 text-[14px] font-[550]'}`}
               onBlur={submitRename}
               onChange={(event) => setRenameDraft(event.target.value)}
               onClick={(event) => event.stopPropagation()}
@@ -1842,7 +1894,7 @@ function DeckLibraryItem({
           )}
           <span>{deck.cardCount} cards</span>
         </span>
-        <span className={lab.deckLibraryMeta}>
+        <span className="flex min-w-0 items-center justify-between gap-2.5 [&_span]:whitespace-nowrap [&_span]:text-[11px] uppercase text-[var(--text-soft)]">
           <span>{deck.newCount} new</span>
           <span>{deck.learningCount} learning</span>
           <span>{deck.dueCount} due</span>
@@ -1850,12 +1902,12 @@ function DeckLibraryItem({
       </button>
 
       {deck.canManage ? (
-        <div className={lab.deckLibraryMenuAnchor} ref={menuRef}>
+        <div className="absolute top-2 right-2 z-[2]" ref={menuRef}>
           <button
             aria-expanded={menuOpen}
             aria-haspopup="menu"
             aria-label={`Deck options for ${deck.name}`}
-            className={lab.deckLibraryMenuButton}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[rgba(9,14,23,0.72)] text-[var(--text-muted)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.82)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"
             disabled={deckBusy || deckActionLoading}
             onClick={(event) => {
               event.stopPropagation();
@@ -1867,12 +1919,20 @@ function DeckLibraryItem({
           </button>
 
           {menuOpen ? (
-            <div className={lab.deckLibraryMenu} role="menu">
-              <button className={lab.deckLibraryMenuOption} onClick={startRename} role="menuitem" type="button">
+            <div
+              className="absolute top-[calc(100%+4px)] right-0 z-[5] flex min-w-[148px] flex-col gap-1 rounded-[10px] border border-[rgba(214,226,244,0.18)] bg-[rgba(8,12,19,0.96)] p-1.5 shadow-[0_10px_28px_rgba(0,0,0,0.34)]"
+              role="menu"
+            >
+              <button
+                className="min-h-[34px] rounded-lg border border-transparent bg-transparent px-2.5 text-left text-xs tracking-[0.03em] text-[var(--text)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.16)] hover:bg-[rgba(4,8,15,0.72)]"
+                onClick={startRename}
+                role="menuitem"
+                type="button"
+              >
                 Rename
               </button>
               <button
-                className={`${lab.deckLibraryMenuOption} ${lab.deckLibraryMenuOptionDanger}`}
+                className={`min-h-[34px] rounded-lg border border-transparent bg-transparent px-2.5 text-left text-xs tracking-[0.03em] text-[var(--text)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.16)] hover:bg-[rgba(4,8,15,0.72)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.28)] hover:bg-[rgba(120,28,28,0.22)] hover:text-[#ffe0df]`}
                 onClick={handleDeleteDeck}
                 role="menuitem"
                 type="button"
@@ -1956,17 +2016,19 @@ export function LearnPanel({
 
   return (
     <>
-      <section className={`${lab.card} ${lab.emptyStateCard}`}>
+      <section
+        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+      >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
-          <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
             Decks
           </h2>
-          <span className="text-[14px] leading-[1.45] text-[--text-muted)]">
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
             {deckLibraryLoading ? 'loading' : `${deckSummaries.length} decks`}
           </span>
         </div>
         {deckSummaries.length === 0 ? (
-          <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+          <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
             {deckLibraryLoading
               ? 'Loading decks.'
               : deckLoadError
@@ -1992,7 +2054,7 @@ export function LearnPanel({
         {deckLoadError ? <p className="text-[14px] leading-[1.45] m-0 text-[#ffb4b2]">{deckLoadError}</p> : null}
         {deckSummaries.length > 0 ? (
           <button
-            className={`${lab.action} ${lab.fullWidthAction}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full min-w-0 self-stretch`}
             disabled={!canTrainAll}
             onClick={onTrainAll}
             type="button"
@@ -2002,25 +2064,25 @@ export function LearnPanel({
         ) : null}
       </section>
       <section
-        className={`${lab.card} ${lab.emptyStateCard} ${focusCreateDeck ? 'border-[rgba(198,215,255,0.58)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_0_1px_rgba(198,215,255,0.14)]' : ''}`}
+        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible ${focusCreateDeck ? 'border-[rgba(198,215,255,0.58)] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),inset_0_0_0_1px_rgba(198,215,255,0.14)]' : ''}`}
         ref={createDeckSectionRef}
       >
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
-          <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+          <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
             Create deck
           </h2>
-          <span className="text-[14px] leading-[1.45] text-[--text-muted)]">manual</span>
+          <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">manual</span>
         </div>
         <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-[8px]">
           <input
-            className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[--text-soft)]"
+            className="w-full min-w-0 box-border min-h-[42px] border-[1px] border-solid border-[var(--border)] rounded-[10px] bg-[rgba(7,12,20,0.72)] text-[var(--text)] px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-[var(--text-soft)]"
             onChange={(event) => onNewDeckTitleChange(event.target.value)}
             placeholder="Deck title"
             ref={createDeckInputRef}
             value={newDeckTitle}
           />
           <button
-            className={`${lab.action} ${lab.inlineFormWide} ${newDeckTitle.trim() && !deckActionLoading ? lab.confirmAction : ''}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] col-span-full ${newDeckTitle.trim() && !deckActionLoading ? 'border-[rgba(184,247,161,0.52)] bg-[rgba(184,247,161,0.12)] text-[#d8f5cc] hover:border-[rgba(184,247,161,0.72)] hover:bg-[rgba(184,247,161,0.18)]' : ''}`}
             disabled={deckActionLoading || !newDeckTitle.trim()}
             onClick={onCreateDeck}
             type="button"
@@ -2030,7 +2092,7 @@ export function LearnPanel({
         </div>
       </section>
       <button
-        className={`${lab.action} ${lab.primary} ${lab.fullWidthAction}`}
+        className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)] w-full min-w-0 self-stretch`}
         onClick={onGenerateRecentDeck}
         disabled={deckActionLoading}
         type="button"
@@ -2094,15 +2156,17 @@ export function DeckPanel({
 
   return (
     <>
-      <section className={`${lab.card} ${lab.trainingDeckCard} ${getMasteryToneClass(cardGrade)}`}>
+      <section
+        className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex max-h-none flex-col gap-2.5 overflow-visible rounded-[10px] p-3 ${getMasteryToneClass(cardGrade)}`}
+      >
         {card ? (
           <>
             <div className="flex items-center justify-between gap-[10px] min-w-0">
               <div className="flex min-w-0 flex-col gap-[4px]">
-                <strong className="text-[--text)] text-[16px] leading-[1.2] tracking-0 wrap-anywhere text-[15px] leading-[1.15]">
+                <strong className="text-[var(--text)] text-[16px] leading-[1.2] tracking-0 wrap-anywhere text-[15px] leading-[1.15]">
                   {getOpeningDisplayName(card)}
                 </strong>
-                <span className="text-[--text-muted)] text-[11px] leading-[1.1] tracking-[0.06em] uppercase leading-[1.3]">
+                <span className="text-[var(--text-muted)] text-[11px] leading-[1.1] tracking-[0.06em] uppercase leading-[1.3]">
                   Active card
                 </span>
               </div>
@@ -2122,7 +2186,7 @@ export function DeckPanel({
                 style={{ width: `${cardScore}%` }}
               />
             </div>
-            <div className="flex items-center justify-between gap-[10px] text-[--text-soft)] text-[12px] text-[11px] leading-[1.3]">
+            <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
               <span>Card {cardScore}/100</span>
               <span>
                 {trainAllSession
@@ -2144,7 +2208,7 @@ export function DeckPanel({
             ) : null}
             {deckFeedback ? (
               <div
-                className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-[--text)] text-[--text-muted)] px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border-[1px] border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border-[1px] border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border-[1px] border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
+                className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-[var(--text)] text-[var(--text-muted)] px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border-[1px] border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border-[1px] border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border-[1px] border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
               >
                 <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
                 <span>
@@ -2167,7 +2231,7 @@ export function DeckPanel({
             ) : null}
             <div className="grid grid-cols-2 gap-[6px] min-h-[38px] px-[8px] py-0 text-[11px] grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-w-0 min-h-[34px] overflow-hidden text-ellipsis whitespace-nowrap">
               <button
-                className={`${lab.action} ${lab.deleteAction}`}
+                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] text-[#ffc8c6] hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df]`}
                 disabled={!card || !canDeleteCard || deckActionLoading}
                 onClick={onDeleteCard}
                 type="button"
@@ -2175,7 +2239,7 @@ export function DeckPanel({
                 {deleteCardLabel}
               </button>
               <button
-                className={`${lab.action} ${lab.primary}`}
+                className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
                 disabled={deckPlaybackBusy}
                 onClick={onNext}
                 type="button"
@@ -2186,7 +2250,7 @@ export function DeckPanel({
           </>
         ) : (
           <>
-            <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0">
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0">
               {deckLoading
                 ? 'Loading learning cards from Supabase.'
                 : trainAllSession
@@ -2198,11 +2262,13 @@ export function DeckPanel({
         )}
       </section>
       {!trainAllSession && activeLineMastery ? (
-        <section className={`${lab.card} ${lab.lineMetricCard} ${getMasteryToneClass(activeLineMastery.grade)}`}>
+        <section
+          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] p-3 ${getMasteryToneClass(activeLineMastery.grade)}`}
+        >
           <div className="flex items-center justify-between gap-[10px] min-w-0">
             <div className="flex min-w-0 flex-col gap-[4px]">
-              <strong className="text-[--text)] text-[13px] leading-[1.2]">Opening mastery</strong>
-              <span className="text-[--text-muted)] text-[11px] leading-tight wrap-anywhere">
+              <strong className="text-[var(--text)] text-[13px] leading-[1.2]">Opening mastery</strong>
+              <span className="text-[var(--text-muted)] text-[11px] leading-tight wrap-anywhere">
                 {activeLineMastery.cardCount} cards in {getOpeningDisplayName(card!)}
               </span>
             </div>
@@ -2222,15 +2288,17 @@ export function DeckPanel({
               style={{ width: `${activeLineMastery.masteryScore}%` }}
             />
           </div>
-          <div className="flex items-center justify-between gap-[10px] text-[--text-soft)] text-[12px] text-[11px] leading-[1.3]">
+          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[11px] leading-[1.3]">
             <span>Opening {activeLineMastery.masteryScore}/100</span>
             <span>{activeLineMastery.newCount + activeLineMastery.dueCount} due/new</span>
           </div>
         </section>
       ) : null}
       {!trainAllSession && gradeDistribution.length > 0 ? (
-        <section className={`${lab.card} ${lab.masteryDistributionCard}`}>
-          <div className="flex items-center justify-between gap-[10px] text-[--text-soft)] text-[12px] text-[--text-muted)] text-[11px]">
+        <section
+          className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16] flex flex-col gap-2.5 rounded-[10px] bg-[rgba(9,14,23,0.34)] p-3`}
+        >
+          <div className="flex items-center justify-between gap-[10px] text-[var(--text-soft)] text-[12px] text-[var(--text-muted)] text-[11px]">
             <span>Opening spread</span>
             <span>{deckLineMastery.length} openings</span>
           </div>
@@ -2251,7 +2319,7 @@ export function DeckPanel({
           <div className="flex flex-wrap gap-8px 12px">
             {gradeDistribution.map((segment) => (
               <span
-                className="inline-flex items-center gap-[6px] text-[--text-soft)] text-[11px] text-[--text-muted)]"
+                className="inline-flex items-center gap-[6px] text-[var(--text-soft)] text-[11px] text-[var(--text-muted)]"
                 key={segment.grade}
               >
                 <span
@@ -2295,7 +2363,7 @@ export function PgnImportDialog({
       }}
     >
       <section
-        className="w-[min(680px,calc(100vw-36px))] max-h-min(720px,calc(100svh min-h-0 grid grid-rows-[auto_auto_minmax(220px,1fr)_auto] gap-[14px] overflow-hidden border-[1px] border-solid border-[--border)] rounded-[16px] bg-[rgba(12,18,29,0.9)] shadow-[--glass-shadow)] p-[18px]"
+        className="w-[min(680px,calc(100vw-36px))] max-h-min(720px,calc(100svh min-h-0 grid grid-rows-[auto_auto_minmax(220px,1fr)_auto] gap-[14px] overflow-hidden border-[1px] border-solid border-[var(--border)] rounded-[16px] bg-[rgba(12,18,29,0.9)] shadow-[var(--glass-shadow)] p-[18px]"
         role="dialog"
         aria-modal="true"
         aria-labelledby="pgn-import-title"
@@ -2304,25 +2372,33 @@ export function PgnImportDialog({
         <div className="min-w-0 flex items-center justify-between gap-[14px]">
           <div>
             <h2
-              className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]"
+              className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]"
               id="pgn-import-title"
             >
               Import PGN
             </h2>
-            <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0 text-[--text)] font-[550]">
+            <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0 text-[var(--text)] font-[550]">
               Use this only when you want full-game review.
             </p>
           </div>
-          <button className={lab.iconButton} onClick={onClose} title="Close import" type="button">
+          <button
+            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] p-0 font-[550] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none"
+            onClick={onClose}
+            title="Close import"
+            type="button"
+          >
             X
           </button>
         </div>
         <div className="grid gap-[8px] grid-cols-2 grid-cols-1fr">
-          <label className={`${lab.action} ${lab.primary}`} htmlFor="pgn-upload">
+          <label
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] flex items-center justify-center border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-[var(--text)]`}
+            htmlFor="pgn-upload"
+          >
             Load file
           </label>
           <button
-            className={`${lab.action} ${lab.secondary}`}
+            className={`box-border rounded-[10px] border border-[var(--border)] bg-[rgba(9,14,23,0.38)] text-[var(--text)] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-[var(--text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--accent-strong)] disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-[var(--text-disabled)] disabled:shadow-none min-h-[42px] px-3.5 text-xs font-normal uppercase tracking-[0.04em] w-full`}
             onClick={() => void handlePgnPaste()}
             disabled={!pgnDraft.trim()}
             type="button"
@@ -2332,13 +2408,13 @@ export function PgnImportDialog({
         </div>
         <input className="hidden" id="pgn-upload" type="file" accept=".pgn" onChange={handleUpload} />
         <textarea
-          className={lab.pgnInput}
+          className="box-border h-full min-h-0 w-full resize-none overflow-auto rounded-[10px] border border-[var(--border)] bg-[rgba(7,12,20,0.72)] p-3 font-mono text-xs leading-[1.55] text-[var(--text)] outline-none focus:border-[var(--accent)] focus:shadow-[0_0_0_3px_rgba(152,184,255,0.16)] placeholder:text-[var(--text-disabled)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           value={pgnDraft}
           onChange={(event) => setPgnDraft(event.target.value)}
           placeholder={'[Event "Live Chess"]\n[White "LosValettos"]\n[Black "rafaelpiresrj"]\n\n1. e4 e5 2. Nf3 Nc6'}
           spellCheck={false}
         />
-        <p className="text-[14px] leading-[1.45] text-[--text-muted)] m-0 text-[--text)] font-[550]">
+        <p className="text-[14px] leading-[1.45] text-[var(--text-muted)] m-0 text-[var(--text)] font-[550]">
           {fileName || 'No PGN loaded'}
         </p>
       </section>
@@ -2358,27 +2434,29 @@ function EngineLinesSection({
   positionLoading: boolean;
 }) {
   return (
-    <section className={`${lab.card}`}>
+    <section
+      className={`relative min-h-0 rounded-xl border border-[var(--border-soft)] bg-[var(--surface)] p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-[16px] backdrop-saturate-[1.16]`}
+    >
       <div className="min-w-0 flex items-center justify-between gap-[14px]">
-        <h2 className="m-0 min-w-0 text-[--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
+        <h2 className="m-0 min-w-0 text-[var(--text)] font-[560] tracking-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] leading-[1.15]">
           Engine
         </h2>
-        <span className="text-[14px] leading-[1.45] text-[--text-muted)]">
+        <span className="text-[14px] leading-[1.45] text-[var(--text-muted)]">
           {positionLoading ? 'updating' : `depth ${positionAnalysis?.depth ?? '--'}`}
         </span>
       </div>
-      <div className={lab.engineLines}>
+      <div className="flex min-h-0 flex-col gap-2.5 overflow-y-auto overflow-x-hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {lines.map((line) => (
           <div
             className="border-[1px] border-solid border-[rgba(214,226,244,0.16)] rounded-[8px] bg-[rgba(7,12,20,0.44)] p-[10px]"
             key={line.multipv}
           >
-            <div className="min-w-0 flex items-center justify-between gap-[14px] grid grid-cols-[auto_minmax(0,1fr)_auto] text-[--text-muted)] text-[13px] gap-[10px] text-[--text)] text-[16px] overflow-hidden text-ellipsis whitespace-nowrap">
-              <span className="text-[--accent-strong)] font-[550]">#{line.multipv}</span>
+            <div className="min-w-0 flex items-center justify-between gap-[14px] grid grid-cols-[auto_minmax(0,1fr)_auto] text-[var(--text-muted)] text-[13px] gap-[10px] text-[var(--text)] text-[16px] overflow-hidden text-ellipsis whitespace-nowrap">
+              <span className="text-[var(--accent-strong)] font-[550]">#{line.multipv}</span>
               <strong>{line.bestMove ? formatBestMove(currentFen, line.bestMove) : '--'}</strong>
               <span>{formatLineScore(line)}</span>
             </div>
-            <p className="mx-0 mt-[8px] mb-0 text-[--text-muted)] text-[12px] leading-[1.45] whitespace-nowrap overflow-hidden text-ellipsis">
+            <p className="mx-0 mt-[8px] mb-0 text-[var(--text-muted)] text-[12px] leading-[1.45] whitespace-nowrap overflow-hidden text-ellipsis">
               {formatPvLine(currentFen, line.pv)}
             </p>
           </div>

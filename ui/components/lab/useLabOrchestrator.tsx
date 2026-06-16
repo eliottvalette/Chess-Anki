@@ -2059,7 +2059,7 @@ export function useLabOrchestrator() {
   };
 
   const pageClassName = [
-    'chess-lab min-h-svh h-svh overflow-hidden p-[18px] text-[--text)]',
+    'chess-lab min-h-svh h-svh overflow-hidden p-[18px] text-[var(--text)]',
     'max-[980px]:h-auto max-[980px]:min-h-svh max-[980px]:overflow-auto max-[720px]:p-3',
     mode === 'train' ? 'chess-lab--train' : '',
     mode === 'train' && activeDeckCard ? 'chess-lab--train-session max-[720px]:overflow-auto max-[720px]:p-1' : '',
