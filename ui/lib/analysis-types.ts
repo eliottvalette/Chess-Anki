@@ -59,3 +59,11 @@ export type AnalysisLine = {
   score: RelativeScore | null;
   whitePerspective: PerspectiveScore | null;
 };
+
+export type TrainingProfile = {
+  id: string;
+  username: string;
+  hasPassword?: boolean;
+};
+
+export type WorkspaceMode = 'review' | 'train' | 'lines';

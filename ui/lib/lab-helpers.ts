@@ -1,12 +1,19 @@
 import { Chess } from 'chess.js';
+import type { CSSProperties } from 'react';
 import type { AnalysisResult } from './analysis-types';
 import {
   classifyTimelineMoves,
   type GameMetadata,
   type StoredMove,
   type TimelineReview,
-  toStoredMove
+  toStoredMove,
+    reviewCategoryMeta,
+  type ReviewCategory,
 } from './chess-analysis-client';
+
+const LAST_MOVE_STYLE: CSSProperties = {
+  backgroundColor: 'rgba(255, 255, 0, 0.4)',
+};
 export { toStoredMove };
 import type { ChessComRecentGameSummary } from './chesscom';
 import {
@@ -505,3 +512,49 @@ export function isUsableCachedTimelineAnalysis(
     analysis.preMoveAnalyses.length === analyzedPlies
   );
 }
+
+
+export function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
+  if (!category) {
+    return LAST_MOVE_STYLE;
+  }
+
+  const color = reviewCategoryMeta[category]?.color;
+
+  if (!color) {
+    return LAST_MOVE_STYLE;
+  }
+
+  return {
+    backgroundColor: `color-mix(in srgb, ${color} 38%, transparent)`,
+    boxShadow: `inset 0 0 0 2px color-mix(in srgb, ${color} 62%, transparent)`,
+  };
+}
+
+export function getBoardSquareCenter(square: string, orientation: 'white' | 'black', boardWidth: number) {
+  const fileIndex = square.charCodeAt(0) - 97;
+  const rank = Number(square[1]);
+
+  if (fileIndex < 0 || fileIndex > 7 || !Number.isInteger(rank) || rank < 1 || rank > 8) {
+    return null;
+  }
+
+  const visualFile = orientation === 'white' ? fileIndex : 7 - fileIndex;
+  const visualRank = orientation === 'white' ? 8 - rank : rank - 1;
+  const squareSize = boardWidth / 8;
+
+  return {
+    left: visualFile * squareSize + squareSize * 0.78,
+    top: visualRank * squareSize + squareSize * 0.22,
+    squareSize,
+  };
+}
+
+export type BoardPlayerSummary = {
+  color: 'white' | 'black';
+  name: string;
+  elo: string;
+  avatarUrl: string | null;
+  captured: string[];
+  materialAdvantage: number;
+};

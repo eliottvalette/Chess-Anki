@@ -7,7 +7,7 @@ import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/l
 import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DrillPathStep, OpeningTreeDetail, OpeningTreeSummary } from '@/lib/opening-tree';
 import type { DeckCard, DeckFeedback, OpeningSeedLine } from '@/lib/opening-training';
-import type { TrainingProfile } from '../components/chess-analysis-lab';
+import type { TrainingProfile } from '../lib/analysis-types';
 import type { TrainSessionStats, WorkspaceMode, TrainingDeckSummary } from '../components/chess-lab-panels';
 
 export function useLabState() {
@@ -22,7 +22,7 @@ export function useLabState() {
   const [orientation, setOrientation] = useState<'white' | 'black'>('white');
   const [showArrow, setShowArrow] = useState(true);
   const [mode, setMode] = useState<WorkspaceMode>('review');
-  const [reviewSide] = useState<ReviewSide>('both');
+  const [reviewSide, setReviewSide] = useState<ReviewSide>('both');
   const [reviewIndex, setReviewIndex] = useState(0);
   const [metadata, setMetadata] = useState<GameMetadata | null>(null);
   const [whiteAvatarUrl, setWhiteAvatarUrl] = useState<string | null>(null);
@@ -107,7 +107,7 @@ export function useLabState() {
     historyIndex, setHistoryIndex, variationBaseIndex, setVariationBaseIndex,
     variationMoves, setVariationMoves, selectedSquare, setSelectedSquare,
     squareStyles, setSquareStyles, orientation, setOrientation, showArrow, setShowArrow,
-    mode, setMode, reviewSide, reviewIndex, setReviewIndex, metadata, setMetadata,
+    mode, setMode, reviewSide, setReviewSide, reviewIndex, setReviewIndex, metadata, setMetadata,
     whiteAvatarUrl, setWhiteAvatarUrl, blackAvatarUrl, setBlackAvatarUrl,
     fileName, setFileName, pgnDraft, setPgnDraft, pgnDialogOpen, setPgnDialogOpen,
     positionAnalysis, setPositionAnalysis, preMoveAnalyses, setPreMoveAnalyses,

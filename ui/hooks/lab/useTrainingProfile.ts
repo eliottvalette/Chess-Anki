@@ -10,7 +10,7 @@ import {
 } from '@/lib/lab-helpers';
 import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
-import type { TrainingProfile } from '../../components/chess-analysis-lab';
+import type { TrainingProfile } from '../../lib/analysis-types';
 
 export function useTrainingProfile(
   state: LabState,
@@ -260,7 +260,8 @@ export function useTrainingProfile(
     return () => {
       cancelled = true;
     };
-  }, [setTrainingPassword, setTrainingProfile, setTrainingProfileBootstrapping, setTrainingProfileError, setTrainingUsername, sharedRefs]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!trainingProfile || !sharedRefs.progressHydratedRef.current) {
