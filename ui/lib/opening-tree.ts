@@ -70,6 +70,7 @@ export type OpeningTreeSummary = {
   name: string;
   library: OpeningLibrary;
   rootSan: string[];
+  rootUci: string[];
   sourceCount: number;
   targetDepth: number;
   nodeCount: number;
@@ -127,7 +128,7 @@ export type OpeningDrillStep = {
   depthRemaining: number;
 };
 
-export const DEFAULT_OPENING_ROOT_PLY = 4;
+export const DEFAULT_OPENING_ROOT_PLY = 0;
 export const DEFAULT_OPENING_TARGET_DEPTH = 10;
 
 export function normalizeOpeningFen(fen: string) {
@@ -216,7 +217,7 @@ export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ow
     }
 
     const library = resolveOpeningLibrary(parsed);
-    const rootFen = parsed[rootPly - 1]?.fenAfter;
+    const rootFen = rootPly === 0 ? new Chess().fen() : parsed[rootPly - 1]?.fenAfter;
 
     if (!rootFen) {
       continue;
@@ -485,7 +486,6 @@ function buildTreeForGroup(
     rootPly: options.rootPly,
     rootSan: rootMoves.map(move => move.san),
     rootUci: rootMoves.map(move => move.uci),
-    trainSide: first.input.trainSide,
     sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
     targetDepth: options.targetDepth,
     nodes: [...nodes.values()].sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id)),
@@ -521,4 +521,83 @@ function shortHash(value: string) {
   }
 
   return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: number): OpeningTreeDetail[] {
+  const sliced: OpeningTreeDetail[] = [];
+
+  for (const tree of forest) {
+    const rootNodes = tree.nodes.filter(node => node.ply === minForcedPlies);
+
+    for (const rootNode of rootNodes) {
+      const rootSan: string[] = [];
+      const rootUci: string[] = [];
+      let currentId = rootNode.id;
+
+      for (let i = 0; i < minForcedPlies; i++) {
+        const edge = tree.edges.find(e => e.toNodeId === currentId);
+        if (!edge) {
+          break;
+        }
+        rootSan.unshift(edge.san);
+        rootUci.unshift(edge.uci);
+        currentId = edge.fromNodeId;
+      }
+
+      rootSan.unshift(...tree.rootSan);
+      rootUci.unshift(...tree.rootUci);
+
+      const reachableNodeIds = new Set<string>();
+      const reachableEdgeIds = new Set<string>();
+      const queue = [rootNode.id];
+      reachableNodeIds.add(rootNode.id);
+
+      while (queue.length > 0) {
+        const currId = queue.shift()!;
+        const outgoingEdges = tree.edges.filter(e => e.fromNodeId === currId);
+        for (const edge of outgoingEdges) {
+          reachableEdgeIds.add(edge.id);
+          if (!reachableNodeIds.has(edge.toNodeId)) {
+            reachableNodeIds.add(edge.toNodeId);
+            queue.push(edge.toNodeId);
+          }
+        }
+      }
+
+      const nodes = tree.nodes.filter(n => reachableNodeIds.has(n.id));
+      const edges = tree.edges.filter(e => reachableEdgeIds.has(e.id));
+
+      if (nodes.length === 0) {
+        continue;
+      }
+
+      const sourceCount = rootNode.recentGames + rootNode.cardCount;
+      if (sourceCount === 0) {
+        continue;
+      }
+
+      const trainNodes = nodes.filter(n => n.masteryScore > 0 || n.seenCount > 0);
+      const masteryScore = trainNodes.length > 0
+        ? trainNodes.reduce((sum, n) => sum + n.masteryScore, 0) / trainNodes.length
+        : 0;
+
+      sliced.push({
+        id: `sliced-${rootNode.id}`,
+        name: tree.name,
+        library: tree.library,
+        rootSan,
+        rootUci,
+        sourceCount,
+        targetDepth: tree.targetDepth,
+        nodeCount: nodes.length,
+        dueCount: 0, 
+        masteryScore,
+        updatedAt: tree.updatedAt,
+        nodes,
+        edges,
+      });
+    }
+  }
+
+  return sliced.sort((a, b) => b.sourceCount - a.sourceCount);
 }

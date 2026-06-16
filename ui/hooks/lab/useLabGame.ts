@@ -200,7 +200,7 @@ export function useLabGame(
           let nextStepIndex = currentPathIndex + 1;
 
           if (isAlternativeValid && activeOpeningTree) {
-            const newPath = buildDrillPath(activeOpeningTree, { seed: Date.now(), startNodeId: newActiveNodeId });
+            const newPath = buildDrillPath(activeOpeningTree, { trainSide: state.activeTrainSide, seed: Date.now(), startNodeId: newActiveNodeId });
             if (newPath.length > 0) {
               drillPathRef.current = newPath;
               drillPathIndexRef.current = 0;
@@ -225,7 +225,7 @@ export function useLabGame(
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
 
-            if (nextNode.sideToMove !== nextNode.trainSide) {
+            if (nextNode.sideToMove !== state.activeTrainSide) {
               const opponentEdges = activeOpeningTree?.edges.filter(edge => edge.fromNodeId === nextNode.id) ?? [];
               const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
               const afterOpponent = opponentEdge ? activeOpeningTree?.nodes.find(node => node.id === opponentEdge.toNodeId) ?? null : null;
@@ -243,7 +243,7 @@ export function useLabGame(
                       if (oppMove) {
                         setMoveHistory(prev => [...prev, toStoredMove(oppMove)]);
                         setHistoryIndex(prev => prev + 1);
-                        playSoundSequence(getMoveSoundSequence({ move: oppMove, isSelfMove: false, isCheck: nextGame.isCheck(), isCheckmate: nextGame.isCheckmate(), isGameOver: nextGame.isGameOver() }));
+                        playSoundSequence(getMoveSoundSequence({ move: toStoredMove(oppMove), isSelfMove: false, isCheck: nextGame.isCheck(), isCheckmate: nextGame.isCheckmate(), isGameOver: nextGame.isGameOver() }));
                       }
                     } catch (e) {
                       // Fallback
@@ -376,6 +376,24 @@ export function useLabGame(
     clearSelection();
   }, [activeDeckCard, clearSelection, clearVariation, initialFen, moveHistory, setDeckFeedbackArrowsVisible, setGame, setHistoryIndex]);
 
+  const undoMove = useCallback(() => {
+    if (moveHistory.length === 0) {
+      return;
+    }
+    
+    const newHistory = moveHistory.slice(0, -1);
+    const nextGame = restoreGameFromHistory(newHistory, initialFen, newHistory.length);
+    
+    setMoveHistory(newHistory);
+    setHistoryIndex(newHistory.length);
+    if (activeDeckCard) {
+      setDeckFeedbackArrowsVisible(false);
+    }
+    clearVariation();
+    setGame(nextGame);
+    clearSelection();
+  }, [moveHistory, initialFen, activeDeckCard, setMoveHistory, setHistoryIndex, setDeckFeedbackArrowsVisible, clearVariation, setGame, clearSelection]);
+
   return {
     clearSelection,
     clearVariation,
@@ -383,5 +401,6 @@ export function useLabGame(
     commitMove,
     tryMove,
     jumpToIndex,
+    undoMove,
   };
 }

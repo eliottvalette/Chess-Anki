@@ -97,7 +97,10 @@ export function LinesPanel({
   onStopDrill,
   trainSide,
   onChangeTrainSide,
+  undoMove,
   trees,
+  minForcedPlies,
+  setMinForcedPlies,
 }: {
   actionError: string;
   actionLoading: boolean;
@@ -116,14 +119,42 @@ export function LinesPanel({
   onStopDrill: () => void;
   trainSide: 'white' | 'black';
   onChangeTrainSide: (side: 'white' | 'black') => void;
+  undoMove: () => void;
   trees: OpeningTreeSummary[];
+  minForcedPlies: number;
+  setMinForcedPlies: (v: number) => void;
 }) {
-  const groupedTrees = useMemo(() => groupOpeningTrees(trees), [trees]);
+  const [minNodes, setMinNodes] = useState(0);
+  const [minDepth, setMinDepth] = useState(0);
+
+  useEffect(() => {
+    const savedNodes = localStorage.getItem('chess-lab-min-nodes');
+    const savedDepth = localStorage.getItem('chess-lab-min-depth');
+    if (savedNodes) setMinNodes(parseInt(savedNodes, 10) || 0);
+    if (savedDepth) setMinDepth(parseInt(savedDepth, 10) || 0);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-min-nodes', minNodes.toString());
+  }, [minNodes]);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-min-depth', minDepth.toString());
+  }, [minDepth]);
+
+  const filteredTrees = useMemo(
+    () => trees.filter(tree =>
+      tree.nodeCount >= minNodes &&
+      tree.targetDepth >= minDepth,
+    ),
+    [trees, minNodes, minDepth],
+  );
+  const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
   const selectedNode = useMemo(
     () => activeTree?.nodes.find(node => node.id === activeNodeId) ?? null,
     [activeNodeId, activeTree],
   );
-  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, onSelectNode, drillActive), [activeNodeId, activeTree, drillActive, onSelectNode]);
+  const graph = useMemo(() => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive), [activeTree, activeNodeId, trainSide, onSelectNode, drillActive]);
 
   return (
     <>
@@ -137,6 +168,42 @@ export function LinesPanel({
             <p className={styles.copy}>Import your recent games to build opening trees grouped by the position after 4 plies.</p>
           ) : (
             <div className={styles.linesLibrary}>
+              <div className={styles.linesFilters}>
+                <label className={styles.linesFilterItem}>
+                  <span className={styles.linesFilterLabel}>Min forced plies (X)</span>
+                  <input
+                    className={styles.linesFilterInput}
+                    id="filter-min-forced-plies"
+                    min={1}
+                    onChange={event => setMinForcedPlies(Math.max(1, Number(event.target.value) || 1))}
+                    type="number"
+                    value={minForcedPlies}
+                  />
+                </label>
+                <label className={styles.linesFilterItem}>
+                  <span className={styles.linesFilterLabel}>Min nodes</span>
+                  <input
+                    className={styles.linesFilterInput}
+                    id="filter-min-nodes"
+                    min={0}
+                    onChange={event => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
+                    type="number"
+                    value={minNodes}
+                  />
+                </label>
+                <label className={styles.linesFilterItem}>
+                  <span className={styles.linesFilterLabel}>Min depth</span>
+                  <input
+                    className={styles.linesFilterInput}
+                    id="filter-min-depth"
+                    min={0}
+                    onChange={event => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
+                    type="number"
+                    value={minDepth}
+                  />
+                </label>
+              </div>
+              <span className={styles.linesFilterCount}>{filteredTrees.length} / {trees.length} openings</span>
               {OPENING_LIBRARY_ORDER.map(library => {
                 const libraryTrees = groupedTrees.get(library) ?? [];
 
@@ -228,12 +295,19 @@ export function LinesPanel({
             
             {drillActive && (drillStatus || deckFeedback) ? (
               <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}>
-                <strong>
-                  {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
-                </strong>
-                <span>
-                  {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
-                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <strong>
+                      {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
+                    </strong>
+                    <span>
+                      {!deckFeedback ? drillStatus : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}${deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}`}
+                    </span>
+                  </div>
+                  <button className={`${styles.action} ${styles.secondary}`} onClick={undoMove} type="button">
+                    Undo
+                  </button>
+                </div>
               </div>
             ) : null}
 
@@ -272,7 +346,7 @@ export function LinesPanel({
   );
 }
 
-const OPENING_LIBRARY_ORDER: OpeningLibrary[] = ['white', 'black_vs_e4', 'black_vs_d4', 'black_vs_c4', 'black_vs_n_f3', 'black_other'];
+const OPENING_LIBRARY_ORDER: OpeningLibrary[] = ['e4', 'd4', 'c4', 'nf3', 'other'];
 
 function groupOpeningTrees(trees: OpeningTreeSummary[]) {
   const groups = new Map<OpeningLibrary, OpeningTreeSummary[]>();
@@ -288,22 +362,20 @@ function groupOpeningTrees(trees: OpeningTreeSummary[]) {
 
 function formatOpeningLibrary(library: OpeningLibrary) {
   switch (library) {
-    case 'white':
-      return 'White';
-    case 'black_vs_e4':
-      return 'Black vs 1.e4';
-    case 'black_vs_d4':
-      return 'Black vs 1.d4';
-    case 'black_vs_c4':
-      return 'Black vs 1.c4';
-    case 'black_vs_n_f3':
-      return 'Black vs 1.Nf3';
-    case 'black_other':
-      return 'Black other';
+    case 'e4':
+      return 'vs 1.e4';
+    case 'd4':
+      return 'vs 1.d4';
+    case 'c4':
+      return 'vs 1.c4';
+    case 'nf3':
+      return 'vs 1.Nf3';
+    case 'other':
+      return 'Other';
   }
 }
 
-function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, onSelectNode: (nodeId: string) => void, drillActive = false) {
+function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: string | null, trainSide: 'white' | 'black', onSelectNode: (nodeId: string) => void, drillActive = false) {
   if (!tree) {
     return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
   }
@@ -325,7 +397,7 @@ function buildOpeningTreeGraph(tree: OpeningTreeDetail | null, activeNodeId: str
   const nodes = tree.nodes.map(node => {
     const point = graph.node(node.id) ?? { x: 0, y: 0 };
     const isActive = node.id === activeNodeId;
-    const isTrainTurn = node.sideToMove === node.trainSide;
+    const isTrainTurn = node.sideToMove === trainSide;
     const isWeak = node.masteryScore < 60 && isTrainTurn;
     const showAnswer = isTrainTurn && node.bestSan && !drillActive;
 

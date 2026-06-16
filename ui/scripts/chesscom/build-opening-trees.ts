@@ -1,17 +1,34 @@
+import { loadLocalEnv } from '../supabase/env.mjs';
+Object.assign(process.env, loadLocalEnv());
+
 import { createAdminClient } from '../../utils/supabase/admin';
 import {
   DEFAULT_OPENING_TARGET_DEPTH,
   buildOpeningTrees,
   type OpeningTreeDraft,
 } from '../../lib/opening-tree';
-import { getStockfishSession, evaluatePosition } from '../../lib/stockfish-session';
+import { getStockfishSession } from '../../lib/stockfish-session';
 import { fetchLichessOpeningExplorer } from '../../lib/opening-book';
-import { moveSanFromFen } from '../../lib/chess-analysis-client';
+import { Chess } from 'chess.js';
 import { ensureDraftEdge } from '../../app/api/opening-trees/route';
 
 const MAX_ENGINE_IMPORT_NODES = 60;
 const MAX_LICHESS_IMPORT_NODES = 120;
 const CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
+
+function moveSanFromFen(fen: string, uci: string) {
+  try {
+    const game = new Chess(fen);
+    const move = game.move({
+      from: uci.substring(0, 2),
+      to: uci.substring(2, 4),
+      promotion: uci.length === 5 ? uci[4] : undefined,
+    });
+    return move?.san;
+  } catch {
+    return null;
+  }
+}
 
 async function buildInputsFromRows(lines: any[], cards: any[]) {
   const inputs = [];
@@ -21,6 +38,7 @@ async function buildInputsFromRows(lines: any[], cards: any[]) {
     inputs.push({
       id: String(line.id),
       name: String(line.name ?? 'Opening'),
+      trainSide: (line.side === 'black' ? 'black' : 'white') as 'white' | 'black',
       moves: line.moves,
       source: 'recent_game' as const,
       count: 1,
@@ -37,6 +55,7 @@ async function buildInputsFromRows(lines: any[], cards: any[]) {
     inputs.push({
       id: String(card.id),
       name: String(card.line_name ?? 'Opening'),
+      trainSide: (card.side === 'black' ? 'black' : 'white') as 'white' | 'black',
       moves,
       source: 'card' as const,
       count: 1,
@@ -60,7 +79,7 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 
   for (const node of trainNodes) {
     try {
-      const analysis = await evaluatePosition(session, node.fen, { depth: draft.targetDepth, movetime: undefined });
+      const analysis = await session.analyze({ fen: node.fen, depth: draft.targetDepth, movetimeMs: undefined, multipv: 1 });
 
       if (!analysis || !analysis.bestMove) continue;
 
@@ -108,13 +127,13 @@ async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
   }
 }
 
-async function upsertTreeDraft(supabase: any, draft: OpeningTreeDraft) {
+async function upsertTreeDraft(supabase: any, draft: OpeningTreeDraft, ownerProfileId: string) {
   const now = new Date().toISOString();
 
   const { error: treeError } = await supabase.from('opening_trees').upsert(
     {
       id: draft.id,
-      owner_profile_id: draft.ownerProfileId,
+      owner_profile_id: ownerProfileId,
       library: draft.library,
       name: draft.name,
       root_fen_key: draft.rootFenKey,
@@ -174,7 +193,7 @@ async function upsertTreeDraft(supabase: any, draft: OpeningTreeDraft) {
         is_engine_best: edge.isEngineBest,
         updated_at: now,
       })),
-      { onConflict: 'tree_id,from_node_id,to_node_id,uci' },
+      { onConflict: 'tree_id,from_node_id,uci' },
     );
 
     if (error) {
@@ -199,9 +218,8 @@ async function main() {
   }
 
   const { data: lines, error: linesError } = await supabase
-    .from('deck_progress')
-    .select('id,name,moves')
-    .eq('source_type', 'recent_game');
+    .from('opening_lines')
+    .select('id,name,side,moves');
 
   if (linesError) {
     throw new Error(linesError.message);
@@ -231,7 +249,7 @@ async function main() {
     await enrichLichessOpponentMoves(draft);
     
     // Save to DB
-    await upsertTreeDraft(supabase, draft);
+    await upsertTreeDraft(supabase, draft, ownerProfileId);
   }
 
   console.log('[build-opening-trees] Done building opening trees!');

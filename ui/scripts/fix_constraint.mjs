@@ -1,6 +1,8 @@
 import { Client } from 'pg';
+import { loadLocalEnv, requireEnv } from './supabase/env.mjs';
 
-const dbUrl = 'postgresql://postgres.rdehwurjccisorhyqonc:1T0s2lTcixTE45BN@aws-0-eu-west-1.pooler.supabase.com:6543/postgres';
+const env = loadLocalEnv();
+const dbUrl = requireEnv(env, 'SUPABASE_DB_URL');
 
 async function fix() {
   const client = new Client({

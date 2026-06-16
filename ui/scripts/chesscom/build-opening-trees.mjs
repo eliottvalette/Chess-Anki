@@ -390,3 +390,55 @@ export async function buildAndUpsertOpeningTrees({ supabase, openingLines, cards
   logProgress(`done: upserted ${drafts.length} opening trees`);
   return drafts.length;
 }
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const { fileURLToPath } = await import('node:url');
+  main().catch(error => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
+
+async function main() {
+  const { fileURLToPath } = await import('node:url');
+  const env = loadLocalEnv();
+  const supabaseUrl = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
+  const adminKey = requireAdminKey(env);
+  const analyzeBaseUrl = env.ANALYZE_BASE_URL?.trim() || 'http://localhost:3000';
+
+  const supabase = createClient(supabaseUrl, adminKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data: profiles, error: profileError } = await supabase.from('training_profiles').select('id,username').limit(1);
+  if (profileError) throw new Error(profileError.message);
+  const profile = profiles?.[0];
+  if (!profile) throw new Error('No training profile found.');
+
+  const { data: decks, error: deckError } = await supabase
+    .from('decks').select('id').eq('is_active', true).eq('owner_profile_id', profile.id);
+  if (deckError) throw new Error(deckError.message);
+  const deckIds = (decks ?? []).map(deck => deck.id);
+
+  if (deckIds.length === 0) {
+    console.error('[build-opening-trees] No active deck found. Run chesscom:build:deck first.');
+    process.exit(1);
+  }
+
+  const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
+    supabase.from('opening_lines').select('id,name,moves').in('deck_id', deckIds),
+    supabase.from('deck_cards').select('id,line_name,answer_san,setup_moves,score_swing_cp').in('deck_id', deckIds).eq('source_type', 'recent_game'),
+  ]);
+
+  if (linesError) throw new Error(linesError.message);
+  if (cardsError) throw new Error(cardsError.message);
+
+  await buildAndUpsertOpeningTrees({
+    supabase,
+    openingLines: lines ?? [],
+    cards: cards ?? [],
+    ownerProfileId: profile.id,
+    analyzeBaseUrl,
+    logProgress: message => console.error(`[build-opening-trees ${new Date().toISOString()}] ${message}`),
+  });
+}

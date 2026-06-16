@@ -142,7 +142,10 @@ export function LabSidebar() {
                 lab.labState.setActiveTrainSide(side);
                 lab.labState.setOrientation(side);
               }}
+              undoMove={lab.undoMove}
               trees={lab.labState.openingTrees}
+              minForcedPlies={lab.labState.minForcedPlies}
+              setMinForcedPlies={lab.labState.setMinForcedPlies}
             />
           ) : (
             <TrainPanel

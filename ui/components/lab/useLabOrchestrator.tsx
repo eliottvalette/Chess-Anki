@@ -46,6 +46,7 @@ import {
 } from '@/lib/card-move-reviews';
 import { getPrimaryMoveSound } from '@/lib/chess-sounds';
 import { type DeckCard, type DeckFeedback } from '@/lib/opening-training';
+import { sliceOpeningForest } from '@/lib/opening-tree';
 
 import { useLabState } from '../../hooks/useLabState';
 import {
@@ -719,6 +720,7 @@ export function useLabOrchestrator() {
     highlightMoves,
     tryMove,
     jumpToIndex,
+    undoMove,
   } = useLabGame(labState, gameContext);
   const applyWorkspaceSnapshot = useCallback((snapshot: WorkspaceSnapshot) => {
     positionRequestIdRef.current += 1;
@@ -1727,15 +1729,31 @@ export function useLabOrchestrator() {
   ].filter(Boolean).join(' ');
 
 
+  const slicedTrees = useMemo(
+    () => sliceOpeningForest(labState.openingTrees, labState.minForcedPlies),
+    [labState.openingTrees, labState.minForcedPlies]
+  );
+
+  const overriddenLabState = useMemo(() => ({
+    ...labState,
+    openingTrees: slicedTrees,
+    activeOpeningTree: slicedTrees.find(t => t.id === labState.selectedOpeningTreeId) ?? null,
+  }), [labState, slicedTrees]);
+
+  const handleSelectOpeningTree = useCallback((treeId: string) => {
+    const treeObj = slicedTrees.find(t => t.id === treeId);
+    return selectOpeningTree(treeId, treeObj);
+  }, [selectOpeningTree, slicedTrees]);
+
   return {
-    labState,
+    labState: overriddenLabState,
     gameContext,
     linesContext,
     trainingContext,
-    tryMove, jumpToIndex,  highlightMoves, clearSelection, clearVariation,
+    tryMove, jumpToIndex, undoMove, highlightMoves, clearSelection, clearVariation,
     createTrainingDeck, generateRecentTrainingDeck, renameTrainingDeck, deleteTrainingDeck,
      goToReviewMoment, handleGoToReviewMoment,
-    advanceDeckCard, trainDeckFromLibrary, trainAllDecks, finishDeckTrainingSession, loadTrainingDeck,     selectOpeningTree, selectOpeningNode, startOpeningDrill, stopOpeningDrill, importRecentOpeningTrees,
+    advanceDeckCard, trainDeckFromLibrary, trainAllDecks, finishDeckTrainingSession, loadTrainingDeck,     selectOpeningTree: handleSelectOpeningTree, selectOpeningNode, startOpeningDrill, stopOpeningDrill, importRecentOpeningTrees,
     currentFen, currentMoves, hasLoadedGame, isTrainCardFinished, displayAnalysis, reviewMoments, activeReviewMoment, timelineReviews,
     boardSquareStyles, boardArrows, boardReviewBadge, movePairs,
     topBoardPlayer, bottomBoardPlayer, boardScoreLabel, whiteAdvantage, deckOpponentBestSan,

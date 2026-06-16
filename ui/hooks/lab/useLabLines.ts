@@ -61,6 +61,8 @@ export function useLabLines(
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,
+    minForcedPlies,
+    openingTrees,
   } = state;
 
   const {
@@ -141,7 +143,7 @@ export function useLabLines(
     setOpeningTreeActionError('');
 
     try {
-      const response = await fetch('/api/opening-trees', { credentials: 'same-origin' });
+      const response = await fetch('/api/opening-trees?full=true', { credentials: 'same-origin' });
       const payload = await readJsonResponse<OpeningTreesPayload>(response);
 
       if (!response.ok) {
@@ -150,28 +152,13 @@ export function useLabLines(
 
       const nextTrees = payload.trees ?? [];
       setOpeningTrees(nextTrees);
-
-      setSelectedOpeningTreeId(currentId => {
-        const nextSelectedId = currentId && nextTrees.some((tree: any) => tree.id === currentId)
-          ? currentId
-          : null;
-
-        if (nextSelectedId) {
-          void loadOpeningTreeDetail(nextSelectedId);
-        } else {
-          setActiveOpeningTree(null);
-          setActiveOpeningNodeId(null);
-        }
-
-        return nextSelectedId;
-      });
     } catch (error) {
       setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
       setOpeningTrees([]);
     } finally {
       setOpeningTreesLoading(false);
     }
-  }, [loadOpeningTreeDetail, setActiveOpeningNodeId, setActiveOpeningTree, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading, setSelectedOpeningTreeId]);
+  }, [setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
 
   const importRecentOpeningTrees = useCallback(async () => {
     setOpeningTreeActionLoading(true);
@@ -365,16 +352,23 @@ export function useLabLines(
     drillPathIndexRef.current = 0;
   }, [setDeckFeedback, setDeckFeedbackArrowsVisible, setOpeningDrillActive, setOpeningDrillExpected, setOpeningDrillStatus, setShowArrow]);
 
-  const selectOpeningTree = useCallback(async (treeId: string) => {
+  const selectOpeningTree = useCallback(async (treeId: string, treeObj?: OpeningTreeDetail) => {
     setSelectedOpeningTreeId(treeId);
     setOpeningDrillStatus('');
     setOpeningDrillExpected(null);
-    const tree = await loadOpeningTreeDetail(treeId, { syncBoard: true });
+    
+    let tree = treeObj;
+    if (tree) {
+      setActiveOpeningTree(tree);
+      loadOpeningTreeRootOnBoard(tree);
+    } else {
+      tree = await loadOpeningTreeDetail(treeId, { syncBoard: true });
+    }
 
     if (tree) {
       startOpeningDrill(tree);
     }
-  }, [loadOpeningTreeDetail, setOpeningDrillExpected, setOpeningDrillStatus, setSelectedOpeningTreeId, startOpeningDrill]);
+  }, [loadOpeningTreeDetail, loadOpeningTreeRootOnBoard, setActiveOpeningTree, setOpeningDrillExpected, setOpeningDrillStatus, setSelectedOpeningTreeId, startOpeningDrill]);
 
   const selectOpeningNode = useCallback((nodeId: string) => {
     const node = activeOpeningTree?.nodes.find(candidate => candidate.id === nodeId);

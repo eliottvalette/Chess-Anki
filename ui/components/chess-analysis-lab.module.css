@@ -130,6 +130,52 @@
   padding-right: 3px;
 }
 
+.linesFilters {
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 10px;
+  background: var(--surface-strong);
+}
+
+.linesFilterItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.linesFilterLabel {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-soft);
+}
+
+.linesFilterInput {
+  width: 100%;
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 13px;
+  outline: none;
+  transition: border-color 160ms ease;
+}
+
+.linesFilterInput:focus {
+  border-color: var(--accent);
+}
+
+.linesFilterCount {
+  font-size: 11px;
+  color: var(--text-soft);
+}
+
 .linesLibraryGroup {
   min-width: 0;
   display: flex;
@@ -141,7 +187,7 @@
   margin: 0;
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -202,7 +248,7 @@
   flex: 0 0 auto;
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   line-height: 1;
   text-transform: uppercase;
 }
@@ -225,7 +271,7 @@
 .openingTreeItemStats span {
   color: var(--text-soft);
   font-size: 10px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: 0.03em;
   line-height: 1;
   text-transform: uppercase;
@@ -266,7 +312,7 @@
 .openingTreeCanvas :global(.react-flow__edge-text) {
   fill: #eef5ff;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
 }
 
 .openingTreeCanvas :global(.react-flow__edge-textbg) {
@@ -340,7 +386,7 @@
   overflow: hidden;
   color: var(--text-soft);
   font-size: 10px;
-  font-weight: 750;
+  font-weight: 550;
   text-overflow: ellipsis;
   text-transform: uppercase;
   white-space: nowrap;
@@ -392,7 +438,7 @@
 .openingTreeNodeDetails span {
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: 0.03em;
   line-height: 1;
   text-transform: uppercase;
@@ -518,7 +564,7 @@
   border-radius: 10px;
   color: var(--text-muted);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   overflow: hidden;
@@ -561,7 +607,7 @@
   padding: 0 14px;
   border-radius: 10px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -619,7 +665,7 @@
   border-radius: 10px;
   border: 1px solid var(--border);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 550;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--text-muted);
@@ -668,7 +714,7 @@
   flex: 0 0 auto;
   min-width: 0;
   border-radius: 10px;
-  font-weight: 750;
+  font-weight: 550;
 }
 
 .iconButton {
@@ -845,7 +891,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 15px;
-  font-weight: 780;
+  font-weight: 550;
 }
 
 .boardPlayerElo {
@@ -879,7 +925,7 @@
   margin-left: 7px;
   color: var(--text-muted);
   font-size: 14px;
-  font-weight: 780;
+  font-weight: 550;
 }
 
 .boardFrame {
@@ -988,7 +1034,7 @@
 
 .engineRank {
   color: var(--accent-strong);
-  font-weight: 750;
+  font-weight: 550;
 }
 
 .enginePv {
@@ -1024,7 +1070,7 @@
   background: rgba(255, 255, 255, 0.03);
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -1045,7 +1091,7 @@
 
 .moveNumber {
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text-soft);
 }
 
@@ -1121,8 +1167,8 @@
   padding: 9px 10px;
 }
 
-.accuracyCard > *,
-.openingBox > * {
+.accuracyCard>*,
+.openingBox>* {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -1134,7 +1180,7 @@
   gap: 8px;
   font-size: 22px;
   line-height: 1;
-  font-weight: 700;
+  font-weight: 400;
   color: var(--text);
 }
 
@@ -1142,7 +1188,7 @@
   flex: 0 0 auto;
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .openingBox strong {
@@ -1210,7 +1256,7 @@
 
 .momentButton strong {
   color: var(--text);
-  font-weight: 750;
+  font-weight: 550;
 }
 
 .chartCard {
@@ -1346,7 +1392,7 @@
   min-width: 0;
   color: var(--text);
   font-size: 15px;
-  font-weight: 760;
+  font-weight: 550;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1401,7 +1447,7 @@
 .fieldLabel {
   color: var(--text-soft);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1432,7 +1478,7 @@
   border-radius: 6px;
   background: rgba(184, 247, 161, 0.1);
   color: #d8f5cc;
-  font-weight: 760;
+  font-weight: 550;
   padding: 1px 7px;
 }
 
@@ -1444,7 +1490,7 @@
 
 .support strong {
   color: var(--text);
-  font-weight: 760;
+  font-weight: 550;
 }
 
 .reviewMoveTableScroller {
@@ -1470,7 +1516,7 @@
 .reviewMoveNumber {
   color: var(--text-soft);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 550;
   text-align: right;
   width: 34px;
   padding: 0 8px 0 2px;
@@ -1509,7 +1555,7 @@
   padding: 0 8px 0 2px;
   font: inherit;
   font-size: 15px;
-  font-weight: 720;
+  font-weight: 550;
   text-align: left;
   cursor: pointer;
 }
@@ -1638,7 +1684,7 @@
   justify-content: center;
   color: rgba(13, 17, 24, 0.7);
   font-size: 12px;
-  font-weight: 760;
+  font-weight: 550;
 }
 
 .reviewTimelineProgress {
@@ -1665,7 +1711,7 @@
   gap: 10px;
   color: rgba(245, 242, 232, 0.78);
   font-size: 11px;
-  font-weight: 780;
+  font-weight: 550;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -1735,7 +1781,7 @@
   border: 1px solid color-mix(in srgb, var(--review-color) 50%, rgba(214, 226, 244, 0.18));
   color: var(--text);
   font-size: 11px;
-  font-weight: 750;
+  font-weight: 550;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -1788,7 +1834,7 @@
 .reviewFacts span {
   color: var(--text-soft);
   font-size: 10px;
-  font-weight: 750;
+  font-weight: 550;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -2079,7 +2125,7 @@
 .settingRowLabel {
   color: var(--text);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -2127,18 +2173,18 @@
     background-color 160ms ease;
 }
 
-.settingSwitchInput:checked + .settingSwitchTrack {
+.settingSwitchInput:checked+.settingSwitchTrack {
   border-color: rgba(198, 215, 255, 0.58);
   background: rgba(46, 58, 82, 0.72);
   box-shadow: inset 0 0 0 1px rgba(198, 215, 255, 0.1);
 }
 
-.settingSwitchInput:checked + .settingSwitchTrack::after {
+.settingSwitchInput:checked+.settingSwitchTrack::after {
   transform: translateX(20px);
   background: var(--accent-strong);
 }
 
-.settingSwitchInput:focus-visible + .settingSwitchTrack {
+.settingSwitchInput:focus-visible+.settingSwitchTrack {
   outline: 2px solid var(--accent-strong);
   outline-offset: 2px;
 }
@@ -2267,7 +2313,7 @@
   background: transparent;
   color: var(--text);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 400;
   letter-spacing: 0.03em;
   text-align: left;
   padding: 0 10px;
@@ -2296,7 +2342,7 @@
   min-height: 34px;
   padding: 0 10px;
   font-size: 14px;
-  font-weight: 760;
+  font-weight: 550;
 }
 
 .createDeckSectionFocus {
@@ -2555,7 +2601,7 @@
   height: 30px;
   border-radius: 6px;
   font-size: 15px;
-  font-weight: 800;
+  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -2587,7 +2633,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .deckStats div {

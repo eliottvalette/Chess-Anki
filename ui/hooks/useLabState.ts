@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Chess } from 'chess.js';
 import type { CSSProperties } from 'react';
 import type { AnalysisResult } from '@/lib/analysis-types';
@@ -56,7 +56,17 @@ export function useLabState() {
   const [deckLoadError, setDeckLoadError] = useState('');
   const [deckActionLoading, setDeckActionLoading] = useState(false);
   const [deckActionError, setDeckActionError] = useState('');
-  const [openingTrees, setOpeningTrees] = useState<OpeningTreeSummary[]>([]);
+  const [openingTrees, setOpeningTrees] = useState<OpeningTreeDetail[]>([]);
+  const [minForcedPlies, setMinForcedPlies] = useState(4);
+
+  useEffect(() => {
+    const savedPlies = localStorage.getItem('chess-lab-min-plies');
+    if (savedPlies) setMinForcedPlies(parseInt(savedPlies, 10) || 4);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-min-plies', minForcedPlies.toString());
+  }, [minForcedPlies]);
   const [activeOpeningTree, setActiveOpeningTree] = useState<OpeningTreeDetail | null>(null);
   const [openingTreesLoading, setOpeningTreesLoading] = useState(false);
   const [openingTreeActionLoading, setOpeningTreeActionLoading] = useState(false);
@@ -122,7 +132,7 @@ export function useLabState() {
     deckCards, setDeckCards, deckSummaries, setDeckSummaries, selectedDeckId, setSelectedDeckId,
     deckLibraryLoading, setDeckLibraryLoading, deckCardsLoading, setDeckCardsLoading,
     deckLoadError, setDeckLoadError, deckActionLoading, setDeckActionLoading,
-    deckActionError, setDeckActionError, openingTrees, setOpeningTrees,
+    deckActionError, setDeckActionError, openingTrees, setOpeningTrees, minForcedPlies, setMinForcedPlies,
     activeOpeningTree, setActiveOpeningTree, openingTreesLoading, setOpeningTreesLoading,
     openingTreeActionLoading, setOpeningTreeActionLoading, openingTreeActionError, setOpeningTreeActionError,
     selectedOpeningTreeId, setSelectedOpeningTreeId, activeOpeningNodeId, setActiveOpeningNodeId,
