@@ -179,7 +179,7 @@ export function LinesPanel({
             onClick={onImportRecent}
             type="button"
           >
-            {actionLoading ? 'Importing' : 'Import 100-game opening trees'}
+            {actionLoading ? 'Loading...' : 'Refresh opening trees'}
           </button>
           {actionError ? <p className={styles.error}>{actionError}</p> : null}
         </section>

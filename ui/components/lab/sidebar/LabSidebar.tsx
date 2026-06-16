@@ -137,8 +137,11 @@ export function LabSidebar() {
               onSelectTree={lab.selectOpeningTree}
               onStartDrill={() => lab.startOpeningDrill()}
               onStopDrill={lab.stopOpeningDrill}
-              trainSide={lab.labState.orientation}
-              onChangeTrainSide={lab.labState.setOrientation}
+              trainSide={lab.labState.activeTrainSide}
+              onChangeTrainSide={(side) => {
+                lab.labState.setActiveTrainSide(side);
+                lab.labState.setOrientation(side);
+              }}
               trees={lab.labState.openingTrees}
             />
           ) : (

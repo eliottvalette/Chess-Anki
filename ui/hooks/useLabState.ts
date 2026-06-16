@@ -66,6 +66,7 @@ export function useLabState() {
   const [openingDrillStatus, setOpeningDrillStatus] = useState('');
   const [openingDrillExpected, setOpeningDrillExpected] = useState<{ nodeId: string; uci: string | null; san: string | null } | null>(null);
   const [openingDrillActive, setOpeningDrillActive] = useState(false);
+  const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);
   const drillPathIndexRef = useRef(0);
   const [newDeckTitle, setNewDeckTitle] = useState('');
@@ -126,7 +127,7 @@ export function useLabState() {
     openingTreeActionLoading, setOpeningTreeActionLoading, openingTreeActionError, setOpeningTreeActionError,
     selectedOpeningTreeId, setSelectedOpeningTreeId, activeOpeningNodeId, setActiveOpeningNodeId,
     openingDrillStatus, setOpeningDrillStatus, openingDrillExpected, setOpeningDrillExpected,
-    openingDrillActive, setOpeningDrillActive, drillPathRef, drillPathIndexRef,
+    openingDrillActive, setOpeningDrillActive, drillPathRef, drillPathIndexRef, activeTrainSide, setActiveTrainSide,
     newDeckTitle, setNewDeckTitle, reviewDeckSaveStatus, setReviewDeckSaveStatus,
     deckProgress, setDeckProgress, chesscomUsername, setChesscomUsername,
     recentGameTimeClass, setRecentGameTimeClass, recentChessGames, setRecentChessGames,

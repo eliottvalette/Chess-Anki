@@ -1,6 +1,6 @@
 import { Chess } from 'chess.js';
 
-export type OpeningLibrary = 'white' | 'black_vs_e4' | 'black_vs_d4' | 'black_vs_c4' | 'black_vs_n_f3' | 'black_other';
+export type OpeningLibrary = 'e4' | 'd4' | 'c4' | 'nf3' | 'other';
 export type OpeningSide = 'white' | 'black';
 export type OpeningEdgeSource = 'recent_game' | 'card' | 'lichess_masters' | 'engine_best' | 'mixed';
 
@@ -31,7 +31,6 @@ export type OpeningTreeDraft = {
   rootPly: number;
   rootSan: string[];
   rootUci: string[];
-  trainSide: OpeningSide;
   sourceCount: number;
   targetDepth: number;
   nodes: OpeningNodeDraft[];
@@ -44,7 +43,6 @@ export type OpeningNodeDraft = {
   fenKey: string;
   ply: number;
   sideToMove: OpeningSide;
-  trainSide: OpeningSide;
   bestUci?: string | null;
   bestSan?: string | null;
   evalCp?: number | null;
@@ -91,7 +89,6 @@ export type OpeningTreeNode = {
   fenKey: string;
   ply: number;
   sideToMove: OpeningSide;
-  trainSide: OpeningSide;
   bestUci: string | null;
   bestSan: string | null;
   evalCp: number | null;
@@ -184,30 +181,26 @@ export function tokenizePgnMoves(text: string) {
     .filter(Boolean);
 }
 
-export function resolveOpeningLibrary(trainSide: OpeningSide, parsedMoves: OpeningMove[]): OpeningLibrary {
-  if (trainSide === 'white') {
-    return 'white';
-  }
-
+export function resolveOpeningLibrary(parsedMoves: OpeningMove[]): OpeningLibrary {
   const firstMove = parsedMoves[0]?.uci;
 
   if (firstMove === 'e2e4') {
-    return 'black_vs_e4';
+    return 'e4';
   }
 
   if (firstMove === 'd2d4') {
-    return 'black_vs_d4';
+    return 'd4';
   }
 
   if (firstMove === 'c2c4') {
-    return 'black_vs_c4';
+    return 'c4';
   }
 
   if (firstMove === 'g1f3') {
-    return 'black_vs_n_f3';
+    return 'nf3';
   }
 
-  return 'black_other';
+  return 'other';
 }
 
 export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ownerProfileId: string; targetDepth?: number; rootPly?: number }) {
@@ -222,7 +215,7 @@ export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ow
       continue;
     }
 
-    const library = resolveOpeningLibrary(input.trainSide, parsed);
+    const library = resolveOpeningLibrary(parsed);
     const rootFen = parsed[rootPly - 1]?.fenAfter;
 
     if (!rootFen) {
@@ -230,7 +223,7 @@ export function buildOpeningTrees(inputs: OpeningTreeBuildInput[], options: { ow
     }
 
     const rootFenKey = normalizeOpeningFen(rootFen);
-    const key = `${library}|${rootFenKey}`;
+    const key = rootFenKey;
     const bucket = groups.get(key) ?? [];
     bucket.push({ input, parsed, library, rootFenKey });
     groups.set(key, bucket);
@@ -281,7 +274,7 @@ export type DrillPathStep = {
 
 export function buildDrillPath(
   tree: { nodes: OpeningTreeNode[]; edges: OpeningTreeEdge[]; rootSan: string[] },
-  options: { preferWeak?: boolean; seed?: number; startNodeId?: string } = {},
+  options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
 ): DrillPathStep[] {
   const rootPly = tree.rootSan.length;
   const rootNode = options.startNodeId 
@@ -305,12 +298,12 @@ export function buildDrillPath(
       break;
     }
 
-    const isTrainTurn = node.sideToMove === node.trainSide;
+    const isTrainTurn = node.sideToMove === options.trainSide;
     path.push({
       nodeId: node.id,
       fen: node.fen,
       sideToMove: node.sideToMove,
-      trainSide: node.trainSide,
+      trainSide: options.trainSide,
       bestUci: node.bestUci,
       bestSan: node.bestSan,
       masteryScore: node.masteryScore,
@@ -328,33 +321,43 @@ export function buildDrillPath(
     let chosenEdge: OpeningTreeEdge | null = null;
 
     if (isTrainTurn) {
-      const nonMistakes = outgoing.filter(edge => {
-        if (edge.isEngineBest) return true;
+      const validMoves = outgoing.filter(edge => {
+        if (edge.isEngineBest || edge.mastersGames > 0) return true;
         const target = tree.nodes.find(n => n.id === edge.toNodeId);
         if (!target || node.evalCp == null || target.evalCp == null) return true;
         const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
-        return swing > -100;
+        return swing > -30;
       });
 
-      if (nonMistakes.length > 0) {
-        chosenEdge = nonMistakes.find(edge => edge.isEngineBest) ?? nonMistakes[0] ?? null;
+      if (validMoves.length > 0) {
+        const sorted = [...validMoves].sort((a, b) => b.recentCount - a.recentCount);
+        chosenEdge = sorted[0] ?? null;
       } else {
-        chosenEdge = null;
+        chosenEdge = outgoing.find(edge => edge.isEngineBest) ?? null;
       }
     } else {
-      if (options.preferWeak) {
-        const weakTargets = outgoing.filter(edge => {
-          const target = tree.nodes.find(candidate => candidate.id === edge.toNodeId);
-          return target && target.sideToMove === target.trainSide && target.masteryScore < 80;
+      const roll = seededUnit(currentSeed) * 100;
+      if (roll < 20) {
+        const theoryEdges = [...outgoing].sort((a, b) => {
+          if (a.isEngineBest !== b.isEngineBest) return a.isEngineBest ? -1 : 1;
+          return b.mastersGames - a.mastersGames;
         });
+        chosenEdge = theoryEdges[0] ?? null;
+      } else {
+        if (options.preferWeak) {
+          const weakTargets = outgoing.filter(edge => {
+            const target = tree.nodes.find(candidate => candidate.id === edge.toNodeId);
+            return target && target.sideToMove === options.trainSide && target.masteryScore < 80;
+          });
 
-        if (weakTargets.length > 0) {
-          chosenEdge = chooseWeightedOpponentEdge(weakTargets, currentSeed);
+          if (weakTargets.length > 0) {
+            chosenEdge = chooseWeightedOpponentEdge(weakTargets, currentSeed);
+          }
         }
-      }
 
-      if (!chosenEdge) {
-        chosenEdge = chooseWeightedOpponentEdge(outgoing, currentSeed);
+        if (!chosenEdge) {
+          chosenEdge = chooseWeightedOpponentEdge(outgoing, currentSeed);
+        }
       }
     }
 

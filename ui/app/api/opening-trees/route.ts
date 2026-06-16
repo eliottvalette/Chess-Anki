@@ -24,7 +24,7 @@ import { TRAINING_SESSION_COOKIE, hashTrainingSessionToken, parseTrainingSession
 import { createAdminClient } from '@/utils/supabase/admin';
 
 const TREE_SELECT = 'id,library,name,root_san,root_uci,source_count,target_depth,updated_at';
-const NODE_SELECT = 'id,tree_id,fen,fen_key,ply,side_to_move,train_side,best_uci,best_san,eval_cp,recent_games,card_count';
+const NODE_SELECT = 'id,tree_id,fen,fen_key,ply,side_to_move,best_uci,best_san,eval_cp,recent_games,card_count';
 const EDGE_SELECT = 'id,tree_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
 const CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
 const MAX_ENGINE_IMPORT_NODES = 60;
@@ -89,48 +89,16 @@ export async function POST(request: Request) {
 
 async function importRecentOpeningTrees(profile: TrainingProfileCookie) {
   const supabase = createAdminClient();
-  const { data: decks, error: deckError } = await supabase
-    .from('decks')
-    .select('id,owner_profile_id,is_active')
-    .eq('is_active', true)
-    .or(`owner_profile_id.eq.${profile.id},owner_profile_id.is.null`);
+  const { count, error } = await supabase
+    .from('opening_trees')
+    .select('id', { count: 'exact', head: true })
+    .eq('owner_profile_id', profile.id);
 
-  if (deckError) {
-    return NextResponse.json({ error: deckError.message }, { status: 500 });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const deckIds = (decks ?? []).map(deck => String(deck.id));
-
-  if (deckIds.length === 0) {
-    return NextResponse.json({ imported: 0, nodes: 0, edges: 0 });
-  }
-
-  const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
-    supabase.from('opening_lines').select('id,name,eco,side,moves').in('deck_id', deckIds),
-    supabase.from('deck_cards').select(CARD_SELECT).in('deck_id', deckIds).eq('source_type', 'recent_game').limit(500),
-  ]);
-
-  if (linesError) {
-    return NextResponse.json({ error: linesError.message }, { status: 500 });
-  }
-
-  if (cardsError) {
-    return NextResponse.json({ error: cardsError.message }, { status: 500 });
-  }
-
-  const inputs = buildInputsFromRows(lines ?? [], cards ?? []);
-  const drafts = buildOpeningTrees(inputs, { ownerProfileId: profile.id, targetDepth: DEFAULT_OPENING_TARGET_DEPTH });
-
-  for (const draft of drafts) {
-    await enrichOpeningTreeDraft(draft);
-    await upsertTreeDraft(supabase, profile.id, draft);
-  }
-
-  return NextResponse.json({
-    imported: drafts.length,
-    nodes: drafts.reduce((total, draft) => total + draft.nodes.length, 0),
-    edges: drafts.reduce((total, draft) => total + draft.edges.length, 0),
-  });
+  return NextResponse.json({ imported: count ?? 0, nodes: 0, edges: 0 });
 }
 
 async function recordAttempt(profile: TrainingProfileCookie, body: Record<string, unknown>) {
@@ -222,7 +190,6 @@ async function upsertTreeDraft(supabase: ReturnType<typeof createAdminClient>, p
         fen_key: node.fenKey,
         ply: node.ply,
         side_to_move: node.sideToMove,
-        train_side: node.trainSide,
         best_uci: node.bestUci ?? null,
         best_san: node.bestSan ?? null,
         eval_cp: node.evalCp ?? null,
@@ -272,7 +239,6 @@ async function enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
   const trainNodes = draft.nodes
-    .filter(node => node.sideToMove === node.trainSide)
     .sort((left, right) => left.ply - right.ply)
     .slice(0, MAX_ENGINE_IMPORT_NODES);
   const session = trainNodes.length > 0 ? await getStockfishSession() : null;
@@ -292,7 +258,7 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
       node.bestUci = analysis.bestMove;
       node.bestSan = moveSanFromFen(node.fen, analysis.bestMove) ?? analysis.bestMove;
       node.evalCp = analysis.whitePerspective?.type === 'cp'
-        ? (node.trainSide === 'white' ? analysis.whitePerspective.value : -analysis.whitePerspective.value)
+        ? analysis.whitePerspective.value
         : null;
       ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
         isEngineBest: true,
@@ -306,7 +272,6 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 
 async function enrichLichessOpponentMoves(draft: OpeningTreeDraft) {
   const opponentNodes = draft.nodes
-    .filter(node => node.sideToMove !== node.trainSide)
     .sort((left, right) => left.ply - right.ply)
     .slice(0, MAX_LICHESS_IMPORT_NODES);
 
@@ -369,7 +334,6 @@ function ensureDraftEdge(
       fenKey: toFenKey,
       ply: fromNode.ply + 1,
       sideToMove: toFen.split(' ')[1] === 'b' ? 'black' : 'white',
-      trainSide: fromNode.trainSide,
       recentGames: 0,
       cardCount: 0,
     };
@@ -453,7 +417,6 @@ async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, p
       fenKey: String(row.fen_key),
       ply: Number(row.ply ?? 0),
       sideToMove: row.side_to_move === 'black' ? 'black' : 'white',
-      trainSide: row.train_side === 'black' ? 'black' : 'white',
       bestUci: row.best_uci ? String(row.best_uci) : null,
       bestSan: row.best_san ? String(row.best_san) : null,
       evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
@@ -484,7 +447,7 @@ async function fetchTreeDetail(supabase: ReturnType<typeof createAdminClient>, p
 }
 
 function summarizeTree(tree: Record<string, unknown>, nodes: Record<string, unknown>[], progress: Map<string, ProgressEntry>): OpeningTreeSummary {
-  const trainNodes = nodes.filter(node => node.side_to_move === node.train_side);
+  const trainNodes = nodes;
   const scores = trainNodes.map(node => progress.get(String(node.id))?.masteryScore ?? 0);
   const masteryScore = scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
   const dueCount = trainNodes.filter(node => (progress.get(String(node.id))?.masteryScore ?? 0) < 80).length;
@@ -514,7 +477,6 @@ function buildInputsFromRows(lines: Record<string, unknown>[], cards: Record<str
     return [{
       id: String(line.id),
       name: String(line.name ?? 'Opening'),
-      trainSide: line.side === 'black' ? 'black' as const : 'white' as const,
       moves,
       source: 'recent_game' as const,
       count: 1,
@@ -532,7 +494,6 @@ function buildInputsFromRows(lines: Record<string, unknown>[], cards: Record<str
     return [{
       id: String(card.id),
       name: String(card.line_name ?? 'Opening'),
-      trainSide: card.side === 'black' ? 'black' as const : 'white' as const,
       moves,
       source: 'card' as const,
       count: 1,

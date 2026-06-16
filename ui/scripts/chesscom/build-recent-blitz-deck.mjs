@@ -4,10 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 import { fetchArchives, fetchRecentGames, extractTag } from './api.mjs';
 import { isMoveInOpeningBook, dedupeTrainingCards, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';
+import { buildAndUpsertOpeningTrees } from './build-opening-trees.mjs';
 import { DETERMINISTIC_ANALYSIS_PROFILE } from '../../lib/analysis-profile.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
-const DEFAULT_COUNT = 10;
+const DEFAULT_COUNT = 200;
 const DEFAULT_TIME_CLASS = 'blitz';
 const DEFAULT_THRESHOLD_CP = 90;
 const DEFAULT_ACCEPTABLE_LOSS_CP = 35;
@@ -136,6 +137,17 @@ export async function main() {
     logProgress(`upserted ${deckLines.length} opening lines`);
     await upsert(supabase, 'deck_cards', deckCards, 'id');
     logProgress(`upserted ${deckCards.length} deck cards`);
+
+    if (ownerProfileId) {
+      await buildAndUpsertOpeningTrees({
+        supabase,
+        openingLines: deckLines.map(line => ({ ...line, moves: line.moves ?? [] })),
+        cards: deckCards,
+        ownerProfileId,
+        analyzeBaseUrl,
+        logProgress,
+      });
+    }
   }
 
   console.log(
