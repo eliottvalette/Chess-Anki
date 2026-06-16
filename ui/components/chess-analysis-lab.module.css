@@ -1846,6 +1846,7 @@
   display: flex;
   width: 100%;
   align-items: stretch;
+  gap: 8px;
 }
 
 .trainingDeckCard {

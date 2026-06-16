@@ -328,7 +328,19 @@ export function buildDrillPath(
     let chosenEdge: OpeningTreeEdge | null = null;
 
     if (isTrainTurn) {
-      chosenEdge = outgoing.find(edge => edge.isEngineBest) ?? outgoing[0] ?? null;
+      const nonMistakes = outgoing.filter(edge => {
+        if (edge.isEngineBest) return true;
+        const target = tree.nodes.find(n => n.id === edge.toNodeId);
+        if (!target || node.evalCp == null || target.evalCp == null) return true;
+        const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
+        return swing > -100;
+      });
+
+      if (nonMistakes.length > 0) {
+        chosenEdge = nonMistakes.find(edge => edge.isEngineBest) ?? nonMistakes[0] ?? null;
+      } else {
+        chosenEdge = null;
+      }
     } else {
       if (options.preferWeak) {
         const weakTargets = outgoing.filter(edge => {

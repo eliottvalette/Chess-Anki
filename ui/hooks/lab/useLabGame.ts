@@ -216,61 +216,41 @@ export function useLabGame(
               advanceDrillToStepRef.current(nextStepIndex);
             }, DRILL_OPPONENT_DELAY_MS);
           } else {
-            setOpeningDrillStatus(`Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Continuing...`);
-
-            window.setTimeout(() => {
-              const correctStep = drillPathRef.current[nextStepIndex];
-              if (correctStep && correctStep.edgeUciFromParent) {
-                const prevGame = new Chess(drillPathRef.current[currentPathIndex].fen);
-                try {
-                  const correctMove = prevGame.move({
-                    from: correctStep.edgeUciFromParent.substring(0, 2),
-                    to: correctStep.edgeUciFromParent.substring(2, 4),
-                    promotion: correctStep.edgeUciFromParent.length === 5 ? correctStep.edgeUciFromParent[4] : undefined
-                  });
-                  if (correctMove) {
-                    setGame(prevGame);
-                    setMoveHistory(prev => [...prev.slice(0, -1), toStoredMove(correctMove)]);
-                  }
-                } catch (e) {
-                  // Fallback if anything goes wrong
-                }
-              }
-              advanceDrillToStepRef.current(nextStepIndex);
-            }, DRILL_OPPONENT_DELAY_MS + 500);
+            setOpeningDrillStatus(`Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}. Use undo (left arrow) to retry.`);
           }
         } else {
-          const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === (expectedUci ?? move.uci));
+          const nextNodeEdge = activeOpeningTree?.edges.find(edge => edge.fromNodeId === nodeId && edge.uci === move.uci);
           const nextNode = nextNodeEdge ? activeOpeningTree?.nodes.find(node => node.id === nextNodeEdge.toNodeId) ?? null : null;
-
-          setOpeningDrillStatus(correct ? 'Correct.' : `Miss. Best was ${expectedSan ?? expectedUci ?? 'unknown'}.`);
 
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
 
-            if (nextNode.sideToMove === nextNode.trainSide) {
-              window.setTimeout(() => {
-                setInitialFen(nextNode.fen);
-                setMoveHistory([]);
-                setHistoryIndex(0);
-                setGame(new Chess(nextNode.fen));
-                setOpeningDrillExpected({ nodeId: nextNode.id, uci: nextNode.bestUci, san: nextNode.bestSan });
-                setOpeningDrillStatus('Next node. Find the best move.');
-              }, DRILL_OPPONENT_DELAY_MS);
-            } else {
+            if (nextNode.sideToMove !== nextNode.trainSide) {
               const opponentEdges = activeOpeningTree?.edges.filter(edge => edge.fromNodeId === nextNode.id) ?? [];
               const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
               const afterOpponent = opponentEdge ? activeOpeningTree?.nodes.find(node => node.id === opponentEdge.toNodeId) ?? null : null;
 
               if (afterOpponent) {
                 window.setTimeout(() => {
-                  setInitialFen(afterOpponent.fen);
-                  setMoveHistory([]);
-                  setHistoryIndex(0);
-                  setGame(new Chess(afterOpponent.fen));
+                  setGame(prevGame => {
+                    const nextGame = new Chess(prevGame.fen());
+                    try {
+                      const oppMove = nextGame.move({
+                        from: opponentEdge.uci.substring(0, 2),
+                        to: opponentEdge.uci.substring(2, 4),
+                        promotion: opponentEdge.uci.length === 5 ? opponentEdge.uci[4] : undefined
+                      });
+                      if (oppMove) {
+                        setMoveHistory(prev => [...prev, toStoredMove(oppMove)]);
+                        setHistoryIndex(prev => prev + 1);
+                        playSoundSequence(getMoveSoundSequence({ move: oppMove, isSelfMove: false, isCheck: nextGame.isCheck(), isCheckmate: nextGame.isCheckmate(), isGameOver: nextGame.isGameOver() }));
+                      }
+                    } catch (e) {
+                      // Fallback
+                    }
+                    return nextGame;
+                  });
                   setActiveOpeningNodeId(afterOpponent.id);
-                  setOpeningDrillExpected({ nodeId: afterOpponent.id, uci: afterOpponent.bestUci, san: afterOpponent.bestSan });
-                  setOpeningDrillStatus(`Opponent played ${opponentEdge?.san ?? 'a branch'}. Find the best move.`);
                 }, DRILL_OPPONENT_DELAY_MS);
               }
             }

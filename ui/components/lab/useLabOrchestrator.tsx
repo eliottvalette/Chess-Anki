@@ -1209,8 +1209,9 @@ export function useLabOrchestrator() {
         }
 
         setHistoryIndex(boundedIndex);
-        if (activeDeckCard) {
+        if (activeDeckCard || openingDrillActive) {
           setDeckFeedbackArrowsVisible(false);
+          setDeckFeedback(null);
         }
         clearVariation();
         setGame(nextGame);

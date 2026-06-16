@@ -149,25 +149,28 @@ export function useLabLines(
 
       const nextTrees = payload.trees ?? [];
       setOpeningTrees(nextTrees);
-      const nextSelectedId = selectedOpeningTreeId && nextTrees.some((tree: any) => tree.id === selectedOpeningTreeId)
-        ? selectedOpeningTreeId
-        : nextTrees[0]?.id ?? null;
 
-      setSelectedOpeningTreeId(nextSelectedId);
+      setSelectedOpeningTreeId(currentId => {
+        const nextSelectedId = currentId && nextTrees.some((tree: any) => tree.id === currentId)
+          ? currentId
+          : null;
 
-      if (nextSelectedId) {
-        await loadOpeningTreeDetail(nextSelectedId);
-      } else {
-        setActiveOpeningTree(null);
-        setActiveOpeningNodeId(null);
-      }
+        if (nextSelectedId) {
+          void loadOpeningTreeDetail(nextSelectedId);
+        } else {
+          setActiveOpeningTree(null);
+          setActiveOpeningNodeId(null);
+        }
+
+        return nextSelectedId;
+      });
     } catch (error) {
       setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
       setOpeningTrees([]);
     } finally {
       setOpeningTreesLoading(false);
     }
-  }, [loadOpeningTreeDetail, selectedOpeningTreeId, setActiveOpeningNodeId, setActiveOpeningTree, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading, setSelectedOpeningTreeId]);
+  }, [loadOpeningTreeDetail, setActiveOpeningNodeId, setActiveOpeningTree, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading, setSelectedOpeningTreeId]);
 
   const importRecentOpeningTrees = useCallback(async () => {
     setOpeningTreeActionLoading(true);
@@ -213,25 +216,39 @@ export function useLabLines(
     setActiveOpeningNodeId(step.nodeId);
     
     if (isOpponentMovePlayback && step.edgeUciFromParent) {
+      let movePlayed: ReturnType<Chess['move']> | null = null;
       setGame(prevGame => {
         const nextGame = new Chess(prevGame.fen());
         try {
-          const move = nextGame.move({
+          movePlayed = nextGame.move({
             from: step.edgeUciFromParent!.substring(0, 2),
             to: step.edgeUciFromParent!.substring(2, 4),
             promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
           });
-          if (move) {
-            setMoveHistory(prev => [...prev, toStoredMove(move)]);
-            setHistoryIndex(prev => prev + 1);
-            playSound('move'); // Simplified from getMoveSoundSequence for decoupling
-          }
         } catch (e) {
-          // If the move fails (e.g. board out of sync), gracefully fallback to the correct state
           return new Chess(step.fen);
         }
         return nextGame;
       });
+
+      if (step.edgeUciFromParent) {
+        // We just construct the move for the history independently to avoid side effects in setGame
+        const tempGame = new Chess(path[stepIndex - 1]?.fen ?? step.fen);
+        try {
+          const move = tempGame.move({
+            from: step.edgeUciFromParent.substring(0, 2),
+            to: step.edgeUciFromParent.substring(2, 4),
+            promotion: step.edgeUciFromParent.length === 5 ? step.edgeUciFromParent[4] : undefined,
+          });
+          if (move) {
+            setMoveHistory(prev => [...prev, toStoredMove(move)]);
+            setHistoryIndex(prev => prev + 1);
+            playSound('move');
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
     }
 
     setPositionAnalysis(null);

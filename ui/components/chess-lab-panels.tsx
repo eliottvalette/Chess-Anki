@@ -127,7 +127,7 @@ export function LinesPanel({
 
   return (
     <>
-      {!drillActive ? (
+      {!activeTree ? (
         <section className={`${styles.card} ${styles.emptyStateCard}`}>
           <div className={styles.panelHeader}>
             <h2 className={styles.sectionTitle}>Lines</h2>
@@ -203,7 +203,13 @@ export function LinesPanel({
                 </button>
               </div>
             </>
-          ) : null}
+          ) : (
+            <div className={styles.trainBackRow} style={{ marginBottom: '16px' }}>
+              <button className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`} onClick={() => onSelectTree('')} type="button">
+                Back
+              </button>
+            </div>
+          )}
 
           <section className={`${styles.card} ${styles.openingTreeCard} ${drillActive ? (deckFeedback?.correct ? styles.tonePositive : deckFeedback?.pending === false ? styles.toneNegative : styles.toneNeutral) : ''}`}>
             {!drillActive ? (
@@ -221,7 +227,7 @@ export function LinesPanel({
             )}
             
             {drillActive && (drillStatus || deckFeedback) ? (
-              <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 16px 16px 16px', padding: '16px', borderRadius: '12px' }}>
+              <div className={`${styles.feedbackBox} ${deckFeedback?.pending ? styles.feedbackPending : deckFeedback?.correct ? styles.feedbackGood : deckFeedback ? styles.feedbackBad : styles.feedbackPending}`} style={{ margin: '0 0 16px 0', padding: '16px', borderRadius: '12px' }}>
                 <strong>
                   {!deckFeedback ? 'Drill Step' : deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}
                 </strong>
