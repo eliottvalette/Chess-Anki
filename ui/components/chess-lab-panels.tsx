@@ -12,22 +12,47 @@ import dagre from 'dagre';
 import { type ChangeEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import '@xyflow/react/dist/style.css';
 
-function OpeningTreeGraphAutoFollow({ activeNodeId }: { activeNodeId: string | null }) {
-  const { setCenter, getNode } = useReactFlow();
+function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: string | null; treeId: string | null }) {
+  const { fitView } = useReactFlow();
+  const previousTreeIdRef = useRef<string | null>(null);
+  const previousNodeIdRef = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (activeNodeId) {
-      const node = getNode(activeNodeId);
-      if (node?.position) {
-        requestAnimationFrame(() => {
-          setCenter(node.position.x + (node.width ?? 156) / 2, node.position.y + (node.height ?? 58) / 2, {
-            duration: 800,
-            zoom: 1.2,
-          });
-        });
-      }
+  useLayoutEffect(() => {
+    if (!treeId) {
+      return;
     }
-  }, [activeNodeId, getNode, setCenter]);
+
+    const treeChanged = previousTreeIdRef.current !== treeId;
+    previousTreeIdRef.current = treeId;
+
+    const nodeChanged = previousNodeIdRef.current !== activeNodeId;
+    previousNodeIdRef.current = activeNodeId;
+
+    if (!treeChanged && !nodeChanged) {
+      return;
+    }
+
+    const runFollow = () => {
+      if (activeNodeId) {
+        void fitView({
+          nodes: [{ id: activeNodeId }],
+          maxZoom: 1.2,
+          minZoom: 0.25,
+          padding: treeChanged ? 0.5 : 0.35,
+          duration: treeChanged ? 400 : 800,
+        });
+        return;
+      }
+
+      if (treeChanged) {
+        void fitView({ padding: 0.5, duration: 400 });
+      }
+    };
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(runFollow);
+    });
+  }, [activeNodeId, fitView, treeId]);
 
   return null;
 }
@@ -143,12 +168,15 @@ export function LinesPanel({
   activeTreeId,
   deckFeedback,
   drillActive,
+  drillStatus,
   loading,
   onImportRecent,
   onSelectNode,
   onSelectTree,
+  onStartDrill,
   trainSide,
   onChangeTrainSide,
+  undoMove,
   trees,
   minForcedPlies,
   setMinForcedPlies,
@@ -164,6 +192,7 @@ export function LinesPanel({
   activeTreeId: string | null;
   deckFeedback: DeckFeedback | null;
   drillActive: boolean;
+  drillStatus: string;
   expectedSan: string | null;
   loading: boolean;
   onImportRecent: () => void;
@@ -346,12 +375,63 @@ export function LinesPanel({
               <span>{activeTree.dueCount} weak</span>
             </div>
 
+            {drillActive && (drillStatus || deckFeedback) ? (
+              <div
+                className={`rounded-[10px] border px-3 py-3 text-sm leading-[1.45] ${
+                  deckFeedback?.pending
+                    ? 'border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)] text-(--text-muted)'
+                    : deckFeedback?.correct
+                      ? 'border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] text-(--text)'
+                      : deckFeedback
+                        ? 'border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)] text-(--text)'
+                        : 'border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)] text-(--text-muted)'
+                }`}
+              >
+                <div className="flex flex-col gap-1">
+                  <strong className="text-[13px] font-normal text-(--text)">
+                    {!deckFeedback
+                      ? 'Drill step'
+                      : deckFeedback.pending
+                        ? 'Checking eval'
+                        : deckFeedback.correct
+                          ? 'Best move'
+                          : 'Miss'}
+                  </strong>
+                  <span>
+                    {!deckFeedback
+                      ? drillStatus
+                      : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}`}
+                  </span>
+                </div>
+              </div>
+            ) : null}
+
+            {!drillActive ? (
+              <div className="flex w-full items-stretch gap-2">
+                <button
+                  className="box-border flex min-h-[42px] w-full min-w-0 items-center justify-center self-stretch rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
+                  onClick={onStartDrill}
+                  type="button"
+                >
+                  Drill
+                </button>
+              </div>
+            ) : (
+              <div className="flex w-full items-stretch gap-2">
+                <button
+                  className="box-border flex min-h-[42px] w-full min-w-0 items-center justify-center self-stretch rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
+                  onClick={undoMove}
+                  type="button"
+                >
+                  Undo
+                </button>
+              </div>
+            )}
+
             <div className="w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
               <ReactFlowProvider key={activeTreeId ?? 'none'}>
                 <ReactFlow
                   edges={graph.edges}
-                  fitView
-                  fitViewOptions={{ padding: 0.5 }}
                   minZoom={0.25}
                   nodes={graph.nodes}
                   nodesDraggable={false}
@@ -365,7 +445,7 @@ export function LinesPanel({
                   proOptions={{ hideAttribution: true }}
                 >
                   <Background />
-                  <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} />
+                  <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} treeId={activeTreeId} />
                 </ReactFlow>
               </ReactFlowProvider>
             </div>

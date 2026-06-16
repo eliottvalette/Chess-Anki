@@ -30,6 +30,7 @@ export function useLabGame(
       (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
     >;
     cancelDrillOpponentMoveRef?: React.MutableRefObject<() => void>;
+    linesGameTimeoutRef: React.MutableRefObject<number | null>;
     playSoundSequence: (keys: ChessSoundKey[]) => void;
     playSound: (key: ChessSoundKey) => void;
     saveTrainingAttempt: (card: DeckCard, feedback: DeckFeedback) => Promise<void>;
@@ -77,6 +78,7 @@ export function useLabGame(
   const {
     advanceDrillToStepRef,
     cancelDrillOpponentMoveRef,
+    linesGameTimeoutRef,
     playSoundSequence,
     playSound,
     saveTrainingAttempt,
@@ -89,6 +91,20 @@ export function useLabGame(
 
   const currentFen = game.fen();
   const hasLoadedGame = moveHistory.length > 0 || initialFen != null;
+
+  const scheduleLinesOpponentAction = useCallback(
+    (action: () => void) => {
+      if (linesGameTimeoutRef.current != null) {
+        window.clearTimeout(linesGameTimeoutRef.current);
+      }
+
+      linesGameTimeoutRef.current = window.setTimeout(() => {
+        linesGameTimeoutRef.current = null;
+        action();
+      }, DRILL_OPPONENT_DELAY_MS);
+    },
+    [linesGameTimeoutRef],
+  );
 
   const clearSelection = useCallback(() => {
     setSelectedSquare(null);
@@ -239,9 +255,9 @@ export function useLabGame(
               setActiveOpeningNodeId(targetNodeId);
               setOpeningDrillStatus(classification.exact ? 'Correct.' : 'Book move.');
 
-              window.setTimeout(() => {
+              scheduleLinesOpponentAction(() => {
                 advanceDrillToStepRef.current(nextStepIndex);
-              }, DRILL_OPPONENT_DELAY_MS);
+              });
             } else {
               setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
             }
@@ -264,7 +280,7 @@ export function useLabGame(
                 : null;
 
               if (afterOpponent && opponentEdge) {
-                window.setTimeout(() => {
+                scheduleLinesOpponentAction(() => {
                   setGame((prevGame) => {
                     const nextGame = new Chess(prevGame.fen());
                     try {
@@ -292,7 +308,7 @@ export function useLabGame(
                     return nextGame;
                   });
                   setActiveOpeningNodeId(afterOpponent.id);
-                }, DRILL_OPPONENT_DELAY_MS);
+                });
               }
             }
           }
@@ -393,6 +409,7 @@ export function useLabGame(
       openingDrillExpected,
       playSoundSequence,
       saveTrainingAttempt,
+      scheduleLinesOpponentAction,
       setActiveOpeningNodeId,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
@@ -432,6 +449,10 @@ export function useLabGame(
         return false;
       }
 
+      if (openingDrillActive && deckFeedback != null && !deckFeedback.pending && openingDrillExpected == null) {
+        return false;
+      }
+
       const nextGame = new Chess(currentFen);
       const move = (() => {
         try {
@@ -459,12 +480,18 @@ export function useLabGame(
       openingDrillActive,
       openingDrillExpected,
       playSound,
+      scheduleLinesOpponentAction,
     ],
   );
 
   const jumpToIndex = useCallback(
     (index: number) => {
       cancelDrillOpponentMoveRef?.current?.();
+
+      if (linesGameTimeoutRef.current != null) {
+        window.clearTimeout(linesGameTimeoutRef.current);
+        linesGameTimeoutRef.current = null;
+      }
 
       let boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
       let nextMoveHistory = moveHistory;
@@ -501,6 +528,7 @@ export function useLabGame(
       openingDrillActive,
       advanceDrillToStepRef,
       cancelDrillOpponentMoveRef,
+      linesGameTimeoutRef,
       drillPathRef,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
@@ -517,6 +545,11 @@ export function useLabGame(
     }
 
     cancelDrillOpponentMoveRef?.current?.();
+
+    if (linesGameTimeoutRef.current != null) {
+      window.clearTimeout(linesGameTimeoutRef.current);
+      linesGameTimeoutRef.current = null;
+    }
 
     const newHistory = moveHistory.slice(0, -1);
     const nextGame = restoreGameFromHistory(newHistory, initialFen, newHistory.length);
@@ -549,6 +582,7 @@ export function useLabGame(
     setGame,
     clearSelection,
     cancelDrillOpponentMoveRef,
+    linesGameTimeoutRef,
     openingDrillActive,
     drillPathRef,
     activeOpeningTree?.rootSan.length,

@@ -796,11 +796,13 @@ export function useLabOrchestrator() {
     (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
   >(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
+  const linesGameTimeoutRef = useRef<number | null>(null);
 
   const gameContext = useMemo(
     () => ({
       advanceDrillToStepRef,
       cancelDrillOpponentMoveRef,
+      linesGameTimeoutRef,
       playSoundSequence,
       playSound,
       saveTrainingAttempt,
@@ -1006,6 +1008,8 @@ export function useLabOrchestrator() {
       timelineRequestIdRef,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
+      deckPlaybackRequestIdRef,
+      linesGameTimeoutRef,
       modeRef,
     }),
     [
@@ -1018,6 +1022,8 @@ export function useLabOrchestrator() {
       timelineRequestIdRef,
       deckReplayMovesRef,
       deckReplayInitialFenRef,
+      deckPlaybackRequestIdRef,
+      linesGameTimeoutRef,
     ],
   );
 

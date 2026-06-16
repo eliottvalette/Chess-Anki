@@ -133,6 +133,7 @@ export function LabSidebar() {
               activeTreeId={lab.labState.selectedOpeningTreeId}
               deckFeedback={lab.labState.deckFeedback}
               drillActive={lab.labState.openingDrillActive}
+              drillStatus={lab.labState.openingDrillStatus}
               expectedSan={
                 lab.labState.openingDrillExpected?.san ??
                 (lab.labState.openingDrillExpected?.uci
@@ -148,6 +149,10 @@ export function LabSidebar() {
               onChangeTrainSide={(side) => {
                 lab.labState.setActiveTrainSide(side);
                 lab.labState.setOrientation(side);
+
+                if (lab.labState.activeOpeningTree) {
+                  lab.startOpeningDrill(lab.labState.activeOpeningTree, side);
+                }
               }}
               undoMove={lab.undoMove}
               trees={lab.labState.openingTrees}

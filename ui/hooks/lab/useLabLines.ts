@@ -33,6 +33,8 @@ export function useLabLines(
     timelineRequestIdRef: React.MutableRefObject<number>;
     deckReplayInitialFenRef: React.MutableRefObject<string | null>;
     deckReplayMovesRef: React.MutableRefObject<StoredMove[]>;
+    deckPlaybackRequestIdRef: React.MutableRefObject<number>;
+    linesGameTimeoutRef: React.MutableRefObject<number | null>;
     modeRef: React.MutableRefObject<WorkspaceMode> | React.RefObject<WorkspaceMode>;
   },
 ) {
@@ -48,6 +50,7 @@ export function useLabLines(
     setOpeningDrillActive,
     setOpeningDrillStatus,
     setOpeningDrillExpected,
+    setDeckPlaybackBusy,
     setInitialFen,
     setMoveHistory,
     setHistoryIndex,
@@ -78,6 +81,8 @@ export function useLabLines(
     timelineRequestIdRef,
     deckReplayInitialFenRef,
     deckReplayMovesRef,
+    deckPlaybackRequestIdRef,
+    linesGameTimeoutRef,
     modeRef,
   } = context;
 
@@ -229,7 +234,12 @@ export function useLabLines(
       window.clearTimeout(drillTimeoutRef.current);
       drillTimeoutRef.current = null;
     }
-  }, []);
+
+    if (linesGameTimeoutRef.current != null) {
+      window.clearTimeout(linesGameTimeoutRef.current);
+      linesGameTimeoutRef.current = null;
+    }
+  }, [linesGameTimeoutRef]);
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -354,14 +364,15 @@ export function useLabLines(
   );
 
   const startOpeningDrill = useCallback(
-    (overrideTree?: OpeningTreeDetail) => {
+    (overrideTree?: OpeningTreeDetail, overrideTrainSide?: OpeningSide) => {
       const tree = overrideTree ?? activeOpeningTree;
 
       if (!tree) {
         return;
       }
 
-      const path = buildDrillPath(tree, { trainSide: activeTrainSide, preferWeak: true, seed: Date.now() });
+      const trainSide = overrideTrainSide ?? activeTrainSide;
+      const path = buildDrillPath(tree, { trainSide, preferWeak: true, seed: Date.now() });
       const firstTrainIndex = path.findIndex((step: DrillPathStep) => step.isTrainTurn);
 
       if (firstTrainIndex < 0) {
@@ -382,8 +393,10 @@ export function useLabLines(
       setTimelineAnalyses([]);
       setTimelineError('');
       setServerError('');
-      setOrientation(path[0]?.trainSide ?? activeTrainSide);
+      setOrientation(path[0]?.trainSide ?? trainSide);
       setShowArrow(false);
+      setDeckFeedback(null);
+      setDeckFeedbackArrowsVisible(false);
       setOpeningDrillActive(true);
       playSound('game-start');
 
@@ -413,8 +426,15 @@ export function useLabLines(
         clearSelection();
 
         cancelDrillOpponentMove();
+        deckPlaybackRequestIdRef.current += 1;
+        setDeckPlaybackBusy(false);
         drillTimeoutRef.current = window.setTimeout(async () => {
-          await playDeckReplayToIndex(moves.length, activeTrainSide);
+          const replayCompleted = await playDeckReplayToIndex(moves.length, trainSide);
+
+          if (replayCompleted === false) {
+            return;
+          }
+
           advanceDrillToStep(firstTrainIndex);
         }, 500);
       } catch (err) {
@@ -429,6 +449,7 @@ export function useLabLines(
       cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
+      deckPlaybackRequestIdRef,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
       drillPathIndexRef,
@@ -445,6 +466,9 @@ export function useLabLines(
       setMetadata,
       setMode,
       setMoveHistory,
+      setDeckPlaybackBusy,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
       setOpeningDrillActive,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
@@ -481,6 +505,8 @@ export function useLabLines(
   const selectOpeningTree = useCallback(
     async (treeId: string, treeObj?: OpeningTreeDetail) => {
       cancelDrillOpponentMove();
+      deckPlaybackRequestIdRef.current += 1;
+      setDeckPlaybackBusy(false);
 
       if (!treeId) {
         stopOpeningDrill();
@@ -518,6 +544,7 @@ export function useLabLines(
       cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
+      deckPlaybackRequestIdRef,
       loadOpeningTreeDetail,
       loadOpeningTreeRootOnBoard,
       setActiveOpeningNodeId,
@@ -526,6 +553,7 @@ export function useLabLines(
       setHistoryIndex,
       setInitialFen,
       setMoveHistory,
+      setDeckPlaybackBusy,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
       setPreMoveAnalyses,
@@ -602,8 +630,15 @@ export function useLabLines(
           setOpeningDrillStatus('Playing to selected node...');
 
           cancelDrillOpponentMove();
+          deckPlaybackRequestIdRef.current += 1;
+          setDeckPlaybackBusy(false);
           drillTimeoutRef.current = window.setTimeout(async () => {
-            await playDeckReplayToIndex(moves.length, activeTrainSide);
+            const replayCompleted = await playDeckReplayToIndex(moves.length, activeTrainSide);
+
+            if (replayCompleted === false) {
+              return;
+            }
+
             advanceDrillToStep(targetNodeIndex);
           }, 500);
         } else {
@@ -615,6 +650,8 @@ export function useLabLines(
             node.sideToMove === activeTrainSide ? 'Find the best move from this node.' : 'Opponent node selected.',
           );
           cancelDrillOpponentMove();
+          deckPlaybackRequestIdRef.current += 1;
+          setDeckPlaybackBusy(false);
           drillTimeoutRef.current = window.setTimeout(async () => {
             await playDeckReplayToIndex(moves.length, activeTrainSide);
           }, 500);
@@ -637,12 +674,14 @@ export function useLabLines(
       setOpeningDrillStatus,
       setOrientation,
       cancelDrillOpponentMove,
+      deckPlaybackRequestIdRef,
       playDeckReplayToIndex,
       advanceDrillToStep,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
       drillPathRef,
       drillPathIndexRef,
+      setDeckPlaybackBusy,
       setOpeningDrillActive,
     ],
   );
