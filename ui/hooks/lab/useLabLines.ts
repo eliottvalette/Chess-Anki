@@ -466,11 +466,12 @@ export function useLabLines(
 
   const selectOpeningTree = useCallback(
     async (treeId: string, treeObj?: OpeningTreeDetail) => {
-      setSelectedOpeningTreeId(treeId);
-      setOpeningDrillStatus('');
-      setOpeningDrillExpected(null);
+      cancelDrillOpponentMove();
 
       if (!treeId) {
+        stopOpeningDrill();
+        setSelectedOpeningTreeId(null);
+        setActiveOpeningNodeId(null);
         setActiveOpeningTree(null);
         setInitialFen(null);
         setMoveHistory([]);
@@ -482,6 +483,10 @@ export function useLabLines(
         setPreMoveAnalyses([]);
         return;
       }
+
+      setSelectedOpeningTreeId(treeId);
+      setOpeningDrillStatus('');
+      setOpeningDrillExpected(null);
 
       let tree = treeObj;
       if (tree) {
@@ -496,10 +501,12 @@ export function useLabLines(
       }
     },
     [
+      cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
       loadOpeningTreeDetail,
       loadOpeningTreeRootOnBoard,
+      setActiveOpeningNodeId,
       setActiveOpeningTree,
       setGame,
       setHistoryIndex,
@@ -511,6 +518,7 @@ export function useLabLines(
       setSelectedOpeningTreeId,
       setTimelineAnalyses,
       startOpeningDrill,
+      stopOpeningDrill,
     ],
   );
 

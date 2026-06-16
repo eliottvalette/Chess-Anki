@@ -105,13 +105,16 @@ export function LinesPanel({
   onSelectNode,
   onSelectTree,
   onStartDrill: _onStartDrill,
-  onStopDrill,
   trainSide,
   onChangeTrainSide,
   undoMove: _undoMove,
   trees,
   minForcedPlies,
   setMinForcedPlies,
+  minNodes,
+  setMinNodes,
+  minDepth,
+  setMinDepth,
 }: {
   actionError: string;
   actionLoading: boolean;
@@ -127,32 +130,17 @@ export function LinesPanel({
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
   onStartDrill: () => void;
-  onStopDrill: () => void;
   trainSide: 'white' | 'black';
   onChangeTrainSide: (side: 'white' | 'black') => void;
   undoMove: () => void;
   trees: OpeningTreeSummary[];
   minForcedPlies: number;
   setMinForcedPlies: (v: number) => void;
+  minNodes: number;
+  setMinNodes: (v: number) => void;
+  minDepth: number;
+  setMinDepth: (v: number) => void;
 }) {
-  const [minNodes, setMinNodes] = useState(0);
-  const [minDepth, setMinDepth] = useState(0);
-
-  useEffect(() => {
-    const savedNodes = localStorage.getItem('chess-lab-min-nodes');
-    const savedDepth = localStorage.getItem('chess-lab-min-depth');
-    if (savedNodes) setMinNodes(parseInt(savedNodes, 10) || 0);
-    if (savedDepth) setMinDepth(parseInt(savedDepth, 10) || 0);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('chess-lab-min-nodes', minNodes.toString());
-  }, [minNodes]);
-
-  useEffect(() => {
-    localStorage.setItem('chess-lab-min-depth', minDepth.toString());
-  }, [minDepth]);
-
   const filteredTrees = useMemo(
     () => trees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
     [trees, minNodes, minDepth],
@@ -276,7 +264,7 @@ export function LinesPanel({
               <div className={styles.trainBackRow}>
                 <button
                   className={`${styles.action} ${styles.fullWidthAction} ${styles.backAction}`}
-                  onClick={onStopDrill}
+                  onClick={() => onSelectTree('')}
                   type="button"
                 >
                   Back

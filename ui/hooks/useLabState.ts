@@ -10,6 +10,26 @@ import type { DrillPathStep, OpeningTreeDetail } from '@/lib/opening-tree';
 import type { TrainingDeckSummary, TrainSessionStats, WorkspaceMode } from '../components/chess-lab-panels';
 import type { TrainingProfile } from '../lib/analysis-types';
 
+function readStoredLinesFilter(storageKey: string, fallback: number) {
+  if (typeof window === 'undefined') {
+    return fallback;
+  }
+
+  const saved = localStorage.getItem(storageKey);
+
+  if (!saved) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(saved, 10);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  return parsed;
+}
+
 export function useLabState() {
   const [game, setGame] = useState(() => new Chess());
   const [initialFen, setInitialFen] = useState<string | null>(null);
@@ -57,16 +77,22 @@ export function useLabState() {
   const [deckActionLoading, setDeckActionLoading] = useState(false);
   const [deckActionError, setDeckActionError] = useState('');
   const [openingTrees, setOpeningTrees] = useState<OpeningTreeDetail[]>([]);
-  const [minForcedPlies, setMinForcedPlies] = useState(4);
-
-  useEffect(() => {
-    const savedPlies = localStorage.getItem('chess-lab-min-plies');
-    if (savedPlies) setMinForcedPlies(parseInt(savedPlies, 10) || 4);
-  }, []);
+  const [minForcedPlies, setMinForcedPlies] = useState(() => readStoredLinesFilter('chess-lab-min-plies', 4));
+  const [minNodes, setMinNodes] = useState(() => readStoredLinesFilter('chess-lab-min-nodes', 0));
+  const [minDepth, setMinDepth] = useState(() => readStoredLinesFilter('chess-lab-min-depth', 0));
 
   useEffect(() => {
     localStorage.setItem('chess-lab-min-plies', minForcedPlies.toString());
   }, [minForcedPlies]);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-min-nodes', minNodes.toString());
+  }, [minNodes]);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-min-depth', minDepth.toString());
+  }, [minDepth]);
+
   const [activeOpeningTree, setActiveOpeningTree] = useState<OpeningTreeDetail | null>(null);
   const [openingTreesLoading, setOpeningTreesLoading] = useState(false);
   const [openingTreeActionLoading, setOpeningTreeActionLoading] = useState(false);
@@ -212,6 +238,10 @@ export function useLabState() {
     setOpeningTrees,
     minForcedPlies,
     setMinForcedPlies,
+    minNodes,
+    setMinNodes,
+    minDepth,
+    setMinDepth,
     activeOpeningTree,
     setActiveOpeningTree,
     openingTreesLoading,

@@ -143,7 +143,6 @@ export function LabSidebar() {
               onSelectNode={lab.selectOpeningNode}
               onSelectTree={lab.selectOpeningTree}
               onStartDrill={() => lab.startOpeningDrill()}
-              onStopDrill={lab.stopOpeningDrill}
               trainSide={lab.labState.activeTrainSide}
               onChangeTrainSide={(side) => {
                 lab.labState.setActiveTrainSide(side);
@@ -153,6 +152,10 @@ export function LabSidebar() {
               trees={lab.labState.openingTrees}
               minForcedPlies={lab.labState.minForcedPlies}
               setMinForcedPlies={lab.labState.setMinForcedPlies}
+              minNodes={lab.labState.minNodes}
+              setMinNodes={lab.labState.setMinNodes}
+              minDepth={lab.labState.minDepth}
+              setMinDepth={lab.labState.setMinDepth}
             />
           ) : (
             <TrainPanel
