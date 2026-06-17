@@ -43,7 +43,11 @@ import {
   summarizeLineMastery,
 } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
-import { sliceOpeningForest } from '@/lib/opening-tree';
+import {
+  classifyLinesMoveAtHistoryIndex,
+  linesMoveCategoryToReviewCategory,
+  sliceOpeningForest,
+} from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
 import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
@@ -52,6 +56,7 @@ import { useLabGame } from '../../hooks/lab/useLabGame';
 import { useLabLines } from '../../hooks/lab/useLabLines';
 import { useLabReview } from '../../hooks/lab/useLabReview';
 import { useLabTraining } from '../../hooks/lab/useLabTraining';
+import { useLinesSession } from '../../hooks/lab/useLinesSession';
 import { useRecentGames } from '../../hooks/lab/useRecentGames';
 import { useTrainingProfile } from '../../hooks/lab/useTrainingProfile';
 import { useLabState } from '../../hooks/useLabState';
@@ -293,6 +298,8 @@ export function useLabOrchestrator() {
     setActiveOpeningTree,
     setSelectedOpeningTreeId,
     setActiveOpeningNodeId,
+    activeOpeningTree,
+    activeTrainSide,
     openingDrillActive,
     drillPathRef,
     drillPathIndexRef,
@@ -625,12 +632,17 @@ export function useLabOrchestrator() {
   );
   const activeReviewMoment = reviewMoments[reviewIndex] ?? null;
   const linesBoardClassification = useMemo(() => {
-    if (mode !== 'lines' || !openingDrillActive || historyIndex !== moveHistory.length || deckFeedback == null) {
+    if (mode !== 'lines' || !openingDrillActive || !activeOpeningTree || historyIndex <= 0) {
       return null;
     }
 
-    const classifiedMove =
-      currentMoves.find((move) => move.uci === deckFeedback.playedUci) ?? currentMoves[currentMoves.length - 1] ?? null;
+    const classified = classifyLinesMoveAtHistoryIndex(activeOpeningTree, moveHistory, historyIndex, activeTrainSide);
+
+    if (!classified) {
+      return null;
+    }
+
+    const classifiedMove = currentMoves.find((move) => move.uci === classified.moveUci) ?? null;
 
     if (!classifiedMove) {
       return null;
@@ -638,25 +650,19 @@ export function useLabOrchestrator() {
 
     return {
       move: classifiedMove,
-      category: deckFeedback.correct ? (deckFeedback.exact ? ('best' as const) : ('book' as const)) : ('miss' as const),
+      category: classified.category,
     };
-  }, [currentMoves, deckFeedback, historyIndex, mode, moveHistory.length, openingDrillActive]);
+  }, [activeOpeningTree, activeTrainSide, currentMoves, historyIndex, mode, moveHistory, openingDrillActive]);
   const boardSquareStyles = useMemo(() => {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
     const reviewCategory = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
       : linesBoardClassification
-        ? linesBoardClassification.category
-        : mode === 'lines' && historyIndex > 0
-          ? historyIndex === moveHistory.length && deckFeedback != null
-            ? deckFeedback.correct
-              ? 'excellent'
-              : 'mistake'
-            : 'book'
-          : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
-            ? timelineReviews[historyIndex - 1]?.category
-            : null;
+        ? linesMoveCategoryToReviewCategory(linesBoardClassification.category)
+        : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
+          ? timelineReviews[historyIndex - 1]?.category
+          : null;
     const styledMove = linesBoardClassification?.move ?? lastMove;
     const lastMoveStyle = getReviewMoveStyle(reviewCategory);
 
@@ -673,12 +679,9 @@ export function useLabOrchestrator() {
     activeDeckCard,
     activeTrainMoveReview,
     currentMoves,
-    deckFeedback,
     hasLoadedGame,
     historyIndex,
     linesBoardClassification,
-    mode,
-    moveHistory.length,
     squareStyles,
     timelineReviews,
     variationBaseIndex,
@@ -692,16 +695,10 @@ export function useLabOrchestrator() {
     const category = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
       : linesBoardClassification
-        ? linesBoardClassification.category
-        : mode === 'lines' && historyIndex > 0
-          ? historyIndex === moveHistory.length && deckFeedback != null
-            ? deckFeedback.correct
-              ? 'excellent'
-              : 'mistake'
-            : 'book'
-          : hasLoadedGame
-            ? timelineReviews[historyIndex - 1]?.category
-            : null;
+        ? linesMoveCategoryToReviewCategory(linesBoardClassification.category)
+        : hasLoadedGame
+          ? timelineReviews[historyIndex - 1]?.category
+          : null;
 
     const badgeMove = linesBoardClassification?.move ?? lastMove;
 
@@ -726,12 +723,9 @@ export function useLabOrchestrator() {
     activeTrainMoveReview,
     boardWidth,
     currentMoves,
-    deckFeedback,
     hasLoadedGame,
     historyIndex,
     linesBoardClassification,
-    mode,
-    moveHistory.length,
     orientation,
     timelineReviews,
     variationBaseIndex,
@@ -797,6 +791,7 @@ export function useLabOrchestrator() {
   >(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
   const linesGameTimeoutRef = useRef<number | null>(null);
+  const linesSession = useLinesSession();
 
   const gameContext = useMemo(
     () => ({
@@ -811,8 +806,17 @@ export function useLabOrchestrator() {
       modeRef,
       drillPathRef,
       drillPathIndexRef,
+      linesSession,
     }),
-    [playSoundSequence, playSound, saveTrainingAttempt, timelineRefineRequestIdRef, drillPathRef, drillPathIndexRef],
+    [
+      playSoundSequence,
+      playSound,
+      saveTrainingAttempt,
+      timelineRefineRequestIdRef,
+      drillPathRef,
+      drillPathIndexRef,
+      linesSession,
+    ],
   );
 
   const { clearSelection, clearVariation, highlightMoves, tryMove, jumpToIndex, undoMove } = useLabGame(
@@ -1011,6 +1015,7 @@ export function useLabOrchestrator() {
       deckPlaybackRequestIdRef,
       linesGameTimeoutRef,
       modeRef,
+      linesSession,
     }),
     [
       clearSelection,
@@ -1024,6 +1029,7 @@ export function useLabOrchestrator() {
       deckReplayInitialFenRef,
       deckPlaybackRequestIdRef,
       linesGameTimeoutRef,
+      linesSession,
     ],
   );
 
@@ -1514,7 +1520,7 @@ export function useLabOrchestrator() {
         }
 
         if (openingDrillActive) {
-          jumpToIndex(historyIndex + 1);
+          jumpToIndex(historyIndex + 1, { playForwardSound: true });
           return;
         }
 
@@ -1581,6 +1587,10 @@ export function useLabOrchestrator() {
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         event.stopPropagation();
+
+        if (mode === 'lines' && openingDrillActive) {
+          return;
+        }
 
         if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
           cancelReviewPlayback();
@@ -2100,6 +2110,11 @@ export function useLabOrchestrator() {
     [selectOpeningTree, slicedTrees],
   );
 
+  const linesForkCoverage = useMemo(
+    () => linesSession.getForkCoverage(),
+    [labState.activeOpeningNodeId, labState.historyIndex, labState.openingDrillActive, linesSession],
+  );
+
   return {
     labState: overriddenLabState,
     gameContext,
@@ -2129,6 +2144,7 @@ export function useLabOrchestrator() {
     startOpeningDrill,
     stopOpeningDrill,
     importRecentOpeningTrees,
+    linesForkCoverage,
     currentFen,
     currentMoves,
     hasLoadedGame,

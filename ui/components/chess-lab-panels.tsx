@@ -168,12 +168,11 @@ export function LinesPanel({
   activeTreeId,
   deckFeedback,
   drillActive,
-  drillStatus,
+  forkCoverage,
   loading,
   onImportRecent,
   onSelectNode,
   onSelectTree,
-  onStartDrill,
   trainSide,
   onChangeTrainSide,
   undoMove,
@@ -192,13 +191,12 @@ export function LinesPanel({
   activeTreeId: string | null;
   deckFeedback: DeckFeedback | null;
   drillActive: boolean;
-  drillStatus: string;
+  forkCoverage?: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }>;
   expectedSan: string | null;
   loading: boolean;
   onImportRecent: () => void;
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
-  onStartDrill: () => void;
   trainSide: 'white' | 'black';
   onChangeTrainSide: (side: 'white' | 'black') => void;
   undoMove: () => void;
@@ -215,9 +213,28 @@ export function LinesPanel({
     [trees, minNodes, minDepth],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
+  const activeForkStats = useMemo(() => {
+    if (!activeNodeId || !forkCoverage) {
+      return null;
+    }
+
+    const entry = forkCoverage[activeNodeId];
+
+    if (!entry) {
+      return null;
+    }
+
+    const total = entry.playedEdgeIds.length + entry.remainingEdgeIds.length;
+
+    if (total < 2) {
+      return null;
+    }
+
+    return { played: entry.playedEdgeIds.length, total };
+  }, [activeNodeId, forkCoverage]);
   const graph = useMemo(
-    () => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive),
-    [activeTree, activeNodeId, trainSide, onSelectNode, drillActive],
+    () => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive, forkCoverage),
+    [activeTree, activeNodeId, trainSide, onSelectNode, drillActive, forkCoverage],
   );
 
   return (
@@ -373,50 +390,14 @@ export function LinesPanel({
               <span>depth {activeTree.targetDepth}</span>
               <span>{activeTree.nodeCount} nodes</span>
               <span>{activeTree.dueCount} weak</span>
+              {activeForkStats ? (
+                <span>
+                  {activeForkStats.played}/{activeForkStats.total} replies
+                </span>
+              ) : null}
             </div>
 
-            {drillActive && (drillStatus || deckFeedback) ? (
-              <div
-                className={`rounded-[10px] border px-3 py-3 text-sm leading-[1.45] ${
-                  deckFeedback?.pending
-                    ? 'border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)] text-(--text-muted)'
-                    : deckFeedback?.correct
-                      ? 'border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)] text-(--text)'
-                      : deckFeedback
-                        ? 'border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)] text-(--text)'
-                        : 'border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)] text-(--text-muted)'
-                }`}
-              >
-                <div className="flex flex-col gap-1">
-                  <strong className="text-[13px] font-normal text-(--text)">
-                    {!deckFeedback
-                      ? 'Drill step'
-                      : deckFeedback.pending
-                        ? 'Checking eval'
-                        : deckFeedback.correct
-                          ? 'Best move'
-                          : 'Miss'}
-                  </strong>
-                  <span>
-                    {!deckFeedback
-                      ? drillStatus
-                      : `played ${deckFeedback.playedSan} · best ${deckFeedback.expectedSan}`}
-                  </span>
-                </div>
-              </div>
-            ) : null}
-
-            {!drillActive ? (
-              <div className="flex w-full items-stretch gap-2">
-                <button
-                  className="box-border flex min-h-[42px] w-full min-w-0 items-center justify-center self-stretch rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
-                  onClick={onStartDrill}
-                  type="button"
-                >
-                  Drill
-                </button>
-              </div>
-            ) : (
+            {drillActive ? (
               <div className="flex w-full items-stretch gap-2">
                 <button
                   className="box-border flex min-h-[42px] w-full min-w-0 items-center justify-center self-stretch rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
@@ -426,7 +407,7 @@ export function LinesPanel({
                   Undo
                 </button>
               </div>
-            )}
+            ) : null}
 
             <div className="w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
               <ReactFlowProvider key={activeTreeId ?? 'none'}>
@@ -491,6 +472,7 @@ function buildOpeningTreeGraph(
   trainSide: 'white' | 'black',
   onSelectNode: (nodeId: string) => void,
   drillActive = false,
+  forkCoverage: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }> = {},
 ) {
   if (!tree) {
     return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
@@ -548,20 +530,33 @@ function buildOpeningTreeGraph(
       type: 'default',
     } satisfies FlowNode;
   });
-  const edges = tree.edges.map(
-    (edge) =>
-      ({
-        id: edge.id,
-        source: edge.fromNodeId,
-        target: edge.toNodeId,
-        animated: edge.isEngineBest,
-        label: edge.san,
-        style: edge.isEngineBest ? { stroke: 'rgba(138, 227, 193, 0.95)', strokeWidth: 2.8 } : undefined,
-        labelBgPadding: [6, 4],
-        labelBgBorderRadius: 6,
-        labelShowBg: true,
-      }) satisfies Edge,
-  );
+  const edges = tree.edges.map((edge) => {
+    const fromCoverage = forkCoverage[edge.fromNodeId];
+    const isPlayed = fromCoverage?.playedEdgeIds.includes(edge.id) ?? false;
+    const isRemaining = fromCoverage?.remainingEdgeIds.includes(edge.id) ?? false;
+    const forkEdgeStyle =
+      drillActive && (isPlayed || isRemaining)
+        ? {
+            stroke: isPlayed ? 'rgba(138, 227, 193, 0.95)' : 'rgba(152, 184, 255, 0.55)',
+            strokeWidth: isPlayed ? 2.8 : 2.2,
+            opacity: isRemaining ? 1 : 0.72,
+          }
+        : edge.isEngineBest
+          ? { stroke: 'rgba(138, 227, 193, 0.95)', strokeWidth: 2.8 }
+          : undefined;
+
+    return {
+      id: edge.id,
+      source: edge.fromNodeId,
+      target: edge.toNodeId,
+      animated: edge.isEngineBest || isRemaining,
+      label: edge.san,
+      style: forkEdgeStyle,
+      labelBgPadding: [6, 4],
+      labelBgBorderRadius: 6,
+      labelShowBg: true,
+    } satisfies Edge;
+  });
 
   return { nodes, edges };
 }

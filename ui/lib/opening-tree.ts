@@ -57,6 +57,7 @@ export type OpeningNodeDraft = {
   fenKey: string;
   ply: number;
   sideToMove: OpeningSide;
+  trainSide?: OpeningSide;
   bestUci?: string | null;
   bestSan?: string | null;
   evalCp?: number | null;
@@ -143,7 +144,60 @@ export type OpeningDrillStep = {
 };
 
 export const DEFAULT_OPENING_ROOT_PLY = 0;
-export const DEFAULT_OPENING_TARGET_DEPTH = 10;
+export const OPENING_TARGET_DEPTH_FAST = 12;
+export const OPENING_TARGET_DEPTH_NORMAL = 22;
+export const OPENING_TARGET_DEPTH_DEEP = 28;
+export const OPENING_TARGET_DEPTH_EXTEND_DELTA = 4;
+export const DEFAULT_OPENING_TARGET_DEPTH = OPENING_TARGET_DEPTH_NORMAL;
+export const LINES_MOVE_EVAL_GATE_CP = 55;
+export const OPENING_ENRICH_STALE_DAYS = 7;
+
+export type LinesMoveCategory = 'best' | 'book' | 'miss';
+
+export type OpeningBuildMode = 'fast' | 'normal' | 'backfill' | 'extend_depth';
+
+export type OpeningBuildState = {
+  profileId: string;
+  timeClass: string;
+  lastImportedAt: string | null;
+  newestGameEndTime: string | null;
+  oldestArchiveCursor: string | null;
+  processedGameIds: string[];
+  buildMode: OpeningBuildMode;
+  targetDepth: number;
+};
+
+export type ForkCoverageEntry = {
+  nodeId: string;
+  playedEdgeIds: string[];
+  remainingEdgeIds: string[];
+};
+
+export type ForkCoverageMap = Record<string, ForkCoverageEntry>;
+
+export type LinesSessionPhase =
+  | 'idle'
+  | 'replaying'
+  | 'awaiting_train'
+  | 'showing_feedback'
+  | 'playing_opponent'
+  | 'fork_pause'
+  | 'branch_complete';
+
+export type LinesSessionState = {
+  phase: LinesSessionPhase;
+  trainSide: OpeningSide;
+  activeNodeId: string | null;
+  forkCoverage: ForkCoverageMap;
+  schedulerMode: 'full_line' | 'layer';
+  seed: number;
+};
+
+export type LinesSchedulerAction =
+  | { type: 'await_user' }
+  | { type: 'play_opponent'; edgeId: string; edgeUci: string; toNodeId: string }
+  | { type: 'branch_complete' }
+  | { type: 'ascend_fork'; nodeId: string };
 
 export function formatOpeningTreeDisplayName(name: string) {
   const cleanName = String(name ?? '')
@@ -224,21 +278,566 @@ export function classifyOpeningDrillMove(
   playedUci: string,
   expected: Pick<AcceptedTrainMoves, 'primaryUci' | 'acceptedUcis'> | null,
 ) {
+  const lines = classifyLinesMove(tree, nodeId, playedUci, expected);
+  return {
+    correct: lines.category !== 'miss',
+    exact: lines.category === 'best',
+    category: lines.category,
+    evalLossCp: lines.evalLossCp,
+  };
+}
+
+export function classifyLinesMove(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+  playedUci: string,
+  expected: Pick<AcceptedTrainMoves, 'primaryUci' | 'acceptedUcis'> | null = null,
+): { category: LinesMoveCategory; evalLossCp: number | null } {
   const resolved = expected ?? resolveAcceptedTrainMoveUcis(tree, nodeId);
   const primaryUci = resolved.primaryUci;
+  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
 
-  if (resolved.acceptedUcis.length === 0 && primaryUci == null) {
-    return { correct: false, exact: false };
+  if (primaryUci != null && playedUci === primaryUci) {
+    return { category: 'best', evalLossCp: 0 };
   }
 
-  if (!isAcceptedOpeningDrillMove(fenBefore, playedUci, resolved.acceptedUcis)) {
-    return { correct: false, exact: false };
+  if (!resolved.acceptedUcis.includes(playedUci)) {
+    return { category: 'miss', evalLossCp: null };
+  }
+
+  const evalLossCp = computeTrainMoveEvalLossCp(tree, nodeId, playedUci, resolved.acceptedUcis);
+
+  if (evalLossCp == null || evalLossCp > LINES_MOVE_EVAL_GATE_CP) {
+    return { category: 'miss', evalLossCp };
+  }
+
+  return { category: 'book', evalLossCp };
+}
+
+function computeTrainMoveEvalLossCp(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+  playedUci: string,
+  acceptedUcis: string[],
+): number | null {
+  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+
+  if (!node) {
+    return null;
+  }
+
+  const swings = acceptedUcis
+    .map((uci) => {
+      const edge = tree.edges.find((candidate) => candidate.fromNodeId === nodeId && candidate.uci === uci);
+      const target = edge ? tree.nodes.find((candidate) => candidate.id === edge.toNodeId) : null;
+      return target ? evalSwingCp(node, target) : null;
+    })
+    .filter((swing): swing is number => swing != null);
+
+  if (swings.length === 0) {
+    return null;
+  }
+
+  const playedEdge = tree.edges.find((candidate) => candidate.fromNodeId === nodeId && candidate.uci === playedUci);
+  const playedTarget = playedEdge ? tree.nodes.find((candidate) => candidate.id === playedEdge.toNodeId) : null;
+  const playedSwing = playedTarget ? evalSwingCp(node, playedTarget) : null;
+
+  if (playedSwing == null) {
+    return null;
+  }
+
+  const bestSwing = Math.max(...swings);
+  return Math.max(0, Math.round(bestSwing - playedSwing));
+}
+
+function evalSwingCp(
+  node: OpeningTreeNode | OpeningNodeDraft,
+  target: OpeningTreeNode | OpeningNodeDraft,
+): number | null {
+  if (node.evalCp == null || target.evalCp == null) {
+    return null;
+  }
+
+  return node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
+}
+
+export function mapOpeningLibraryToDb(library: OpeningLibrary): string {
+  switch (library) {
+    case 'e4':
+      return 'e4';
+    case 'd4':
+      return 'd4';
+    case 'c4':
+      return 'c4';
+    case 'nf3':
+      return 'nf3';
+    case 'other':
+      return 'other';
+  }
+}
+
+export function mapOpeningLibraryFromDb(value: unknown): OpeningLibrary {
+  if (value === 'e4' || value === 'd4' || value === 'c4' || value === 'nf3' || value === 'other') {
+    return value;
+  }
+
+  if (value === 'white') {
+    return 'e4';
+  }
+
+  if (value === 'black_vs_e4') {
+    return 'e4';
+  }
+
+  if (value === 'black_vs_d4') {
+    return 'd4';
+  }
+
+  if (value === 'black_vs_c4') {
+    return 'c4';
+  }
+
+  if (value === 'black_vs_n_f3') {
+    return 'nf3';
+  }
+
+  return 'other';
+}
+
+export function resolveTargetDepthForBuildMode(
+  mode: OpeningBuildMode,
+  currentDepth: number = DEFAULT_OPENING_TARGET_DEPTH,
+): number {
+  switch (mode) {
+    case 'fast':
+      return OPENING_TARGET_DEPTH_FAST;
+    case 'normal':
+      return OPENING_TARGET_DEPTH_NORMAL;
+    case 'backfill':
+      return OPENING_TARGET_DEPTH_DEEP;
+    case 'extend_depth':
+      return Math.min(OPENING_TARGET_DEPTH_DEEP, currentDepth + OPENING_TARGET_DEPTH_EXTEND_DELTA);
+  }
+}
+
+export function buildForkCoverage(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  trainSide: OpeningSide,
+): ForkCoverageMap {
+  const coverage: ForkCoverageMap = {};
+
+  for (const node of tree.nodes) {
+    if (node.sideToMove === trainSide) {
+      continue;
+    }
+
+    const outgoing = tree.edges.filter((edge) => edge.fromNodeId === node.id);
+
+    if (outgoing.length < 2) {
+      continue;
+    }
+
+    coverage[node.id] = {
+      nodeId: node.id,
+      playedEdgeIds: [],
+      remainingEdgeIds: outgoing.map((edge) => edge.id),
+    };
+  }
+
+  return coverage;
+}
+
+export function markForkEdgePlayed(coverage: ForkCoverageMap, nodeId: string, edgeId: string): ForkCoverageMap {
+  const entry = coverage[nodeId];
+
+  if (!entry) {
+    return coverage;
+  }
+
+  const playedEdgeIds = entry.playedEdgeIds.includes(edgeId) ? entry.playedEdgeIds : [...entry.playedEdgeIds, edgeId];
+  const remainingEdgeIds = entry.remainingEdgeIds.filter((candidate) => candidate !== edgeId);
+
+  return {
+    ...coverage,
+    [nodeId]: {
+      ...entry,
+      playedEdgeIds,
+      remainingEdgeIds,
+    },
+  };
+}
+
+export function findNearestOpenFork(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  coverage: ForkCoverageMap,
+  fromNodeId: string,
+): ForkCoverageEntry | null {
+  const parentByChild = new Map<string, string>();
+
+  for (const edge of tree.edges) {
+    parentByChild.set(edge.toNodeId, edge.fromNodeId);
+  }
+
+  let currentId: string | null = fromNodeId;
+  const visited = new Set<string>();
+
+  while (currentId && !visited.has(currentId)) {
+    visited.add(currentId);
+    const entry = coverage[currentId];
+
+    if (entry && entry.remainingEdgeIds.length > 0) {
+      return entry;
+    }
+
+    currentId = parentByChild.get(currentId) ?? null;
+  }
+
+  return null;
+}
+
+export function pickNextUnplayedOpponentEdge(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  coverage: ForkCoverageMap,
+  nodeId: string,
+  seed: number,
+): OpeningTreeEdge | null {
+  const entry = coverage[nodeId];
+
+  if (!entry || entry.remainingEdgeIds.length === 0) {
+    return null;
+  }
+
+  const remaining = tree.edges.filter((edge) => entry.remainingEdgeIds.includes(edge.id));
+  return chooseWeightedOpponentEdge(remaining, seed);
+}
+
+export function pickFullLineTargetNodeId(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'targetDepth' | 'rootSan'>,
+  options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
+): string | null {
+  const path = buildDrillPath(tree, options);
+  const lastStep = path[path.length - 1];
+  return lastStep?.nodeId ?? null;
+}
+
+export function pickNextSchedulerAction(tree: OpeningTreeDetail, session: LinesSessionState): LinesSchedulerAction {
+  const node = session.activeNodeId ? tree.nodes.find((candidate) => candidate.id === session.activeNodeId) : null;
+
+  if (!node) {
+    return { type: 'branch_complete' };
+  }
+
+  const openFork = findNearestOpenFork(tree, session.forkCoverage, node.id);
+
+  if (openFork && openFork.remainingEdgeIds.length > 0 && session.schedulerMode === 'layer') {
+    const edge = pickNextUnplayedOpponentEdge(tree, session.forkCoverage, openFork.nodeId, session.seed);
+
+    if (edge) {
+      return {
+        type: 'play_opponent',
+        edgeId: edge.id,
+        edgeUci: edge.uci,
+        toNodeId: edge.toNodeId,
+      };
+    }
+  }
+
+  if (node.sideToMove === session.trainSide) {
+    return { type: 'await_user' };
+  }
+
+  const outgoing = tree.edges.filter((edge) => edge.fromNodeId === node.id);
+
+  if (outgoing.length === 0) {
+    const fork = findNearestOpenFork(tree, session.forkCoverage, node.id);
+
+    if (fork) {
+      return { type: 'ascend_fork', nodeId: fork.nodeId };
+    }
+
+    return { type: 'branch_complete' };
+  }
+
+  const forkEntry = session.forkCoverage[node.id];
+
+  if (forkEntry && forkEntry.remainingEdgeIds.length > 0) {
+    const edge = pickNextUnplayedOpponentEdge(tree, session.forkCoverage, node.id, session.seed);
+
+    if (edge) {
+      return {
+        type: 'play_opponent',
+        edgeId: edge.id,
+        edgeUci: edge.uci,
+        toNodeId: edge.toNodeId,
+      };
+    }
+  }
+
+  const edge = chooseWeightedOpponentEdge(outgoing, session.seed);
+
+  if (!edge) {
+    return { type: 'branch_complete' };
   }
 
   return {
-    correct: true,
-    exact: primaryUci != null && playedUci === primaryUci,
+    type: 'play_opponent',
+    edgeId: edge.id,
+    edgeUci: edge.uci,
+    toNodeId: edge.toNodeId,
   };
+}
+
+export function resolveOpeningNodeFromHistory(
+  tree: OpeningTreeDetail,
+  moveHistory: Array<{ uci: string }>,
+  historyIndex: number,
+): { nodeId: string | null; plyInTree: number } {
+  const rootLength = tree.rootSan.length;
+  const boundedIndex = Math.max(0, Math.min(historyIndex, moveHistory.length));
+
+  if (boundedIndex < rootLength) {
+    const rootNode = tree.nodes.find((node) => node.ply === rootLength) ?? tree.nodes[0] ?? null;
+    return { nodeId: rootNode?.id ?? null, plyInTree: boundedIndex };
+  }
+
+  let currentNode = tree.nodes.find((node) => node.ply === rootLength) ?? tree.nodes[0] ?? null;
+
+  for (let index = rootLength; index < boundedIndex; index += 1) {
+    const move = moveHistory[index];
+
+    if (!move || !currentNode) {
+      break;
+    }
+
+    const edge = tree.edges.find((candidate) => candidate.fromNodeId === currentNode!.id && candidate.uci === move.uci);
+    const nextNode = edge ? tree.nodes.find((candidate) => candidate.id === edge.toNodeId) : null;
+
+    if (!nextNode) {
+      return { nodeId: currentNode.id, plyInTree: index };
+    }
+
+    currentNode = nextNode;
+  }
+
+  return { nodeId: currentNode?.id ?? null, plyInTree: boundedIndex };
+}
+
+export function classifyLinesMoveAtHistoryIndex(
+  tree: OpeningTreeDetail,
+  moveHistory: Array<{ uci: string }>,
+  historyIndex: number,
+  trainSide: OpeningSide,
+): { moveUci: string; category: LinesMoveCategory } | null {
+  if (historyIndex <= 0 || historyIndex > moveHistory.length) {
+    return null;
+  }
+
+  const move = moveHistory[historyIndex - 1];
+
+  if (!move) {
+    return null;
+  }
+
+  const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, historyIndex - 1);
+  const node = nodeId ? tree.nodes.find((candidate) => candidate.id === nodeId) : null;
+
+  if (!node || node.sideToMove !== trainSide) {
+    return null;
+  }
+
+  const classified = classifyLinesMove(tree, nodeId!, move.uci);
+
+  return {
+    moveUci: move.uci,
+    category: classified.category,
+  };
+}
+
+export function linesMoveCategoryToReviewCategory(category: LinesMoveCategory) {
+  switch (category) {
+    case 'best':
+      return 'best' as const;
+    case 'book':
+      return 'book' as const;
+    case 'miss':
+      return 'miss' as const;
+  }
+}
+
+export function createLinesSession(
+  tree: OpeningTreeDetail,
+  trainSide: OpeningSide,
+  startNodeId?: string | null,
+): LinesSessionState {
+  const rootNode = startNodeId
+    ? tree.nodes.find((node) => node.id === startNodeId)
+    : (tree.nodes.find((node) => node.ply === tree.rootSan.length) ?? tree.nodes[0] ?? null);
+
+  return {
+    phase: 'idle',
+    trainSide,
+    activeNodeId: rootNode?.id ?? null,
+    forkCoverage: buildForkCoverage(tree, trainSide),
+    schedulerMode: 'full_line',
+    seed: Date.now(),
+  };
+}
+
+export function maxLinePliesForTree(tree: Pick<OpeningTreeDetail, 'targetDepth' | 'rootSan'>): number {
+  return Math.max(0, tree.targetDepth - tree.rootSan.length);
+}
+
+export type OpeningTreeDraftPreload = {
+  draft: OpeningTreeDraft;
+  nodeRows: Array<Record<string, unknown>>;
+  edgeRows: Array<Record<string, unknown>>;
+};
+
+export function draftFromPreloadedTree(
+  treeRow: Record<string, unknown>,
+  nodeRows: Array<Record<string, unknown>>,
+  edgeRows: Array<Record<string, unknown>>,
+): OpeningTreeDraft {
+  const treeId = String(treeRow.id);
+
+  return {
+    id: treeId,
+    name: String(treeRow.name ?? 'Opening'),
+    library: mapOpeningLibraryFromDb(treeRow.library),
+    rootFenKey: String(treeRow.root_fen_key ?? treeRow.rootFenKey ?? ''),
+    rootPly: Number(treeRow.root_ply ?? treeRow.rootPly ?? DEFAULT_OPENING_ROOT_PLY),
+    rootSan: Array.isArray(treeRow.root_san) ? treeRow.root_san.map(String) : [],
+    rootUci: Array.isArray(treeRow.root_uci) ? treeRow.root_uci.map(String) : [],
+    sourceCount: Number(treeRow.source_count ?? 0),
+    targetDepth: Number(treeRow.target_depth ?? DEFAULT_OPENING_TARGET_DEPTH),
+    trainSide: 'white',
+    nodes: nodeRows.map((row) => ({
+      id: String(row.id),
+      fen: String(row.fen),
+      fenKey: String(row.fen_key),
+      ply: Number(row.ply ?? 0),
+      sideToMove: row.side_to_move === 'black' ? 'black' : 'white',
+      trainSide: row.train_side === 'black' ? 'black' : 'white',
+      bestUci: row.best_uci ? String(row.best_uci) : null,
+      bestSan: row.best_san ? String(row.best_san) : null,
+      evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
+      recentGames: Number(row.recent_games ?? 0),
+      cardCount: Number(row.card_count ?? 0),
+    })),
+    edges: edgeRows.map((row) => ({
+      id: String(row.id),
+      fromNodeId: String(row.from_node_id),
+      toNodeId: String(row.to_node_id),
+      uci: String(row.uci),
+      san: String(row.san),
+      moveBy: row.move_by === 'black' ? 'black' : 'white',
+      source:
+        row.source === 'card' ||
+        row.source === 'lichess_masters' ||
+        row.source === 'engine_best' ||
+        row.source === 'mixed'
+          ? row.source
+          : 'recent_game',
+      recentCount: Number(row.recent_count ?? 0),
+      cardCount: Number(row.card_count ?? 0),
+      mastersGames: Number(row.masters_games ?? 0),
+      priority: Number(row.priority ?? 0),
+      isEngineBest: Boolean(row.is_engine_best),
+    })),
+  };
+}
+
+export function mergeOpeningTreeDelta(
+  existing: OpeningTreeDraft,
+  deltaInputs: OpeningTreeBuildInput[],
+  options: { ownerProfileId: string; targetDepth: number; rootPly: number },
+): { draft: OpeningTreeDraft; newNodeIds: Set<string>; newEdgeIds: Set<string> } {
+  const freshTrees = buildOpeningTrees(deltaInputs, {
+    ownerProfileId: options.ownerProfileId,
+    targetDepth: options.targetDepth,
+    rootPly: options.rootPly,
+  });
+  const matching = freshTrees.find((tree) => tree.rootFenKey === existing.rootFenKey);
+
+  if (!matching) {
+    return { draft: existing, newNodeIds: new Set(), newEdgeIds: new Set() };
+  }
+
+  const nodeByFenKey = new Map(existing.nodes.map((node) => [node.fenKey, node]));
+  const edgeByKey = new Map(existing.edges.map((edge) => [`${edge.fromNodeId}:${edge.uci}`, edge]));
+  const newNodeIds = new Set<string>();
+  const newEdgeIds = new Set<string>();
+
+  for (const node of matching.nodes) {
+    const current = nodeByFenKey.get(node.fenKey);
+
+    if (!current) {
+      existing.nodes.push({ ...node, trainSide: node.trainSide ?? existing.trainSide });
+      nodeByFenKey.set(node.fenKey, node);
+      newNodeIds.add(node.id);
+      continue;
+    }
+
+    current.recentGames += node.recentGames;
+    current.cardCount += node.cardCount;
+  }
+
+  for (const edge of matching.edges) {
+    const key = `${edge.fromNodeId}:${edge.uci}`;
+    const current = edgeByKey.get(key);
+
+    if (!current) {
+      existing.edges.push(edge);
+      edgeByKey.set(key, edge);
+      newEdgeIds.add(edge.id);
+      continue;
+    }
+
+    current.recentCount += edge.recentCount;
+    current.cardCount += edge.cardCount;
+    current.priority = Math.max(current.priority, edge.priority);
+    current.source =
+      current.source === edge.source
+        ? current.source
+        : current.source === 'recent_game' || current.source === 'card'
+          ? 'mixed'
+          : current.source;
+  }
+
+  existing.sourceCount += matching.sourceCount;
+  existing.targetDepth = Math.max(existing.targetDepth, options.targetDepth);
+  existing.nodes.sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id));
+  existing.edges.sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id));
+
+  return { draft: existing, newNodeIds, newEdgeIds };
+}
+
+export function shouldSkipNodeEnrichment(_node: OpeningNodeDraft, _staleBeforeMs: number): boolean {
+  return false;
+}
+
+export function shouldEnrichNodeLazy(node: OpeningNodeDraft, trainSide: OpeningSide, mode: OpeningBuildMode): boolean {
+  if (mode === 'fast') {
+    return false;
+  }
+
+  if (node.ply <= 16) {
+    return true;
+  }
+
+  if (node.ply <= 22) {
+    return node.recentGames >= 2 || (node.sideToMove === trainSide && (node.evalCp ?? 0) < 70);
+  }
+
+  return node.cardCount > 0;
+}
+
+export function buildOpeningTreesIncremental(
+  existing: OpeningTreeDraft,
+  deltaInputs: OpeningTreeBuildInput[],
+  options: { ownerProfileId: string; targetDepth: number; rootPly: number },
+) {
+  return mergeOpeningTreeDelta(existing, deltaInputs, options);
 }
 
 export function normalizeOpeningFen(fen: string) {

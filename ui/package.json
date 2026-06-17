@@ -21,6 +21,7 @@
     "chesscom:recent": "node scripts/chesscom/fetch-recent-games.mjs",
     "chesscom:audit:analysis": "node scripts/chesscom/audit-analysis.mjs",
     "chesscom:build:deck": "node scripts/chesscom/build-recent-blitz-deck.mjs",
+    "chesscom:build:opening-trees": "node scripts/chesscom/build-opening-trees.mjs",
     "supabase:migrate": "node scripts/supabase/migrate.mjs",
     "supabase:apply-migration": "node scripts/supabase/apply-migration.mjs",
     "supabase:seed": "node scripts/supabase/seed-decks.mjs",

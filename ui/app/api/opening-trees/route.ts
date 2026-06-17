@@ -6,10 +6,11 @@ import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
   applyOpeningAttemptScore,
-  type buildOpeningTrees,
   chooseWeightedOpponentEdge,
   DEFAULT_OPENING_TARGET_DEPTH,
   ensureDraftEdge,
+  mapOpeningLibraryFromDb,
+  type OpeningBuildMode,
   type OpeningLibrary,
   type OpeningTreeBuildInput,
   type OpeningTreeDetail,
@@ -17,7 +18,17 @@ import {
   type OpeningTreeEdge,
   type OpeningTreeNode,
   type OpeningTreeSummary,
+  resolveTargetDepthForBuildMode,
 } from '@/lib/opening-tree';
+import {
+  buildFreshOpeningForest,
+  buildInputsFromRows,
+  draftToUpsertRows,
+  listNodesNeedingEnrichment,
+  mergeIncrementalOpeningForest,
+  OPENING_BUILD_ROOT_PLY,
+  type OpeningTreeImportResult,
+} from '@/lib/opening-tree-import';
 import { getStockfishSession } from '@/lib/stockfish-session';
 import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
@@ -78,7 +89,11 @@ export async function POST(request: Request) {
 
   try {
     if (action === 'import_recent') {
-      return importRecentOpeningTrees(profile);
+      const mode = parseBuildMode(body.mode);
+      const timeClasses = parseTimeClasses(body.timeClasses);
+      const maxGames = body.maxGames == null ? null : Number(body.maxGames);
+      const treeId = body.treeId == null ? null : String(body.treeId);
+      return importRecentOpeningTrees(profile, { mode, timeClasses, maxGames, treeId });
     }
 
     if (action === 'attempt') {
@@ -96,18 +111,233 @@ export async function POST(request: Request) {
   }
 }
 
-async function importRecentOpeningTrees(profile: TrainingProfileCookie) {
+async function importRecentOpeningTrees(
+  profile: TrainingProfileCookie,
+  options: {
+    mode: OpeningBuildMode;
+    timeClasses: string[];
+    maxGames: number | null;
+    treeId: string | null;
+  },
+) {
   const supabase = createAdminClient();
-  const { count, error } = await supabase
-    .from('opening_trees')
-    .select('id', { count: 'exact', head: true })
-    .eq('owner_profile_id', profile.id);
+  const buildState = await loadBuildState(supabase, profile.id, options.timeClasses[0] ?? 'all');
+  const currentTargetDepth = buildState?.target_depth ?? DEFAULT_OPENING_TARGET_DEPTH;
+  const targetDepth =
+    options.mode === 'extend_depth' && options.treeId
+      ? resolveTargetDepthForBuildMode('extend_depth', currentTargetDepth)
+      : resolveTargetDepthForBuildMode(options.mode, currentTargetDepth);
+  const { inputs, processedIds, skippedGames } = await loadDeltaInputs(
+    supabase,
+    profile.id,
+    buildState?.processed_game_ids ?? [],
+    options,
+  );
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+  if (inputs.length === 0) {
+    return NextResponse.json({ imported: 0, nodes: 0, edges: 0, skippedGames } satisfies OpeningTreeImportResult);
   }
 
-  return NextResponse.json({ imported: count ?? 0, nodes: 0, edges: 0 });
+  const touchedRootKeys = new Set(
+    buildFreshOpeningForest(inputs, {
+      ownerProfileId: profile.id,
+      targetDepth,
+      rootPly: OPENING_BUILD_ROOT_PLY,
+    }).map((draft) => draft.rootFenKey),
+  );
+  const existingBundles = await loadExistingTreeBundles(supabase, profile.id, [...touchedRootKeys]);
+  const merged =
+    existingBundles.length > 0
+      ? mergeIncrementalOpeningForest(existingBundles, inputs, {
+          ownerProfileId: profile.id,
+          mode: options.mode,
+          currentTargetDepth,
+        })
+      : {
+          drafts: buildFreshOpeningForest(inputs, {
+            ownerProfileId: profile.id,
+            targetDepth,
+            rootPly: OPENING_BUILD_ROOT_PLY,
+          }),
+          newNodeCount: 0,
+          newEdgeCount: 0,
+        };
+
+  let nodeCount = 0;
+  let edgeCount = 0;
+
+  for (const draft of merged.drafts) {
+    if (options.mode !== 'fast') {
+      await enrichOpeningTreeDraftLazy(draft, options.mode);
+    } else {
+      await enrichLichessBookMoves(draft);
+    }
+
+    await upsertTreeDraft(supabase, profile.id, draft);
+    nodeCount += draft.nodes.length;
+    edgeCount += draft.edges.length;
+  }
+
+  await saveBuildState(supabase, profile.id, options.timeClasses[0] ?? 'all', {
+    build_mode: options.mode,
+    target_depth: targetDepth,
+    processed_game_ids: [...new Set([...(buildState?.processed_game_ids ?? []), ...processedIds])],
+    last_imported_at: new Date().toISOString(),
+  });
+
+  return NextResponse.json({
+    imported: merged.drafts.length,
+    nodes: nodeCount,
+    edges: edgeCount,
+    skippedGames,
+  } satisfies OpeningTreeImportResult);
+}
+
+async function loadBuildState(supabase: ReturnType<typeof createAdminClient>, profileId: string, timeClass: string) {
+  const { data, error } = await supabase
+    .from('opening_build_state')
+    .select('processed_game_ids,build_mode,target_depth,last_imported_at')
+    .eq('profile_id', profileId)
+    .eq('time_class', timeClass)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    return null;
+  }
+
+  return {
+    processed_game_ids: Array.isArray(data.processed_game_ids) ? data.processed_game_ids.map(String) : [],
+    build_mode: String(data.build_mode ?? 'normal'),
+    target_depth: Number(data.target_depth ?? DEFAULT_OPENING_TARGET_DEPTH),
+    last_imported_at: data.last_imported_at ? String(data.last_imported_at) : null,
+  };
+}
+
+async function saveBuildState(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  timeClass: string,
+  patch: {
+    build_mode: OpeningBuildMode;
+    target_depth: number;
+    processed_game_ids: string[];
+    last_imported_at: string;
+  },
+) {
+  const { error } = await supabase.from('opening_build_state').upsert(
+    {
+      profile_id: profileId,
+      time_class: timeClass,
+      build_mode: patch.build_mode,
+      target_depth: patch.target_depth,
+      processed_game_ids: patch.processed_game_ids,
+      last_imported_at: patch.last_imported_at,
+      updated_at: patch.last_imported_at,
+    },
+    { onConflict: 'profile_id,time_class' },
+  );
+
+  if (error) {
+    throw new Error(error.message);
+  }
+}
+
+async function loadDeltaInputs(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  processedGameIds: string[],
+  options: { maxGames: number | null },
+) {
+  const { data: decks, error: deckError } = await supabase
+    .from('decks')
+    .select('id')
+    .eq('is_active', true)
+    .eq('owner_profile_id', profileId);
+
+  if (deckError) {
+    throw new Error(deckError.message);
+  }
+
+  const deckIds = (decks ?? []).map((deck) => String(deck.id));
+
+  if (deckIds.length === 0) {
+    return { inputs: [] as OpeningTreeBuildInput[], processedIds: [] as string[], skippedGames: 0 };
+  }
+
+  const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
+    supabase.from('opening_lines').select('id,name,side,moves').in('deck_id', deckIds),
+    supabase
+      .from('deck_cards')
+      .select('id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp')
+      .in('deck_id', deckIds),
+  ]);
+
+  if (linesError) {
+    throw new Error(linesError.message);
+  }
+
+  if (cardsError) {
+    throw new Error(cardsError.message);
+  }
+
+  const processedSet = new Set(processedGameIds);
+  const freshLines = (lines ?? []).filter((line) => !processedSet.has(String(line.id)));
+  const freshCards = (cards ?? []).filter((card) => !processedSet.has(String(card.id)));
+  const boundedLines = options.maxGames == null ? freshLines : freshLines.slice(0, Math.max(0, options.maxGames));
+  const inputs = buildInputsFromRows(boundedLines, freshCards);
+  const processedIds = [...boundedLines.map((line) => String(line.id)), ...freshCards.map((card) => String(card.id))];
+
+  return {
+    inputs,
+    processedIds,
+    skippedGames: (lines?.length ?? 0) - freshLines.length,
+  };
+}
+
+async function loadExistingTreeBundles(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  rootFenKeys: string[],
+) {
+  if (rootFenKeys.length === 0) {
+    return [];
+  }
+
+  const { data: trees, error } = await supabase
+    .from('opening_trees')
+    .select('id,library,name,root_fen_key,root_ply,root_san,root_uci,source_count,target_depth')
+    .eq('owner_profile_id', profileId)
+    .in('root_fen_key', rootFenKeys);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const bundles = [];
+
+  for (const tree of trees ?? []) {
+    const treeId = String(tree.id);
+    const [nodeRows, edgeRows] = await Promise.all([fetchNodes(supabase, [treeId]), fetchEdges(supabase, [treeId])]);
+    bundles.push({ treeRow: tree, nodeRows, edgeRows });
+  }
+
+  return bundles;
+}
+
+function parseBuildMode(value: unknown): OpeningBuildMode {
+  return value === 'fast' || value === 'normal' || value === 'backfill' || value === 'extend_depth' ? value : 'fast';
+}
+
+function parseTimeClasses(value: unknown) {
+  if (!Array.isArray(value)) {
+    return ['bullet', 'blitz'];
+  }
+
+  return value.map((item) => String(item));
 }
 
 async function recordAttempt(profile: TrainingProfileCookie, body: Record<string, unknown>) {
@@ -165,6 +395,51 @@ async function chooseNextStep(profile: TrainingProfileCookie, body: Record<strin
   const selected = chooseWeightedOpponentEdge(outgoing, Date.now());
 
   return NextResponse.json({ edge: selected });
+}
+
+async function upsertTreeDraft(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  draft: OpeningTreeDraft,
+) {
+  const now = new Date().toISOString();
+  const rows = draftToUpsertRows(draft, now);
+  const { error: treeError } = await supabase.from('opening_trees').upsert(
+    {
+      ...rows.tree,
+      owner_profile_id: profileId,
+    },
+    { onConflict: 'owner_profile_id,library,root_fen_key' },
+  );
+
+  if (treeError) {
+    throw new Error(treeError.message);
+  }
+
+  if (rows.nodes.length > 0) {
+    const { error } = await supabase.from('opening_nodes').upsert(rows.nodes, { onConflict: 'tree_id,fen_key' });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  if (rows.edges.length > 0) {
+    const { error } = await supabase.from('opening_edges').upsert(rows.edges, {
+      onConflict: 'tree_id,from_node_id,uci',
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+}
+
+async function enrichOpeningTreeDraftLazy(draft: OpeningTreeDraft, mode: OpeningBuildMode) {
+  const nodesToEnrich = listNodesNeedingEnrichment(draft, mode);
+  const limitedDraft = { ...draft, nodes: nodesToEnrich };
+  await enrichEngineBestMoves(limitedDraft);
+  await enrichLichessBookMoves(draft);
 }
 
 async function _upsertTreeDraft(
@@ -246,8 +521,7 @@ async function _upsertTreeDraft(
 }
 
 async function _enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
-  await enrichEngineBestMoves(draft);
-  await enrichLichessBookMoves(draft);
+  await enrichOpeningTreeDraftLazy(draft, 'normal');
 }
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
@@ -625,7 +899,7 @@ async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | n
 }
 
 function normalizeLibrary(value: unknown): OpeningLibrary {
-  return value === 'e4' || value === 'd4' || value === 'c4' || value === 'nf3' || value === 'other' ? value : 'e4';
+  return mapOpeningLibraryFromDb(value);
 }
 
 function normalizeEdgeSource(value: unknown) {

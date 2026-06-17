@@ -185,14 +185,13 @@ export function LabBoardArea() {
               {boardReviewBadge ? (
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute z-5 h-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] w-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-(--board-review-badge-color) bg-contain bg-center bg-no-repeat shadow-[0_10px_24px_rgba(8,13,21,0.34),0_0_0_1px_rgba(255,255,255,0.22)] drop-shadow-[0_2px_3px_rgba(0,0,0,0.34)]"
+                  className="pointer-events-none absolute z-5 h-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] w-[clamp(22px,calc(var(--board-square-size)*0.34),42px)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-contain bg-center bg-no-repeat shadow-[0_10px_24px_rgba(8,13,21,0.34),0_0_0_1px_rgba(255,255,255,0.22)] drop-shadow-[0_2px_3px_rgba(0,0,0,0.34)]"
                   style={
                     {
-                      '--board-review-badge-url': `url(${boardReviewBadge.badge})`,
-                      '--board-review-badge-color': boardReviewBadge.color,
                       '--board-square-size': `${boardReviewBadge.squareSize}px`,
                       left: `${boardReviewBadge.left}px`,
                       top: `${boardReviewBadge.top}px`,
+                      backgroundColor: boardReviewBadge.color,
                       backgroundImage: `url(${boardReviewBadge.badge})`,
                     } as CSSProperties
                   }

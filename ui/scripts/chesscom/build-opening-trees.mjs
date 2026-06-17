@@ -1,9 +1,10 @@
+import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
 const DEFAULT_OPENING_ROOT_PLY = 4;
-const DEFAULT_OPENING_TARGET_DEPTH = 10;
+const DEFAULT_OPENING_TARGET_DEPTH = 22;
 const MAX_ENGINE_IMPORT_NODES = 60;
 const MAX_LICHESS_IMPORT_NODES = 120;
 const LICHESS_EXPLORER_URL = 'https://explorer.lichess.org/masters';
@@ -404,7 +405,6 @@ export async function buildAndUpsertOpeningTrees({
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const { fileURLToPath } = await import('node:url');
   main().catch((error) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
@@ -412,7 +412,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 }
 
 async function main() {
-  const { fileURLToPath } = await import('node:url');
   const env = loadLocalEnv();
   const supabaseUrl = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const adminKey = requireAdminKey(env);

@@ -133,7 +133,7 @@ export function LabSidebar() {
               activeTreeId={lab.labState.selectedOpeningTreeId}
               deckFeedback={lab.labState.deckFeedback}
               drillActive={lab.labState.openingDrillActive}
-              drillStatus={lab.labState.openingDrillStatus}
+              forkCoverage={lab.linesForkCoverage}
               expectedSan={
                 lab.labState.openingDrillExpected?.san ??
                 (lab.labState.openingDrillExpected?.uci
@@ -144,7 +144,6 @@ export function LabSidebar() {
               onImportRecent={() => void lab.importRecentOpeningTrees()}
               onSelectNode={lab.selectOpeningNode}
               onSelectTree={lab.selectOpeningTree}
-              onStartDrill={() => lab.startOpeningDrill()}
               trainSide={lab.labState.activeTrainSide}
               onChangeTrainSide={(side) => {
                 lab.labState.setActiveTrainSide(side);
