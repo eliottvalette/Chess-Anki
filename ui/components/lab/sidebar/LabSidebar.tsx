@@ -7,7 +7,6 @@ import {
   TrainingProfilePanel,
   TrainPanel,
 } from '@/components/chess-lab-panels';
-import { formatBestMove } from '@/lib/chess-analysis-client';
 import type { WorkspaceMode } from '../../../lib/analysis-types';
 import { createEmptyTrainSessionStats, LAST_TRAINING_DECK_STORAGE_KEY } from '../../../lib/lab-helpers';
 import { useLab } from '../LabContext';
@@ -134,23 +133,33 @@ export function LabSidebar() {
               deckFeedback={lab.labState.deckFeedback}
               drillActive={lab.labState.openingDrillActive}
               forkCoverage={lab.linesForkCoverage}
-              expectedSan={
-                lab.labState.openingDrillExpected?.san ??
-                (lab.labState.openingDrillExpected?.uci
-                  ? formatBestMove(lab.currentFen, lab.labState.openingDrillExpected.uci)
-                  : null)
-              }
+              hasNextLearnBranch={lab.linesHasNextLearnBranch}
+              learnBranchComplete={lab.labState.linesLearnBranchComplete}
+              linesStudyMode={lab.labState.linesStudyMode}
               loading={lab.labState.openingTreesLoading}
               onImportRecent={() => void lab.importRecentOpeningTrees()}
+              onNextLearnBranch={() => lab.startNextLearnBranch()}
+              onQuitSession={() => lab.quitLinesSession()}
               onSelectNode={lab.selectOpeningNode}
               onSelectTree={lab.selectOpeningTree}
+              onStartLearn={() => lab.startLinesLearn()}
+              onStartReview={() => lab.startLinesReview()}
+              reviewIndex={lab.labState.linesReviewIndex}
+              reviewQueueLength={lab.labState.linesReviewQueue.length}
+              sessionTrainPlyCurrent={lab.labState.linesTrainPlyCurrent}
+              sessionTrainPlyTotal={lab.labState.linesTrainPlyTotal}
               trainSide={lab.labState.activeTrainSide}
               onChangeTrainSide={(side) => {
                 lab.labState.setActiveTrainSide(side);
                 lab.labState.setOrientation(side);
 
-                if (lab.labState.activeOpeningTree) {
-                  lab.startOpeningDrill(lab.labState.activeOpeningTree, side);
+                if (lab.labState.linesStudyMode === 'learn') {
+                  lab.startLinesLearn(lab.labState.activeOpeningTree ?? undefined, side);
+                  return;
+                }
+
+                if (lab.labState.linesStudyMode === 'review') {
+                  lab.startLinesReview(lab.labState.activeOpeningTree ?? undefined, side);
                 }
               }}
               trees={lab.labState.openingTrees}

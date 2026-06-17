@@ -151,7 +151,11 @@ export const OPENING_TARGET_DEPTH_NORMAL = 22;
 export const OPENING_TARGET_DEPTH_DEEP = 28;
 export const OPENING_TARGET_DEPTH_EXTEND_DELTA = 4;
 export const DEFAULT_OPENING_TARGET_DEPTH = OPENING_TARGET_DEPTH_NORMAL;
-export const LINES_MOVE_EVAL_GATE_CP = 55;
+export const LINES_MOVE_EVAL_GATE_CP = 25;
+export const LINES_REVIEW_DUE_MASTERY_THRESHOLD = 80;
+export const LINES_WEAK_NODE_MASTERY_THRESHOLD = 60;
+
+export type LinesStudyMode = 'idle' | 'learn' | 'review';
 export const OPENING_ENRICH_STALE_DAYS = 7;
 
 export type LinesMoveCategory = 'best' | 'book' | 'miss';
@@ -408,7 +412,7 @@ export function filterOpeningTreeForDisplay(
     rootUci: tree.rootUci,
     sourceCount: rootNode.recentGames + rootNode.cardCount,
     nodeCount: nodes.length,
-    dueCount: nodes.filter((node) => node.seenCount > 0 && node.masteryScore < 80).length,
+    dueCount: nodes.filter((node) => node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD).length,
     masteryScore: Math.round(masteryScore),
     nodes,
     edges,
@@ -480,7 +484,13 @@ export function classifyLinesMove(
     return { category: 'book', evalLossCp: null };
   }
 
-  return { category: 'miss', evalLossCp: null };
+  const evalLossCp = computeTrainMoveEvalLossCp(tree, nodeId, playedUci, resolved.acceptedUcis);
+
+  if (evalLossCp != null && evalLossCp <= LINES_MOVE_EVAL_GATE_CP) {
+    return { category: 'book', evalLossCp };
+  }
+
+  return { category: 'miss', evalLossCp };
 }
 
 function computeTrainMoveEvalLossCp(
@@ -681,7 +691,7 @@ export function pickNextUnplayedOpponentEdge(
 }
 
 export function pickFullLineTargetNodeId(
-  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'targetDepth' | 'rootSan'>,
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'targetDepth' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
   options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
 ): string | null {
   const path = buildDrillPath(tree, options);
@@ -832,17 +842,10 @@ export function classifyLinesMoveAtHistoryIndex(
     return null;
   }
 
-  const rootPrefixCategory = classifyRootPrefixMove(tree, moveIndex, move.uci);
+  const rootLength = getOpeningTreeRootLength(tree);
 
-  if (rootPrefixCategory != null) {
-    if (moveSideAtIndex(moveIndex) !== trainSide) {
-      return null;
-    }
-
-    return {
-      moveUci: move.uci,
-      category: rootPrefixCategory,
-    };
+  if (moveIndex < rootLength) {
+    return null;
   }
 
   const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, moveIndex);
@@ -1182,6 +1185,151 @@ export function chooseWeightedOpponentEdge(edges: OpeningTreeEdge[], seed = Date
   return weighted[0]?.edge ?? null;
 }
 
+function chooseDeterministicOpponentEdge(outgoing: OpeningTreeEdge[]): OpeningTreeEdge | null {
+  const repertoire = outgoing.filter((edge) => isRepertoireEdge(edge));
+  const pool = repertoire.length > 0 ? repertoire : outgoing;
+  const sorted = [...pool].sort(
+    (left, right) =>
+      right.recentCount - left.recentCount ||
+      right.mastersGames - left.mastersGames ||
+      Number(right.isEngineBest) - Number(left.isEngineBest) ||
+      right.priority - left.priority,
+  );
+
+  return sorted[0] ?? null;
+}
+
+export function countTrainPliesInDrillPath(path: DrillPathStep[]): number {
+  return path.filter((step) => step.isTrainTurn).length;
+}
+
+export function countReviewDueNodes(tree: Pick<OpeningTreeDetail, 'nodes'>, trainSide: OpeningSide): number {
+  return tree.nodes.filter(
+    (node) => node.sideToMove === trainSide && node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD,
+  ).length;
+}
+
+export function buildReviewQueue(tree: Pick<OpeningTreeDetail, 'nodes'>, trainSide: OpeningSide): string[] {
+  return tree.nodes
+    .filter((node) => node.sideToMove === trainSide && node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD)
+    .sort((left, right) => left.masteryScore - right.masteryScore || left.ply - right.ply)
+    .map((node) => node.id);
+}
+
+export function replayToNode(tree: OpeningTreeDetail, nodeId: string): string[] {
+  const path = findPathToNode(tree, nodeId);
+  const fullSans = [...tree.rootSan];
+
+  for (let index = 1; index < path.length; index += 1) {
+    const san = path[index]?.edgeSanFromParent;
+
+    if (san) {
+      fullSans.push(san);
+    }
+  }
+
+  return fullSans;
+}
+
+export function findEarliestForkNodeId(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+): string | null {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode) {
+    return null;
+  }
+
+  const queue = [rootNode.id];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+
+    if (visited.has(nodeId)) {
+      continue;
+    }
+
+    visited.add(nodeId);
+    const repertoireOutgoing = tree.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
+
+    if (repertoireOutgoing.length >= 2) {
+      return nodeId;
+    }
+
+    for (const edge of repertoireOutgoing) {
+      queue.push(edge.toNodeId);
+    }
+  }
+
+  return null;
+}
+
+function scoreBranchEdge(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
+  forkNodeId: string,
+  edge: OpeningTreeEdge,
+): { weakNodes: number; recentCount: number } {
+  const path = buildDrillPath(tree, {
+    trainSide,
+    forcedEdges: { [forkNodeId]: edge.uci },
+  });
+  const weakNodes = path.filter(
+    (step) => step.isTrainTurn && step.masteryScore < LINES_WEAK_NODE_MASTERY_THRESHOLD,
+  ).length;
+
+  return { weakNodes, recentCount: edge.recentCount };
+}
+
+export function pickLearnBranch(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
+  completedBranchEdgeIds: string[],
+): { path: DrillPathStep[]; branchEdgeId: string | null } {
+  const forkNodeId = findEarliestForkNodeId(tree);
+
+  if (!forkNodeId) {
+    return { path: buildDrillPath(tree, { trainSide }), branchEdgeId: null };
+  }
+
+  const candidates = tree.edges.filter(
+    (edge) => edge.fromNodeId === forkNodeId && isRepertoireEdge(edge) && !completedBranchEdgeIds.includes(edge.id),
+  );
+
+  if (candidates.length === 0) {
+    return { path: [], branchEdgeId: null };
+  }
+
+  const ranked = [...candidates].sort((left, right) => {
+    const leftScore = scoreBranchEdge(tree, trainSide, forkNodeId, left);
+    const rightScore = scoreBranchEdge(tree, trainSide, forkNodeId, right);
+
+    if (rightScore.weakNodes !== leftScore.weakNodes) {
+      return rightScore.weakNodes - leftScore.weakNodes;
+    }
+
+    return rightScore.recentCount - leftScore.recentCount;
+  });
+  const chosen = ranked[0]!;
+
+  return {
+    path: buildDrillPath(tree, { trainSide, forcedEdges: { [forkNodeId]: chosen.uci } }),
+    branchEdgeId: chosen.id,
+  };
+}
+
+export function listSiblingBranchEdges(
+  tree: Pick<OpeningTreeDetail, 'edges'>,
+  forkNodeId: string,
+  completedBranchEdgeIds: string[],
+): OpeningTreeEdge[] {
+  return tree.edges.filter(
+    (edge) => edge.fromNodeId === forkNodeId && isRepertoireEdge(edge) && !completedBranchEdgeIds.includes(edge.id),
+  );
+}
+
 export function applyOpeningAttemptScore(currentScore: number, correct: boolean) {
   return Math.max(0, Math.min(100, currentScore + (correct ? 18 : -22)));
 }
@@ -1201,7 +1349,13 @@ export type DrillPathStep = {
 
 export function buildDrillPath(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
-  options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
+  options: {
+    trainSide: OpeningSide;
+    preferWeak?: boolean;
+    seed?: number;
+    startNodeId?: string;
+    forcedEdges?: Record<string, string>;
+  },
 ): DrillPathStep[] {
   const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
   const rootNode = options.startNodeId
@@ -1215,7 +1369,6 @@ export function buildDrillPath(
   const path: DrillPathStep[] = [];
   const visited = new Set<string>();
   let currentNodeId = rootNode.id;
-  let currentSeed = options.seed ?? Date.now();
 
   while (currentNodeId && !visited.has(currentNodeId)) {
     visited.add(currentNodeId);
@@ -1246,65 +1399,33 @@ export function buildDrillPath(
     }
 
     let chosenEdge: OpeningTreeEdge | null = null;
+    const forcedUci = options.forcedEdges?.[currentNodeId];
 
-    if (isTrainTurn) {
+    if (forcedUci) {
+      chosenEdge = outgoing.find((edge) => edge.uci === forcedUci) ?? null;
+    } else if (isTrainTurn) {
       const validMoves = outgoing.filter((edge) => {
         if (edge.isEngineBest || edge.mastersGames > 0) return true;
-        const target = tree.nodes.find((n) => n.id === edge.toNodeId);
+        const target = tree.nodes.find((node) => node.id === edge.toNodeId);
         if (!target || node.evalCp == null || target.evalCp == null) return true;
         const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
         return swing > -30;
       });
-
-      if (validMoves.length > 0) {
-        const sorted = [...validMoves].sort((a, b) => b.recentCount - a.recentCount);
-        chosenEdge = sorted[0] ?? null;
-      } else {
-        chosenEdge = outgoing.find((edge) => edge.isEngineBest) ?? null;
-      }
+      const pool = validMoves.length > 0 ? validMoves : outgoing;
+      const sorted = [...pool].sort((left, right) => right.recentCount - left.recentCount);
+      chosenEdge = sorted[0] ?? outgoing.find((edge) => edge.isEngineBest) ?? null;
     } else {
-      const roll = seededUnit(currentSeed) * 100;
-      if (roll < 20) {
-        const theoryEdges = [...outgoing].sort((a, b) => {
-          if (a.isEngineBest !== b.isEngineBest) return a.isEngineBest ? -1 : 1;
-          return b.mastersGames - a.mastersGames;
-        });
-        chosenEdge = theoryEdges[0] ?? null;
-      } else {
-        if (options.preferWeak) {
-          const weakTargets = outgoing.filter((edge) => {
-            const target = tree.nodes.find((candidate) => candidate.id === edge.toNodeId);
-            return target && target.sideToMove === options.trainSide && target.masteryScore < 80;
-          });
-
-          if (weakTargets.length > 0) {
-            chosenEdge = chooseWeightedOpponentEdge(weakTargets, currentSeed);
-          }
-        }
-
-        if (!chosenEdge) {
-          chosenEdge = chooseWeightedOpponentEdge(outgoing, currentSeed);
-        }
-      }
+      chosenEdge = chooseDeterministicOpponentEdge(outgoing);
     }
 
     if (!chosenEdge) {
       break;
     }
 
-    if (path.length > 0) {
-      const lastStep = path[path.length - 1];
-
-      if (lastStep) {
-        lastStep.edgeSanFromParent = null;
-      }
-    }
-
     const nextStep = tree.nodes.find((candidate) => candidate.id === chosenEdge!.toNodeId);
 
     if (nextStep) {
       currentNodeId = nextStep.id;
-      currentSeed += 1;
     } else {
       break;
     }

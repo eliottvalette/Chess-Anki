@@ -791,11 +791,7 @@ function summarizeTree(
   const scores = nodes.map((node) => progress.get(String(node.id))?.masteryScore ?? 0);
   const masteryScore =
     scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
-  const dueCount = nodes.filter((node) => {
-    const entry = progress.get(String(node.id));
-
-    return (entry?.seenCount ?? 0) > 0 && (entry?.masteryScore ?? 0) < 80;
-  }).length;
+  const dueCount = nodes.filter((node) => (progress.get(String(node.id))?.masteryScore ?? 0) < 80).length;
 
   return {
     id: String(tree.id),

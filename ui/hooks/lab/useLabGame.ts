@@ -32,6 +32,7 @@ export function useLabGame(
     advanceDrillToStepRef: React.MutableRefObject<
       (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
     >;
+    advanceReviewCardRef?: React.MutableRefObject<() => void>;
     cancelDrillOpponentMoveRef?: React.MutableRefObject<() => void>;
     linesGameTimeoutRef: React.MutableRefObject<number | null>;
     playSoundSequence: (keys: ChessSoundKey[]) => void;
@@ -59,6 +60,7 @@ export function useLabGame(
     activeOpeningNodeId,
     activeOpeningTree,
     trainAllSession,
+    linesStudyMode,
     initialFen,
     setVariationBaseIndex,
     setVariationMoves,
@@ -81,6 +83,7 @@ export function useLabGame(
 
   const {
     advanceDrillToStepRef,
+    advanceReviewCardRef,
     cancelDrillOpponentMoveRef,
     linesGameTimeoutRef,
     playSoundSequence,
@@ -195,6 +198,7 @@ export function useLabGame(
             expectedUci: primaryUci ?? move.uci,
             validationMode: 'strict_best',
             pending: false,
+            evalLossCp: linesClassification.evalLossCp ?? undefined,
           });
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
@@ -208,6 +212,7 @@ export function useLabGame(
             expectedUci: primaryUci,
             validationMode: 'strict_best',
             pending: false,
+            evalLossCp: linesClassification.evalLossCp ?? undefined,
           });
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
@@ -238,6 +243,14 @@ export function useLabGame(
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
           if (correct) {
+            if (linesStudyMode === 'review') {
+              setOpeningDrillStatus(linesClassification.category === 'best' ? 'Correct.' : 'Book move.');
+              scheduleLinesOpponentAction(() => {
+                advanceReviewCardRef?.current();
+              });
+              return;
+            }
+
             let nextStepIndex = drillPathIndexRef.current + 1;
 
             if (matchingEdge) {
@@ -247,8 +260,6 @@ export function useLabGame(
               if (!nextStep || nextStep.nodeId !== targetNodeId) {
                 const newPath = buildDrillPath(activeOpeningTree, {
                   trainSide: state.activeTrainSide,
-                  preferWeak: true,
-                  seed: Date.now(),
                   startNodeId: targetNodeId,
                 });
 
@@ -277,7 +288,7 @@ export function useLabGame(
               `Miss. Best was ${primarySan ?? primaryUci ?? 'unknown'}. Use undo (left arrow) to retry.`,
             );
           }
-        } else if (correct && matchingEdge) {
+        } else if (correct && matchingEdge && linesStudyMode === 'learn') {
           const nextNode = activeOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
 
           if (nextNode) {

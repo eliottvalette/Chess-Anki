@@ -829,6 +829,7 @@ export function useLabOrchestrator() {
   const advanceDrillToStepRef = useRef<
     (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
   >(() => {});
+  const advanceReviewCardRef = useRef<() => void>(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
   const linesGameTimeoutRef = useRef<number | null>(null);
   const linesSession = useLinesSession();
@@ -836,6 +837,7 @@ export function useLabOrchestrator() {
   const gameContext = useMemo(
     () => ({
       advanceDrillToStepRef,
+      advanceReviewCardRef,
       cancelDrillOpponentMoveRef,
       linesGameTimeoutRef,
       playSoundSequence,
@@ -1077,11 +1079,18 @@ export function useLabOrchestrator() {
     loadOpeningTrees,
     importRecentOpeningTrees,
     advanceDrillToStep,
+    advanceReviewCard,
+    startLinesLearn,
+    startLinesReview,
+    startNextLearnBranch,
     startOpeningDrill,
+    quitLinesSession,
     stopOpeningDrill,
     cancelDrillOpponentMove,
     selectOpeningTree,
     selectOpeningNode,
+    findEarliestForkNodeId,
+    listSiblingBranchEdges,
   } = useLabLines(labState, linesContext);
 
   useEffect(() => {
@@ -1091,6 +1100,10 @@ export function useLabOrchestrator() {
   useEffect(() => {
     advanceDrillToStepRef.current = advanceDrillToStep;
   }, [advanceDrillToStep]);
+
+  useEffect(() => {
+    advanceReviewCardRef.current = advanceReviewCard;
+  }, [advanceReviewCard]);
 
   const { createTrainingDeck, generateRecentTrainingDeck, renameTrainingDeck, deleteTrainingDeck } = useLabDeckManager(
     labState,
@@ -2153,6 +2166,22 @@ export function useLabOrchestrator() {
     [labState.activeOpeningNodeId, labState.historyIndex, labState.openingDrillActive, linesSession],
   );
 
+  const linesHasNextLearnBranch = useMemo(() => {
+    const tree = labState.activeOpeningTree;
+
+    if (!tree) {
+      return false;
+    }
+
+    const forkNodeId = findEarliestForkNodeId(tree);
+
+    if (!forkNodeId) {
+      return false;
+    }
+
+    return listSiblingBranchEdges(tree, forkNodeId, labState.linesCompletedBranchEdgeIdsRef.current).length > 0;
+  }, [labState.activeOpeningTree, labState.linesLearnBranchComplete, labState.linesStudyMode]);
+
   return {
     labState: overriddenLabState,
     gameContext,
@@ -2179,10 +2208,15 @@ export function useLabOrchestrator() {
     loadTrainingDeck,
     selectOpeningTree: handleSelectOpeningTree,
     selectOpeningNode,
+    startLinesLearn,
+    startLinesReview,
+    startNextLearnBranch,
     startOpeningDrill,
+    quitLinesSession,
     stopOpeningDrill,
     importRecentOpeningTrees,
     linesForkCoverage,
+    linesHasNextLearnBranch,
     currentFen,
     currentMoves,
     hasLoadedGame,

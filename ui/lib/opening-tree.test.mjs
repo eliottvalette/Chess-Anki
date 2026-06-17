@@ -5,6 +5,7 @@ import {
   buildDrillPath,
   buildForkCoverage,
   buildOpeningTrees,
+  buildReviewQueue,
   chooseWeightedOpponentEdge,
   classifyLinesMove,
   classifyLinesMoveAtHistoryIndex,
@@ -867,7 +868,7 @@ test('classifyRootPrefixMove marks matching forced plies as book and deviations 
   assert.equal(classifyRootPrefixMove(rootPrefixTree, 4, 'f1c4'), null);
 });
 
-test('classifyLinesMoveAtHistoryIndex classifies forced train moves from rootUci', () => {
+test('classifyLinesMoveAtHistoryIndex skips forced prefix plies', () => {
   const moveHistory = [
     { uci: 'e2e4', san: 'e4' },
     { uci: 'e7e5', san: 'e5' },
@@ -875,15 +876,8 @@ test('classifyLinesMoveAtHistoryIndex classifies forced train moves from rootUci
     { uci: 'b8c6', san: 'Nc6' },
   ];
 
-  assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 1, 'white'), {
-    moveUci: 'e2e4',
-    category: 'book',
-  });
-  assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 3, 'white'), {
-    moveUci: 'g1f3',
-    category: 'book',
-  });
-  assert.equal(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 2, 'white'), null);
+  assert.equal(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 1, 'white'), null);
+  assert.equal(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 3, 'white'), null);
 });
 
 test('resolveOpeningNodeFromHistory maps root plies without jumping to the canonical root node', () => {
@@ -901,4 +895,106 @@ test('resolveOpeningNodeFromHistory maps root plies without jumping to the canon
     nodeId: 'italian-root',
     plyInTree: 4,
   });
+});
+
+test('buildReviewQueue returns train-side nodes below mastery threshold sorted ascending', () => {
+  const tree = {
+    nodes: [
+      { id: 'weak', sideToMove: 'white', masteryScore: 12, ply: 5 },
+      { id: 'due', sideToMove: 'white', masteryScore: 55, ply: 7 },
+      { id: 'strong', sideToMove: 'white', masteryScore: 90, ply: 8 },
+      { id: 'opponent', sideToMove: 'black', masteryScore: 0, ply: 6 },
+    ],
+  };
+
+  assert.deepEqual(buildReviewQueue(tree, 'white'), ['weak', 'due']);
+});
+
+test('classifyLinesMove accepts engine-tolerant moves within gate', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'train-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'root',
+        ply: 1,
+        sideToMove: 'white',
+        bestUci: 'g1f3',
+        bestSan: 'Nf3',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 50,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-best',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 1',
+        fenKey: 'after-best',
+        ply: 2,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 22,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-d4',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        fenKey: 'after-d4',
+        ply: 2,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 18,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'engine-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-best',
+        uci: 'g1f3',
+        san: 'Nf3',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+      {
+        id: 'off-edge',
+        fromNodeId: 'train-node',
+        toNodeId: 'after-d4',
+        uci: 'd2d4',
+        san: 'd4',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const classified = classifyLinesMove(tree, 'train-node', 'd2d4');
+  assert.equal(classified.category, 'book');
+  assert.ok(classified.evalLossCp != null && classified.evalLossCp <= LINES_MOVE_EVAL_GATE_CP);
 });

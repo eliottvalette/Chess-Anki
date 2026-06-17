@@ -107,6 +107,13 @@ export function useLabState() {
   const [openingDrillStatus, setOpeningDrillStatus] = useState('');
   const [openingDrillExpected, setOpeningDrillExpected] = useState<OpeningDrillExpectedMove | null>(null);
   const [openingDrillActive, setOpeningDrillActive] = useState(false);
+  const [linesStudyMode, setLinesStudyMode] = useState<'idle' | 'learn' | 'review'>('idle');
+  const [linesReviewQueue, setLinesReviewQueue] = useState<string[]>([]);
+  const [linesReviewIndex, setLinesReviewIndex] = useState(0);
+  const [linesLearnBranchComplete, setLinesLearnBranchComplete] = useState(false);
+  const linesCompletedBranchEdgeIdsRef = useRef<string[]>([]);
+  const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
+  const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);
   const drillPathIndexRef = useRef(0);
@@ -261,6 +268,19 @@ export function useLabState() {
     setOpeningDrillExpected,
     openingDrillActive,
     setOpeningDrillActive,
+    linesStudyMode,
+    setLinesStudyMode,
+    linesReviewQueue,
+    setLinesReviewQueue,
+    linesReviewIndex,
+    setLinesReviewIndex,
+    linesLearnBranchComplete,
+    setLinesLearnBranchComplete,
+    linesCompletedBranchEdgeIdsRef,
+    linesTrainPlyCurrent,
+    setLinesTrainPlyCurrent,
+    linesTrainPlyTotal,
+    setLinesTrainPlyTotal,
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,

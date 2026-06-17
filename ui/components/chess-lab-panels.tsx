@@ -92,7 +92,9 @@ import {
   type MasteryGrade,
 } from '@/lib/deck-progress';
 import {
+  countReviewDueNodes,
   formatOpeningTreeDisplayName,
+  type LinesStudyMode,
   type OpeningLibrary,
   type OpeningTreeDetail,
   type OpeningTreeSummary,
@@ -174,6 +176,25 @@ function formatRecentGameTimeClassLabel(timeClass: 'bullet' | 'blitz' | 'rapid')
   }
 }
 
+export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedback | null }) {
+  if (!deckFeedback) {
+    return null;
+  }
+
+  return (
+    <div
+      className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-(--text) text-(--text-muted) px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
+    >
+      <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
+      <span>
+        played {deckFeedback.playedSan} · best {deckFeedback.expectedSan}
+        {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
+      </span>
+      {!deckFeedback.pending && !deckFeedback.correct ? <span>← undo to retry</span> : null}
+    </div>
+  );
+}
+
 export function LinesPanel({
   actionError,
   actionLoading,
@@ -183,12 +204,23 @@ export function LinesPanel({
   deckFeedback,
   drillActive,
   forkCoverage,
+  hasNextLearnBranch,
+  learnBranchComplete,
+  linesStudyMode,
   loading,
+  onChangeTrainSide,
   onImportRecent,
+  onNextLearnBranch,
+  onQuitSession,
   onSelectNode,
   onSelectTree,
+  onStartLearn,
+  onStartReview,
+  reviewIndex,
+  reviewQueueLength,
+  sessionTrainPlyCurrent,
+  sessionTrainPlyTotal,
   trainSide,
-  onChangeTrainSide,
   trees,
   minForcedPlies,
   setMinForcedPlies,
@@ -205,20 +237,30 @@ export function LinesPanel({
   deckFeedback: DeckFeedback | null;
   drillActive: boolean;
   forkCoverage?: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }>;
-  expectedSan: string | null;
+  hasNextLearnBranch: boolean;
+  learnBranchComplete: boolean;
+  linesStudyMode: LinesStudyMode;
   loading: boolean;
+  onChangeTrainSide: (side: 'white' | 'black') => void;
   onImportRecent: () => void;
+  onNextLearnBranch: () => void;
+  onQuitSession: () => void;
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
+  onStartLearn: () => void;
+  onStartReview: () => void;
+  reviewIndex: number;
+  reviewQueueLength: number;
+  sessionTrainPlyCurrent: number;
+  sessionTrainPlyTotal: number;
   trainSide: 'white' | 'black';
-  onChangeTrainSide: (side: 'white' | 'black') => void;
   trees: OpeningTreeSummary[];
   minForcedPlies: number;
-  setMinForcedPlies: (v: number) => void;
+  setMinForcedPlies: (value: number) => void;
   minNodes: number;
-  setMinNodes: (v: number) => void;
+  setMinNodes: (value: number) => void;
   minDepth: number;
-  setMinDepth: (v: number) => void;
+  setMinDepth: (value: number) => void;
 }) {
   const filteredTrees = useMemo(
     () => trees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
@@ -234,7 +276,16 @@ export function LinesPanel({
     () => buildOpeningTreeGraphEdges(activeTree, drillActive, forkCoverage ?? {}),
     [activeTree, drillActive, forkCoverage],
   );
-  const graphInteraction = useMemo(() => ({ drillActive, onSelectNode }), [drillActive, onSelectNode]);
+  const graphInteraction = useMemo(
+    () => ({ drillActive: linesStudyMode !== 'idle' || drillActive, onSelectNode }),
+    [drillActive, linesStudyMode, onSelectNode],
+  );
+  const graphReadOnly = linesStudyMode !== 'idle';
+  const reviewDueCount = useMemo(
+    () => (activeTree ? countReviewDueNodes(activeTree, trainSide) : 0),
+    [activeTree, trainSide],
+  );
+  const inSession = linesStudyMode !== 'idle';
   const graph = useMemo(
     () => ({
       nodes: graphNodes.map((node) => ({
@@ -383,28 +434,61 @@ export function LinesPanel({
           <div className="flex w-full items-stretch gap-2">
             <button
               className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch`}
-              onClick={() => onSelectTree('')}
+              onClick={() => (inSession ? onQuitSession() : onSelectTree(''))}
               type="button"
             >
-              Back
+              {inSession ? 'Quit' : 'Back'}
             </button>
           </div>
-          <div className="flex w-full items-stretch gap-2" style={{ marginTop: '-4px' }}>
-            <button
-              className={`${trainSide === 'white' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
-              onClick={() => onChangeTrainSide('white')}
-              type="button"
-            >
-              White
-            </button>
-            <button
-              className={`${trainSide === 'black' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
-              onClick={() => onChangeTrainSide('black')}
-              type="button"
-            >
-              Black
-            </button>
-          </div>
+          {!inSession ? (
+            <div className="flex w-full items-stretch gap-2" style={{ marginTop: '-4px' }}>
+              <button
+                className={`${trainSide === 'white' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
+                onClick={() => onChangeTrainSide('white')}
+                type="button"
+              >
+                White
+              </button>
+              <button
+                className={`${trainSide === 'black' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
+                onClick={() => onChangeTrainSide('black')}
+                type="button"
+              >
+                Black
+              </button>
+            </div>
+          ) : null}
+          {!inSession ? (
+            <div className="flex w-full items-stretch gap-2">
+              <button
+                className="box-border flex min-h-[42px] flex-1 items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]"
+                onClick={onStartLearn}
+                type="button"
+              >
+                Learn
+              </button>
+              <button
+                className="box-border flex min-h-[42px] flex-1 items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={reviewDueCount === 0}
+                onClick={onStartReview}
+                type="button"
+              >
+                Review ({reviewDueCount})
+              </button>
+            </div>
+          ) : null}
+          {learnBranchComplete && !inSession && hasNextLearnBranch ? (
+            <div className="flex flex-col gap-2 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.1)] px-3 py-2 text-xs text-(--text)">
+              <span>Branch complete.</span>
+              <button
+                className="box-border flex min-h-[38px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3 text-xs text-[#f8fbff]"
+                onClick={onNextLearnBranch}
+                type="button"
+              >
+                Next branch
+              </button>
+            </div>
+          ) : null}
 
           <section
             className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
@@ -414,8 +498,17 @@ export function LinesPanel({
                 <strong className="text-base leading-[1.2] tracking-normal text-(--text) wrap-anywhere">
                   {formatOpeningTreeDisplayName(activeTree.name)}
                 </strong>
+                {inSession ? (
+                  <span className="text-[11px] text-(--text-soft)">
+                    {linesStudyMode === 'learn'
+                      ? `Learn · Coup ${sessionTrainPlyCurrent}/${sessionTrainPlyTotal}`
+                      : `Review · ${reviewIndex + 1}/${reviewQueueLength}`}
+                  </span>
+                ) : null}
               </div>
             </div>
+
+            <DrillFeedbackBlock deckFeedback={deckFeedback} />
 
             <div className="flex items-center justify-between gap-2.5 text-xs text-(--text-soft)">
               <span>depth {activeTree.targetDepth}</span>
@@ -444,7 +537,7 @@ export function LinesPanel({
                     panOnScroll={false}
                     zoomOnDoubleClick={false}
                     nodesConnectable={false}
-                    onNodeClick={(_, node) => onSelectNode(node.id)}
+                    onNodeClick={graphReadOnly ? undefined : (_, node) => onSelectNode(node.id)}
                     proOptions={{ hideAttribution: true }}
                   >
                     <Background />
@@ -561,7 +654,11 @@ const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data, sele
         ]
           .filter(Boolean)
           .join(' ')}
-        onClick={() => onSelectNode(id)}
+        onClick={() => {
+          if (!drillActive) {
+            onSelectNode(id);
+          }
+        }}
         type="button"
       >
         <strong>{isTrainTurn && showAnswer ? `Best: ${nodeData.bestSan}` : `Ply ${nodeData.ply}`}</strong>
