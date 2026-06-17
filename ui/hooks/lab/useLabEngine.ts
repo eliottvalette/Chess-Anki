@@ -35,6 +35,7 @@ export function useLabEngine(
     deckFeedback,
     moveHistory,
     historyIndex,
+    mode,
     timelineLoading,
     setPositionAnalysis,
     setPositionLoading,
@@ -137,6 +138,12 @@ export function useLabEngine(
 
   // 1. Fetch current position analysis on history index / move change
   useEffect(() => {
+    if (mode === 'lines') {
+      setPositionLoading(false);
+      setPositionAnalysis(null);
+      return undefined;
+    }
+
     const requestId = ++positionRequestIdRef.current;
     const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
     const cacheKey = getPositionCacheKey(initialFen, currentMoveList, positionProfile);
@@ -178,6 +185,7 @@ export function useLabEngine(
     currentMoveList,
     fetchCachedPositionAnalysis,
     initialFen,
+    mode,
     setPositionAnalysis,
     setPositionLoading,
     setServerError,
@@ -257,7 +265,7 @@ export function useLabEngine(
 
   // 4. Preload ahead slightly in review mode
   useEffect(() => {
-    if (timelineLoading || moveHistory.length === 0 || historyIndex >= moveHistory.length) {
+    if (mode === 'lines' || timelineLoading || moveHistory.length === 0 || historyIndex >= moveHistory.length) {
       return;
     }
 
@@ -284,7 +292,7 @@ export function useLabEngine(
     }, 180);
 
     return () => window.clearTimeout(timer);
-  }, [activeDeckCard, fetchCachedPositionAnalysis, historyIndex, initialFen, moveHistory, timelineLoading]);
+  }, [activeDeckCard, fetchCachedPositionAnalysis, historyIndex, initialFen, mode, moveHistory, timelineLoading]);
 
   return {
     fetchCachedPositionAnalysis,

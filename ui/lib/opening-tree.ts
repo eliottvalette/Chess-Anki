@@ -84,6 +84,8 @@ export type OpeningTreeSummary = {
   id: string;
   name: string;
   library: OpeningLibrary;
+  rootFenKey: string;
+  rootPly: number;
   rootSan: string[];
   rootUci: string[];
   sourceCount: number;
@@ -153,6 +155,34 @@ export const LINES_MOVE_EVAL_GATE_CP = 55;
 export const OPENING_ENRICH_STALE_DAYS = 7;
 
 export type LinesMoveCategory = 'best' | 'book' | 'miss';
+
+export function getOpeningTreeRootLength(tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan'>): number {
+  return tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+}
+
+export function classifyRootPrefixMove(
+  tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan' | 'rootUci'>,
+  moveIndex: number,
+  playedUci: string,
+): LinesMoveCategory | null {
+  const rootLength = getOpeningTreeRootLength(tree);
+
+  if (moveIndex < 0 || moveIndex >= rootLength) {
+    return null;
+  }
+
+  const expectedUci = tree.rootUci[moveIndex];
+
+  if (!expectedUci) {
+    return 'book';
+  }
+
+  return playedUci === expectedUci ? 'book' : 'miss';
+}
+
+function moveSideAtIndex(moveIndex: number): OpeningSide {
+  return moveIndex % 2 === 0 ? 'white' : 'black';
+}
 
 export type OpeningBuildMode = 'fast' | 'normal' | 'backfill' | 'extend_depth';
 
@@ -224,25 +254,25 @@ export function resolveAcceptedTrainMoveUcis(
     return { primaryUci: null, primarySan: null, acceptedUcis: [] };
   }
 
+  const repertoireEdges = tree.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
+  const sortedEdges = [...repertoireEdges].sort(
+    (left, right) =>
+      right.priority - left.priority || right.recentCount + right.cardCount - (left.recentCount + left.cardCount),
+  );
+  const primaryEdge = sortedEdges.find((edge) => edge.isEngineBest) ?? sortedEdges[0] ?? null;
   const acceptedUcis = new Set<string>();
+
+  for (const edge of repertoireEdges) {
+    acceptedUcis.add(edge.uci);
+  }
 
   if (node.bestUci) {
     acceptedUcis.add(node.bestUci);
   }
 
-  for (const edge of tree.edges) {
-    if (edge.fromNodeId !== nodeId) {
-      continue;
-    }
-
-    if (edge.isEngineBest || edge.mastersGames > 0) {
-      acceptedUcis.add(edge.uci);
-    }
-  }
-
   return {
-    primaryUci: node.bestUci,
-    primarySan: node.bestSan,
+    primaryUci: node.bestUci ?? primaryEdge?.uci ?? null,
+    primarySan: node.bestSan ?? primaryEdge?.san ?? null,
     acceptedUcis: [...acceptedUcis],
   };
 }
@@ -287,6 +317,147 @@ export function classifyOpeningDrillMove(
   };
 }
 
+export function isRepertoireEdge(
+  edge: Pick<OpeningTreeEdge, 'recentCount' | 'cardCount' | 'mastersGames' | 'isEngineBest'>,
+) {
+  return edge.recentCount > 0 || edge.cardCount > 0 || edge.mastersGames > 0 || edge.isEngineBest;
+}
+
+export function resolveCanonicalRootNode(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'rootSan' | 'rootFenKey' | 'rootPly'>,
+  rootPly: number = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : DEFAULT_OPENING_ROOT_PLY),
+): OpeningTreeNode | null {
+  if (tree.rootFenKey) {
+    const byFenKey = tree.nodes.find((node) => node.fenKey === tree.rootFenKey && node.ply === rootPly);
+
+    if (byFenKey) {
+      return byFenKey;
+    }
+  }
+
+  const candidates = tree.nodes.filter((node) => node.ply === rootPly);
+
+  if (candidates.length === 0) {
+    const fallbackPly = tree.rootPly ?? tree.rootSan.length;
+    return tree.nodes.find((node) => node.ply === fallbackPly) ?? tree.nodes[0] ?? null;
+  }
+
+  return (
+    [...candidates].sort(
+      (left, right) => right.recentGames + right.cardCount - (left.recentGames + left.cardCount),
+    )[0] ?? null
+  );
+}
+
+export function isLegacyCatchAllOpeningTree(tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan'>): boolean {
+  const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+  return storedRootPly === 0 && tree.rootSan.length === 0;
+}
+
+export function resolveOpeningTreeRootPly(
+  tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan'>,
+  minForcedPlies: number,
+): number {
+  const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+  if (storedRootPly > 0) {
+    return Math.max(storedRootPly, minForcedPlies);
+  }
+
+  return storedRootPly;
+}
+
+export function filterOpeningTreeForDisplay(
+  tree: OpeningTreeDetail,
+  rootPly: number = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : DEFAULT_OPENING_ROOT_PLY),
+): OpeningTreeDetail {
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode) {
+    return tree;
+  }
+
+  const repertoireEdges = tree.edges.filter((edge) => isRepertoireEdge(edge));
+  const reachableNodeIds = new Set<string>([rootNode.id]);
+  const queue = [rootNode.id];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const outgoing = repertoireEdges.filter((edge) => edge.fromNodeId === currentId);
+
+    for (const edge of outgoing) {
+      if (!reachableNodeIds.has(edge.toNodeId)) {
+        reachableNodeIds.add(edge.toNodeId);
+        queue.push(edge.toNodeId);
+      }
+    }
+  }
+
+  const nodes = tree.nodes.filter((node) => reachableNodeIds.has(node.id));
+  const edges = repertoireEdges.filter(
+    (edge) => reachableNodeIds.has(edge.fromNodeId) && reachableNodeIds.has(edge.toNodeId),
+  );
+  const trainNodes = nodes.filter((node) => node.masteryScore > 0 || node.seenCount > 0);
+  const masteryScore =
+    trainNodes.length > 0 ? trainNodes.reduce((sum, node) => sum + node.masteryScore, 0) / trainNodes.length : 0;
+
+  return {
+    ...tree,
+    rootSan: tree.rootSan,
+    rootUci: tree.rootUci,
+    sourceCount: rootNode.recentGames + rootNode.cardCount,
+    nodeCount: nodes.length,
+    dueCount: nodes.filter((node) => node.seenCount > 0 && node.masteryScore < 80).length,
+    masteryScore: Math.round(masteryScore),
+    nodes,
+    edges,
+  };
+}
+
+export function pruneOpeningTreeDraft(draft: OpeningTreeDraft): OpeningTreeDraft {
+  const rootNode = resolveCanonicalRootNode(
+    {
+      nodes: draft.nodes.map((node) => ({
+        ...node,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      })),
+      rootSan: draft.rootSan,
+    },
+    draft.rootPly,
+  );
+
+  if (!rootNode) {
+    return draft;
+  }
+
+  const repertoireEdges = draft.edges.filter((edge) => isRepertoireEdge(edge));
+  const reachableNodeIds = new Set<string>([rootNode.id]);
+  const queue = [rootNode.id];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+    const outgoing = repertoireEdges.filter((edge) => edge.fromNodeId === currentId);
+
+    for (const edge of outgoing) {
+      if (!reachableNodeIds.has(edge.toNodeId)) {
+        reachableNodeIds.add(edge.toNodeId);
+        queue.push(edge.toNodeId);
+      }
+    }
+  }
+
+  draft.nodes = draft.nodes.filter((node) => reachableNodeIds.has(node.id));
+  draft.edges = repertoireEdges.filter(
+    (edge) => reachableNodeIds.has(edge.fromNodeId) && reachableNodeIds.has(edge.toNodeId),
+  );
+
+  return draft;
+}
+
 export function classifyLinesMove(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
   nodeId: string,
@@ -295,23 +466,21 @@ export function classifyLinesMove(
 ): { category: LinesMoveCategory; evalLossCp: number | null } {
   const resolved = expected ?? resolveAcceptedTrainMoveUcis(tree, nodeId);
   const primaryUci = resolved.primaryUci;
-  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+  const edge = tree.edges.find((candidate) => candidate.fromNodeId === nodeId && candidate.uci === playedUci);
 
   if (primaryUci != null && playedUci === primaryUci) {
     return { category: 'best', evalLossCp: 0 };
   }
 
-  if (!resolved.acceptedUcis.includes(playedUci)) {
-    return { category: 'miss', evalLossCp: null };
+  if (edge && isRepertoireEdge(edge)) {
+    return { category: 'book', evalLossCp: null };
   }
 
-  const evalLossCp = computeTrainMoveEvalLossCp(tree, nodeId, playedUci, resolved.acceptedUcis);
-
-  if (evalLossCp == null || evalLossCp > LINES_MOVE_EVAL_GATE_CP) {
-    return { category: 'miss', evalLossCp };
+  if (resolved.acceptedUcis.includes(playedUci)) {
+    return { category: 'book', evalLossCp: null };
   }
 
-  return { category: 'book', evalLossCp };
+  return { category: 'miss', evalLossCp: null };
 }
 
 function computeTrainMoveEvalLossCp(
@@ -592,15 +761,39 @@ export function resolveOpeningNodeFromHistory(
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
 ): { nodeId: string | null; plyInTree: number } {
-  const rootLength = tree.rootSan.length;
+  const rootLength = getOpeningTreeRootLength(tree);
   const boundedIndex = Math.max(0, Math.min(historyIndex, moveHistory.length));
 
+  for (let index = 0; index < boundedIndex && index < rootLength; index += 1) {
+    const move = moveHistory[index];
+    const expectedUci = tree.rootUci[index];
+
+    if (!move) {
+      return { nodeId: null, plyInTree: index };
+    }
+
+    if (expectedUci && move.uci !== expectedUci) {
+      break;
+    }
+  }
+
   if (boundedIndex < rootLength) {
-    const rootNode = tree.nodes.find((node) => node.ply === rootLength) ?? tree.nodes[0] ?? null;
+    const nodeAtPly = tree.nodes.find((candidate) => candidate.ply === boundedIndex);
+
+    if (nodeAtPly) {
+      return { nodeId: nodeAtPly.id, plyInTree: boundedIndex };
+    }
+
+    return { nodeId: null, plyInTree: boundedIndex };
+  }
+
+  if (boundedIndex === rootLength) {
+    const rootNode = resolveCanonicalRootNode(tree, rootLength);
+
     return { nodeId: rootNode?.id ?? null, plyInTree: boundedIndex };
   }
 
-  let currentNode = tree.nodes.find((node) => node.ply === rootLength) ?? tree.nodes[0] ?? null;
+  let currentNode = resolveCanonicalRootNode(tree, rootLength);
 
   for (let index = rootLength; index < boundedIndex; index += 1) {
     const move = moveHistory[index];
@@ -632,13 +825,27 @@ export function classifyLinesMoveAtHistoryIndex(
     return null;
   }
 
-  const move = moveHistory[historyIndex - 1];
+  const moveIndex = historyIndex - 1;
+  const move = moveHistory[moveIndex];
 
   if (!move) {
     return null;
   }
 
-  const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, historyIndex - 1);
+  const rootPrefixCategory = classifyRootPrefixMove(tree, moveIndex, move.uci);
+
+  if (rootPrefixCategory != null) {
+    if (moveSideAtIndex(moveIndex) !== trainSide) {
+      return null;
+    }
+
+    return {
+      moveUci: move.uci,
+      category: rootPrefixCategory,
+    };
+  }
+
+  const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, moveIndex);
   const node = nodeId ? tree.nodes.find((candidate) => candidate.id === nodeId) : null;
 
   if (!node || node.sideToMove !== trainSide) {
@@ -671,7 +878,7 @@ export function createLinesSession(
 ): LinesSessionState {
   const rootNode = startNodeId
     ? tree.nodes.find((node) => node.id === startNodeId)
-    : (tree.nodes.find((node) => node.ply === tree.rootSan.length) ?? tree.nodes[0] ?? null);
+    : resolveCanonicalRootNode(tree, tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0));
 
   return {
     phase: 'idle',
@@ -683,8 +890,10 @@ export function createLinesSession(
   };
 }
 
-export function maxLinePliesForTree(tree: Pick<OpeningTreeDetail, 'targetDepth' | 'rootSan'>): number {
-  return Math.max(0, tree.targetDepth - tree.rootSan.length);
+export function maxLinePliesForTree(tree: Pick<OpeningTreeDetail, 'targetDepth' | 'rootSan' | 'rootPly'>): number {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+  return Math.max(0, tree.targetDepth - rootPly);
 }
 
 export type OpeningTreeDraftPreload = {
@@ -816,7 +1025,7 @@ export function shouldSkipNodeEnrichment(_node: OpeningNodeDraft, _staleBeforeMs
   return false;
 }
 
-export function shouldEnrichNodeLazy(node: OpeningNodeDraft, trainSide: OpeningSide, mode: OpeningBuildMode): boolean {
+export function shouldEnrichNodeLazy(node: OpeningNodeDraft, _trainSide: OpeningSide, mode: OpeningBuildMode): boolean {
   if (mode === 'fast') {
     return false;
   }
@@ -826,7 +1035,7 @@ export function shouldEnrichNodeLazy(node: OpeningNodeDraft, trainSide: OpeningS
   }
 
   if (node.ply <= 22) {
-    return node.recentGames >= 2 || (node.sideToMove === trainSide && (node.evalCp ?? 0) < 70);
+    return node.recentGames >= 2;
   }
 
   return node.cardCount > 0;
@@ -991,13 +1200,13 @@ export type DrillPathStep = {
 };
 
 export function buildDrillPath(
-  tree: { nodes: OpeningTreeNode[]; edges: OpeningTreeEdge[]; rootSan: string[] },
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
   options: { trainSide: OpeningSide; preferWeak?: boolean; seed?: number; startNodeId?: string },
 ): DrillPathStep[] {
-  const rootPly = tree.rootSan.length;
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
   const rootNode = options.startNodeId
     ? tree.nodes.find((node) => node.id === options.startNodeId)
-    : (tree.nodes.find((node) => node.ply === rootPly) ?? tree.nodes[0]);
+    : resolveCanonicalRootNode(tree, rootPly);
 
   if (!rootNode) {
     return [];
@@ -1115,30 +1324,30 @@ export function buildDrillPath(
 }
 
 export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): DrillPathStep[] {
-  const rootPly = tree.rootSan.length;
-  const rootNodes = tree.nodes.filter((n) => n.ply === rootPly);
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
   const queue: { nodeId: string; path: string[] }[] = [];
   const visited = new Set<string>();
 
-  for (const root of rootNodes) {
-    if (root.id === targetNodeId) {
+  if (rootNode) {
+    if (rootNode.id === targetNodeId) {
       return [
         {
-          nodeId: root.id,
-          fen: root.fen,
+          nodeId: rootNode.id,
+          fen: rootNode.fen,
           isTrainTurn: false,
           edgeSanFromParent: null,
           edgeUciFromParent: null,
           trainSide: 'white',
-          sideToMove: root.sideToMove,
-          bestUci: root.bestUci,
-          bestSan: root.bestSan,
-          masteryScore: root.masteryScore,
+          sideToMove: rootNode.sideToMove,
+          bestUci: rootNode.bestUci,
+          bestSan: rootNode.bestSan,
+          masteryScore: rootNode.masteryScore,
         },
       ];
     }
-    queue.push({ nodeId: root.id, path: [root.id] });
-    visited.add(root.id);
+    queue.push({ nodeId: rootNode.id, path: [rootNode.id] });
+    visited.add(rootNode.id);
   }
 
   let finalPathIds: string[] | null = null;
@@ -1328,82 +1537,60 @@ function shortHash(value: string) {
   return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
+export function prepareOpeningTreeForLines(tree: OpeningTreeDetail, minForcedPlies: number): OpeningTreeDetail {
+  const rootPly = resolveOpeningTreeRootPly(tree, minForcedPlies);
+
+  return filterOpeningTreeForDisplay(tree, rootPly);
+}
+
+export function filterOpeningTreeSummaries(trees: OpeningTreeSummary[], minForcedPlies: number): OpeningTreeSummary[] {
+  const withoutLegacy = trees.filter((tree) => !isLegacyCatchAllOpeningTree(tree));
+  const sourceForest = withoutLegacy.length > 0 ? withoutLegacy : trees;
+
+  return sourceForest
+    .filter((tree) => {
+      const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+      if (storedRootPly === 0) {
+        return true;
+      }
+
+      return storedRootPly >= minForcedPlies;
+    })
+    .filter((tree) => tree.nodeCount >= 2)
+    .sort((left, right) => right.sourceCount - left.sourceCount);
+}
+
 export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: number): OpeningTreeDetail[] {
+  const withoutLegacy = forest.filter((tree) => !isLegacyCatchAllOpeningTree(tree));
+  const sourceForest = withoutLegacy.length > 0 ? withoutLegacy : forest;
   const sliced: OpeningTreeDetail[] = [];
 
-  for (const tree of forest) {
-    const rootNodes = tree.nodes.filter((node) => node.ply === minForcedPlies);
+  for (const tree of sourceForest) {
+    const rootPly = resolveOpeningTreeRootPly(tree, minForcedPlies);
+    const rootNode = resolveCanonicalRootNode(tree, rootPly);
 
-    for (const rootNode of rootNodes) {
-      const rootSan: string[] = [];
-      const rootUci: string[] = [];
-      let currentId = rootNode.id;
-
-      for (let i = 0; i < minForcedPlies; i++) {
-        const edge = tree.edges.find((e) => e.toNodeId === currentId);
-        if (!edge) {
-          break;
-        }
-        rootSan.unshift(edge.san);
-        rootUci.unshift(edge.uci);
-        currentId = edge.fromNodeId;
-      }
-
-      rootSan.unshift(...tree.rootSan);
-      rootUci.unshift(...tree.rootUci);
-
-      const reachableNodeIds = new Set<string>();
-      const reachableEdgeIds = new Set<string>();
-      const queue = [rootNode.id];
-      reachableNodeIds.add(rootNode.id);
-
-      while (queue.length > 0) {
-        const currId = queue.shift()!;
-        const outgoingEdges = tree.edges.filter((e) => e.fromNodeId === currId);
-        for (const edge of outgoingEdges) {
-          reachableEdgeIds.add(edge.id);
-          if (!reachableNodeIds.has(edge.toNodeId)) {
-            reachableNodeIds.add(edge.toNodeId);
-            queue.push(edge.toNodeId);
-          }
-        }
-      }
-
-      const nodes = tree.nodes.filter((n) => reachableNodeIds.has(n.id));
-      const edges = tree.edges.filter((e) => reachableEdgeIds.has(e.id));
-
-      if (nodes.length === 0) {
-        continue;
-      }
-
-      const sourceCount = rootNode.recentGames + rootNode.cardCount;
-      if (sourceCount === 0) {
-        continue;
-      }
-
-      const trainNodes = nodes.filter((n) => n.masteryScore > 0 || n.seenCount > 0);
-      const masteryScore =
-        trainNodes.length > 0 ? trainNodes.reduce((sum, n) => sum + n.masteryScore, 0) / trainNodes.length : 0;
-
-      sliced.push({
-        id: `sliced-${rootNode.id}`,
-        name: tree.name,
-        library: tree.library,
-        rootSan,
-        rootUci,
-        sourceCount,
-        targetDepth: tree.targetDepth,
-        nodeCount: nodes.length,
-        dueCount: 0,
-        masteryScore,
-        updatedAt: tree.updatedAt,
-        nodes,
-        edges,
-      });
+    if (!rootNode || rootNode.recentGames + rootNode.cardCount === 0) {
+      continue;
     }
+
+    const filtered = filterOpeningTreeForDisplay(tree, rootPly);
+
+    if (filtered.nodes.length < 2) {
+      continue;
+    }
+
+    sliced.push({
+      ...filtered,
+      id: tree.id,
+      name: tree.name,
+      library: tree.library,
+      rootPly,
+      rootFenKey: tree.rootFenKey,
+    });
   }
 
-  return sliced.sort((a, b) => b.sourceCount - a.sourceCount);
+  return sliced.sort((left, right) => right.sourceCount - left.sourceCount);
 }
 
 export function ensureDraftEdge(

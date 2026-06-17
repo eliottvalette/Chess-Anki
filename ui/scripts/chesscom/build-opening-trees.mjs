@@ -1,12 +1,13 @@
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
+import { pruneOpeningTreeDraft } from '../../lib/opening-tree.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
 const DEFAULT_OPENING_ROOT_PLY = 4;
 const DEFAULT_OPENING_TARGET_DEPTH = 22;
-const MAX_ENGINE_IMPORT_NODES = 60;
-const MAX_LICHESS_IMPORT_NODES = 120;
+const MAX_ENGINE_IMPORT_NODES = 120;
+const MAX_LICHESS_IMPORT_NODES = 80;
 const LICHESS_EXPLORER_URL = 'https://explorer.lichess.org/masters';
 
 function shortHash(value) {
@@ -88,6 +89,7 @@ function ensureDraftEdge(draft, fromNode, uci, source, options) {
       fenKey: toFenKey,
       ply: fromNode.ply + 1,
       sideToMove: toFen.split(' ')[1] === 'b' ? 'black' : 'white',
+      trainSide: draft.trainSide,
       bestUci: null,
       bestSan: null,
       evalCp: null,
@@ -143,6 +145,7 @@ function buildTreeForGroup(group, options) {
         fenKey,
         ply: index,
         sideToMove: getSideToMove(fen),
+        trainSide: item.input.trainSide,
         bestUci: null,
         bestSan: null,
         evalCp: null,
@@ -233,14 +236,14 @@ function buildOpeningTrees(inputs, options) {
 }
 
 async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
-  const trainNodes = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
+  const nodesToEnrich = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
 
-  for (const node of trainNodes) {
+  for (const node of nodesToEnrich) {
     try {
       const response = await fetch(`${analyzeBaseUrl}/api/analyze-position`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fen: node.fen, depth: draft.targetDepth, multipv: 1 }),
+        body: JSON.stringify({ fen: node.fen, depth: 18, multipv: 1 }),
       });
 
       if (!response.ok) continue;
@@ -253,6 +256,25 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
       node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
 
       ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', { isEngineBest: true, priority: 100 });
+
+      const targetNode = draft.nodes.find((candidate) => {
+        const chess = new Chess(node.fen);
+        try {
+          chess.move({
+            from: analysis.bestMove.slice(0, 2),
+            to: analysis.bestMove.slice(2, 4),
+            ...(analysis.bestMove[4] ? { promotion: analysis.bestMove[4] } : {}),
+          });
+        } catch {
+          return false;
+        }
+
+        return candidate.fenKey === normalizeOpeningFen(chess.fen());
+      });
+
+      if (targetNode && targetNode.evalCp == null && analysis.lines?.[0]?.whitePerspective?.type === 'cp') {
+        targetNode.evalCp = analysis.lines[0].whitePerspective.value;
+      }
     } catch {
       // continue
     }
@@ -260,7 +282,10 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
 }
 
 async function enrichLichessOpponentMoves(draft) {
-  const opponentNodes = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_LICHESS_IMPORT_NODES);
+  const opponentNodes = [...draft.nodes]
+    .filter((node) => node.recentGames > 0)
+    .sort((left, right) => left.ply - right.ply)
+    .slice(0, MAX_LICHESS_IMPORT_NODES);
 
   for (const node of opponentNodes) {
     try {
@@ -277,7 +302,7 @@ async function enrichLichessOpponentMoves(draft) {
         }))
         .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
-        .slice(0, 6);
+        .slice(0, 4);
 
       for (const move of moves) {
         ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
@@ -322,6 +347,7 @@ async function upsertTreeDraft(supabase, profileId, draft) {
         fen_key: node.fenKey,
         ply: node.ply,
         side_to_move: node.sideToMove,
+        train_side: node.trainSide ?? draft.trainSide,
         best_uci: node.bestUci ?? null,
         best_san: node.bestSan ?? null,
         eval_cp: node.evalCp ?? null,
@@ -369,6 +395,7 @@ export async function buildAndUpsertOpeningTrees({
   const lineInputs = openingLines.map((line) => ({
     id: line.id,
     name: line.name ?? 'Opening',
+    trainSide: line.side === 'black' ? 'black' : 'white',
     moves: line.moves,
     source: 'recent_game',
     count: 1,
@@ -380,6 +407,7 @@ export async function buildAndUpsertOpeningTrees({
     return {
       id: card.id,
       name: card.line_name ?? 'Opening',
+      trainSide: card.side === 'black' ? 'black' : 'white',
       moves,
       source: 'card',
       count: 1,
@@ -397,6 +425,7 @@ export async function buildAndUpsertOpeningTrees({
     logProgress(`[${i + 1}/${drafts.length}] enriching "${draft.name}" (${draft.nodes.length} nodes)`);
     await enrichEngineBestMoves(draft, analyzeBaseUrl);
     await enrichLichessOpponentMoves(draft);
+    pruneOpeningTreeDraft(draft);
     await upsertTreeDraft(supabase, ownerProfileId, draft);
   }
 

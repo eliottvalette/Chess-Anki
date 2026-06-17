@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Chess } from 'chess.js';
 
-import { dedupeTrainingCards, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';
+import { dedupeTrainingCards, isMoveInOpeningBook, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';
 
 test('qualifiesAsLineRootMistake accepts the first non-book suboptimal move', () => {
   assert.equal(
@@ -68,4 +69,11 @@ test('dedupeTrainingCards keeps the strongest duplicate position', () => {
   assert.equal(cards.length, 1);
   assert.equal(cards[0]?.score_swing_cp, 120);
   assert.match(cards[0]?.id ?? '', /^recent-fix-[a-f0-9]{12}$/);
+});
+
+test('isMoveInOpeningBook matches e5 after e4 even with en passant in fen', () => {
+  const chess = new Chess();
+  chess.move('e4');
+
+  assert.equal(isMoveInOpeningBook(chess.fen(), 'e7e5'), true);
 });

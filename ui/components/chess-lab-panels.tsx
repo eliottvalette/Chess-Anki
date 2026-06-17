@@ -4,12 +4,26 @@ import {
   Background,
   type Edge,
   type Node as FlowNode,
+  Handle,
+  type NodeProps,
+  Position,
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
 import dagre from 'dagre';
-import { type ChangeEvent, type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ChangeEvent,
+  createContext,
+  memo,
+  type ReactNode,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import '@xyflow/react/dist/style.css';
 
 function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: string | null; treeId: string | null }) {
@@ -39,7 +53,7 @@ function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: st
           maxZoom: 1.2,
           minZoom: 0.25,
           padding: treeChanged ? 0.5 : 0.35,
-          duration: treeChanged ? 400 : 800,
+          duration: treeChanged ? 400 : 0,
         });
         return;
       }
@@ -175,7 +189,6 @@ export function LinesPanel({
   onSelectTree,
   trainSide,
   onChangeTrainSide,
-  undoMove,
   trees,
   minForcedPlies,
   setMinForcedPlies,
@@ -199,7 +212,6 @@ export function LinesPanel({
   onSelectTree: (treeId: string) => void;
   trainSide: 'white' | 'black';
   onChangeTrainSide: (side: 'white' | 'black') => void;
-  undoMove: () => void;
   trees: OpeningTreeSummary[];
   minForcedPlies: number;
   setMinForcedPlies: (v: number) => void;
@@ -213,29 +225,48 @@ export function LinesPanel({
     [trees, minNodes, minDepth],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
-  const activeForkStats = useMemo(() => {
-    if (!activeNodeId || !forkCoverage) {
-      return null;
-    }
-
-    const entry = forkCoverage[activeNodeId];
-
-    if (!entry) {
-      return null;
-    }
-
-    const total = entry.playedEdgeIds.length + entry.remainingEdgeIds.length;
-
-    if (total < 2) {
-      return null;
-    }
-
-    return { played: entry.playedEdgeIds.length, total };
-  }, [activeNodeId, forkCoverage]);
-  const graph = useMemo(
-    () => buildOpeningTreeGraph(activeTree, activeNodeId, trainSide, onSelectNode, drillActive, forkCoverage),
-    [activeTree, activeNodeId, trainSide, onSelectNode, drillActive, forkCoverage],
+  const graphLayout = useMemo(() => layoutOpeningTreeGraph(activeTree), [activeTree]);
+  const graphNodes = useMemo(
+    () => buildOpeningTreeGraphNodes(activeTree, graphLayout, trainSide),
+    [activeTree, graphLayout, trainSide],
   );
+  const graphEdges = useMemo(
+    () => buildOpeningTreeGraphEdges(activeTree, drillActive, forkCoverage ?? {}),
+    [activeTree, drillActive, forkCoverage],
+  );
+  const graphInteraction = useMemo(() => ({ drillActive, onSelectNode }), [drillActive, onSelectNode]);
+  const graph = useMemo(
+    () => ({
+      nodes: graphNodes.map((node) => ({
+        ...node,
+        selected: node.id === activeNodeId,
+      })),
+      edges: graphEdges,
+    }),
+    [graphNodes, graphEdges, activeNodeId],
+  );
+  const activeForkStats = useMemo(() => {
+    if (!activeTree || !activeNodeId) {
+      return null;
+    }
+
+    const entry = forkCoverage?.[activeNodeId];
+
+    if (entry) {
+      return {
+        played: entry.playedEdgeIds.length,
+        total: entry.playedEdgeIds.length + entry.remainingEdgeIds.length,
+      };
+    }
+
+    const outgoing = activeTree.edges?.filter((edge) => edge.fromNodeId === activeNodeId) ?? [];
+
+    if (outgoing.length < 2) {
+      return null;
+    }
+
+    return { played: 0, total: outgoing.length };
+  }, [activeNodeId, activeTree, forkCoverage]);
 
   return (
     <>
@@ -316,7 +347,7 @@ export function LinesPanel({
                           <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-(--text) wrap-anywhere">
                             <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
                             <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft) [&+strong]:min-w-0">
-                              {tree.masteryScore}/100
+                              {tree.masteryScore > 0 ? `${tree.masteryScore}/100` : 'New'}
                             </span>
                           </span>
                           <span className="block font-mono text-[11px] leading-[1.35] text-(--text-muted) wrap-anywhere">
@@ -325,7 +356,7 @@ export function LinesPanel({
                           <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
                             <span>{tree.sourceCount} sources</span>
                             <span>{tree.nodeCount} nodes</span>
-                            <span>{tree.dueCount} weak</span>
+                            {tree.dueCount > 0 ? <span>{tree.dueCount} weak</span> : null}
                           </span>
                         </button>
                       ))}
@@ -388,8 +419,8 @@ export function LinesPanel({
 
             <div className="flex items-center justify-between gap-2.5 text-xs text-(--text-soft)">
               <span>depth {activeTree.targetDepth}</span>
-              <span>{activeTree.nodeCount} nodes</span>
-              <span>{activeTree.dueCount} weak</span>
+              <span>{activeTree.nodes?.length ?? activeTree.nodeCount} nodes</span>
+              {activeTree.dueCount > 0 ? <span>{activeTree.dueCount} weak</span> : null}
               {activeForkStats ? (
                 <span>
                   {activeForkStats.played}/{activeForkStats.total} replies
@@ -397,38 +428,30 @@ export function LinesPanel({
               ) : null}
             </div>
 
-            {drillActive ? (
-              <div className="flex w-full items-stretch gap-2">
-                <button
-                  className="box-border flex min-h-[42px] w-full min-w-0 items-center justify-center self-stretch rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none"
-                  onClick={undoMove}
-                  type="button"
-                >
-                  Undo
-                </button>
-              </div>
-            ) : null}
-
             <div className="w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
-              <ReactFlowProvider key={activeTreeId ?? 'none'}>
-                <ReactFlow
-                  edges={graph.edges}
-                  minZoom={0.25}
-                  nodes={graph.nodes}
-                  nodesDraggable={false}
-                  panOnDrag
-                  selectNodesOnDrag={false}
-                  zoomOnScroll={false}
-                  panOnScroll={false}
-                  zoomOnDoubleClick={false}
-                  nodesConnectable={false}
-                  onNodeClick={(_, node) => onSelectNode(node.id)}
-                  proOptions={{ hideAttribution: true }}
-                >
-                  <Background />
-                  <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} treeId={activeTreeId} />
-                </ReactFlow>
-              </ReactFlowProvider>
+              <OpeningTreeGraphInteractionContext.Provider value={graphInteraction}>
+                <ReactFlowProvider key={activeTreeId ?? 'none'}>
+                  <ReactFlow
+                    edges={graph.edges}
+                    minZoom={0.25}
+                    nodeTypes={openingTreeGraphNodeTypes}
+                    nodes={graph.nodes}
+                    onlyRenderVisibleElements
+                    nodesDraggable={false}
+                    panOnDrag
+                    selectNodesOnDrag={false}
+                    zoomOnScroll={false}
+                    panOnScroll={false}
+                    zoomOnDoubleClick={false}
+                    nodesConnectable={false}
+                    onNodeClick={(_, node) => onSelectNode(node.id)}
+                    proOptions={{ hideAttribution: true }}
+                  >
+                    <Background />
+                    <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} treeId={activeTreeId} />
+                  </ReactFlow>
+                </ReactFlowProvider>
+              </OpeningTreeGraphInteractionContext.Provider>
             </div>
           </section>
         </>
@@ -466,16 +489,9 @@ function formatOpeningLibrary(library: OpeningLibrary) {
   }
 }
 
-function buildOpeningTreeGraph(
-  tree: OpeningTreeDetail | null,
-  activeNodeId: string | null,
-  trainSide: 'white' | 'black',
-  onSelectNode: (nodeId: string) => void,
-  drillActive = false,
-  forkCoverage: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }> = {},
-) {
-  if (!tree) {
-    return { nodes: [], edges: [] } satisfies { nodes: FlowNode[]; edges: Edge[] };
+function layoutOpeningTreeGraph(tree: OpeningTreeDetail | null) {
+  if (!tree?.nodes?.length) {
+    return new Map<string, { x: number; y: number }>();
   }
 
   const graph = new dagre.graphlib.Graph();
@@ -486,79 +502,156 @@ function buildOpeningTreeGraph(
     graph.setNode(node.id, { width: 156, height: 58 });
   }
 
-  for (const edge of tree.edges) {
+  for (const edge of tree.edges ?? []) {
     graph.setEdge(edge.fromNodeId, edge.toNodeId);
   }
 
   dagre.layout(graph);
 
-  const nodes = tree.nodes.map((node) => {
+  const positions = new Map<string, { x: number; y: number }>();
+
+  for (const node of tree.nodes) {
     const point = graph.node(node.id) ?? { x: 0, y: 0 };
-    const isActive = node.id === activeNodeId;
-    const isTrainTurn = node.sideToMove === trainSide;
-    const isWeak = node.masteryScore < 60 && isTrainTurn;
-    const showAnswer = isTrainTurn && node.bestSan && !drillActive;
+    positions.set(node.id, { x: point.x - 78, y: point.y - 29 });
+  }
 
-    return {
-      id: node.id,
-      position: { x: point.x - 78, y: point.y - 29 },
-      data: {
-        label: (
-          <button
-            className="flex min-h-[58px] w-full cursor-pointer flex-col justify-center gap-1 border-0 bg-transparent px-2.5 py-2 text-left text-inherit [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-normal text-(--text-soft)"
-            onClick={() => onSelectNode(node.id)}
-            type="button"
-          >
-            <strong>{isTrainTurn && showAnswer ? `Best: ${node.bestSan}` : `Ply ${node.ply}`}</strong>
-            <span>{isTrainTurn ? `${node.masteryScore}/100` : 'Opponent'}</span>
-          </button>
-        ),
-      },
-      draggable: false,
-      className: [
-        'w-[156px] rounded-[10px] border border-[rgba(214,226,244,0.24)] bg-[rgba(13,20,32,0.94)] text-(--text) shadow-[0_8px_20px_rgba(0,0,0,0.24)]',
-        isActive
-          ? '!border-[rgba(198,215,255,0.78)] shadow-[0_8px_22px_rgba(0,0,0,0.28),0_0_0_2px_rgba(198,215,255,0.16)]'
-          : '',
-        isTrainTurn
-          ? '!border-[rgba(138,198,255,0.34)] !bg-[rgba(42,82,126,0.2)]'
-          : '!border-[rgba(214,226,244,0.2)] !bg-[rgba(13,20,32,0.94)]',
-        isWeak ? '!border-[rgba(255,176,84,0.36)] !bg-[rgba(130,82,32,0.18)]' : '',
-      ]
-        .filter(Boolean)
-        .join(' '),
-      type: 'default',
-    } satisfies FlowNode;
-  });
-  const edges = tree.edges.map((edge) => {
-    const fromCoverage = forkCoverage[edge.fromNodeId];
-    const isPlayed = fromCoverage?.playedEdgeIds.includes(edge.id) ?? false;
-    const isRemaining = fromCoverage?.remainingEdgeIds.includes(edge.id) ?? false;
-    const forkEdgeStyle =
-      drillActive && (isPlayed || isRemaining)
-        ? {
-            stroke: isPlayed ? 'rgba(138, 227, 193, 0.95)' : 'rgba(152, 184, 255, 0.55)',
-            strokeWidth: isPlayed ? 2.8 : 2.2,
-            opacity: isRemaining ? 1 : 0.72,
-          }
-        : edge.isEngineBest
-          ? { stroke: 'rgba(138, 227, 193, 0.95)', strokeWidth: 2.8 }
-          : undefined;
+  return positions;
+}
 
-    return {
-      id: edge.id,
-      source: edge.fromNodeId,
-      target: edge.toNodeId,
-      animated: edge.isEngineBest || isRemaining,
-      label: edge.san,
-      style: forkEdgeStyle,
-      labelBgPadding: [6, 4],
-      labelBgBorderRadius: 6,
-      labelShowBg: true,
-    } satisfies Edge;
-  });
+type OpeningTreeGraphNodeData = {
+  ply: number;
+  sideToMove: 'white' | 'black';
+  trainSide: 'white' | 'black';
+  bestSan: string | null;
+  recentGames: number;
+  seenCount: number;
+  masteryScore: number;
+};
 
-  return { nodes, edges };
+type OpeningTreeGraphInteraction = {
+  drillActive: boolean;
+  onSelectNode: (nodeId: string) => void;
+};
+
+const OpeningTreeGraphInteractionContext = createContext<OpeningTreeGraphInteraction>({
+  drillActive: false,
+  onSelectNode: () => undefined,
+});
+
+const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data, selected }: NodeProps) {
+  const nodeData = data as OpeningTreeGraphNodeData;
+  const { drillActive, onSelectNode } = useContext(OpeningTreeGraphInteractionContext);
+  const isTrainTurn = nodeData.sideToMove === nodeData.trainSide;
+  const isWeak = nodeData.masteryScore < 60 && isTrainTurn;
+  const showAnswer = isTrainTurn && nodeData.bestSan && !drillActive;
+
+  return (
+    <div className="relative">
+      <Handle className="opacity-0" position={Position.Top} type="target" />
+      <button
+        className={[
+          'flex min-h-[58px] w-[156px] cursor-pointer flex-col justify-center gap-1 rounded-[10px] border px-2.5 py-2 text-left text-(--text) shadow-[0_8px_20px_rgba(0,0,0,0.24)] [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-normal text-(--text-soft)',
+          selected
+            ? 'border-[rgba(198,215,255,0.78)] shadow-[0_8px_22px_rgba(0,0,0,0.28),0_0_0_2px_rgba(198,215,255,0.16)]'
+            : 'border-[rgba(214,226,244,0.24)]',
+          isTrainTurn
+            ? 'border-[rgba(138,198,255,0.34)] bg-[rgba(42,82,126,0.2)]'
+            : 'border-[rgba(214,226,244,0.2)] bg-[rgba(13,20,32,0.94)]',
+          isWeak ? 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        onClick={() => onSelectNode(id)}
+        type="button"
+      >
+        <strong>{isTrainTurn && showAnswer ? `Best: ${nodeData.bestSan}` : `Ply ${nodeData.ply}`}</strong>
+        <span>
+          {isTrainTurn
+            ? nodeData.seenCount > 0
+              ? `${nodeData.masteryScore}/100`
+              : nodeData.recentGames > 0
+                ? `${nodeData.recentGames} games`
+                : 'New'
+            : 'Opponent'}
+        </span>
+      </button>
+      <Handle className="opacity-0" position={Position.Bottom} type="source" />
+    </div>
+  );
+});
+
+const openingTreeGraphNodeTypes = {
+  openingTreeNode: OpeningTreeGraphNode,
+};
+
+function buildOpeningTreeGraphNodes(
+  tree: OpeningTreeDetail | null,
+  layout: Map<string, { x: number; y: number }>,
+  trainSide: 'white' | 'black',
+): FlowNode[] {
+  if (!tree?.nodes?.length) {
+    return [];
+  }
+
+  return tree.nodes.map((node) => ({
+    id: node.id,
+    type: 'openingTreeNode',
+    position: layout.get(node.id) ?? { x: 0, y: 0 },
+    sourcePosition: Position.Bottom,
+    targetPosition: Position.Top,
+    data: {
+      ply: node.ply,
+      sideToMove: node.sideToMove,
+      trainSide,
+      bestSan: node.bestSan,
+      recentGames: node.recentGames,
+      seenCount: node.seenCount,
+      masteryScore: node.masteryScore,
+    },
+    draggable: false,
+  }));
+}
+
+function buildOpeningTreeGraphEdges(
+  tree: OpeningTreeDetail | null,
+  drillActive: boolean,
+  forkCoverage: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }>,
+): Edge[] {
+  if (!tree?.edges?.length || !tree?.nodes?.length) {
+    return [];
+  }
+
+  const nodeIds = new Set(tree.nodes.map((node) => node.id));
+
+  return tree.edges
+    .filter((edge) => nodeIds.has(edge.fromNodeId) && nodeIds.has(edge.toNodeId))
+    .map((edge) => {
+      const fromCoverage = forkCoverage[edge.fromNodeId];
+      const isPlayed = fromCoverage?.playedEdgeIds.includes(edge.id) ?? false;
+      const isRemaining = fromCoverage?.remainingEdgeIds.includes(edge.id) ?? false;
+      const forkEdgeStyle =
+        drillActive && (isPlayed || isRemaining)
+          ? {
+              stroke: isPlayed ? 'rgba(138, 227, 193, 0.95)' : 'rgba(152, 184, 255, 0.55)',
+              strokeWidth: isPlayed ? 2.8 : 2.2,
+              opacity: isRemaining ? 1 : 0.72,
+            }
+          : edge.isEngineBest
+            ? { stroke: 'rgba(138, 227, 193, 0.95)', strokeWidth: 2.8 }
+            : undefined;
+
+      return {
+        id: edge.id,
+        source: edge.fromNodeId,
+        target: edge.toNodeId,
+        animated: edge.isEngineBest || isRemaining,
+        label: edge.san,
+        style: forkEdgeStyle,
+        labelBgPadding: [6, 4],
+        labelBgBorderRadius: 6,
+        labelShowBg: true,
+      } satisfies Edge;
+    });
 }
 
 export function ReviewPanel({

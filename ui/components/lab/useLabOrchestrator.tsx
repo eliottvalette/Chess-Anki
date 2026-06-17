@@ -45,8 +45,8 @@ import {
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
   classifyLinesMoveAtHistoryIndex,
+  filterOpeningTreeSummaries,
   linesMoveCategoryToReviewCategory,
-  sliceOpeningForest,
 } from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
@@ -300,6 +300,7 @@ export function useLabOrchestrator() {
     setActiveOpeningNodeId,
     activeOpeningTree,
     activeTrainSide,
+    activeOpeningNodeId,
     openingDrillActive,
     drillPathRef,
     drillPathIndexRef,
@@ -460,7 +461,56 @@ export function useLabOrchestrator() {
     return preMoveAnalyses[historyIndex] ?? null;
   }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex]);
   const displayAnalysis = reviewDisplayAnalysis ?? positionAnalysis;
+  const boardScoreLabel = useMemo(() => {
+    if (mode === 'lines' && activeOpeningTree && activeOpeningNodeId) {
+      const openingNode = activeOpeningTree.nodes.find((node) => node.id === activeOpeningNodeId);
+
+      if (openingNode?.evalCp != null) {
+        return formatEvalCpLabel(openingNode.evalCp, orientation);
+      }
+    }
+
+    if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
+      return formatEvalCpLabel(activeTrainMoveReview.whiteEvalCp, orientation);
+    }
+
+    if (displayAnalysis) {
+      return formatScoreLabel(displayAnalysis, orientation);
+    }
+
+    if (activeDeckCard && historyIndex > 0) {
+      const whiteEvalCp = activeDeckCard.moveReviews[historyIndex - 1]?.whiteEvalCp;
+
+      if (whiteEvalCp != null) {
+        return formatEvalCpLabel(whiteEvalCp, orientation);
+      }
+    }
+
+    if (mode === 'lines') {
+      return '0.0';
+    }
+
+    return formatScoreLabel(displayAnalysis, orientation);
+  }, [
+    activeDeckCard,
+    activeOpeningNodeId,
+    activeOpeningTree,
+    activeTrainMoveReview,
+    displayAnalysis,
+    historyIndex,
+    mode,
+    orientation,
+    trainUsesLivePositionEval,
+  ]);
   const whiteAdvantage = useMemo(() => {
+    if (mode === 'lines' && activeOpeningTree && activeOpeningNodeId) {
+      const openingNode = activeOpeningTree.nodes.find((node) => node.id === activeOpeningNodeId);
+
+      if (openingNode?.evalCp != null) {
+        return getAdvantageMeterFromEvalCp(openingNode.evalCp);
+      }
+    }
+
     if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
       return getAdvantageMeterFromEvalCp(activeTrainMoveReview.whiteEvalCp);
     }
@@ -478,26 +528,16 @@ export function useLabOrchestrator() {
     }
 
     return getAdvantageMeter(displayAnalysis);
-  }, [activeDeckCard, activeTrainMoveReview, displayAnalysis, historyIndex, trainUsesLivePositionEval]);
-  const boardScoreLabel = useMemo(() => {
-    if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
-      return formatEvalCpLabel(activeTrainMoveReview.whiteEvalCp, orientation);
-    }
-
-    if (displayAnalysis) {
-      return formatScoreLabel(displayAnalysis, orientation);
-    }
-
-    if (activeDeckCard && historyIndex > 0) {
-      const whiteEvalCp = activeDeckCard.moveReviews[historyIndex - 1]?.whiteEvalCp;
-
-      if (whiteEvalCp != null) {
-        return formatEvalCpLabel(whiteEvalCp, orientation);
-      }
-    }
-
-    return formatScoreLabel(displayAnalysis, orientation);
-  }, [activeDeckCard, activeTrainMoveReview, displayAnalysis, historyIndex, orientation, trainUsesLivePositionEval]);
+  }, [
+    activeDeckCard,
+    activeOpeningNodeId,
+    activeOpeningTree,
+    activeTrainMoveReview,
+    displayAnalysis,
+    historyIndex,
+    mode,
+    trainUsesLivePositionEval,
+  ]);
   const isTrainCardFinished =
     (activeDeckCard != null || mode === 'lines') && deckFeedback != null && !deckFeedback.pending;
   const isAtDeckFailureFeedbackView =
@@ -2088,27 +2128,25 @@ export function useLabOrchestrator() {
     backgroundAttachment: 'fixed',
   } satisfies CSSProperties;
 
-  const slicedTrees = useMemo(
-    () => sliceOpeningForest(labState.openingTrees, labState.minForcedPlies),
+  const filteredOpeningTrees = useMemo(
+    () => filterOpeningTreeSummaries(labState.openingTrees, labState.minForcedPlies),
     [labState.openingTrees, labState.minForcedPlies],
   );
 
   const overriddenLabState = useMemo(
     () => ({
       ...labState,
-      openingTrees: slicedTrees,
-      activeOpeningTree: slicedTrees.find((t) => t.id === labState.selectedOpeningTreeId) ?? null,
+      openingTrees: filteredOpeningTrees,
+      activeOpeningTree:
+        labState.activeOpeningTree?.id === labState.selectedOpeningTreeId &&
+        Array.isArray(labState.activeOpeningTree.nodes)
+          ? labState.activeOpeningTree
+          : null,
     }),
-    [labState, slicedTrees],
+    [labState, filteredOpeningTrees],
   );
 
-  const handleSelectOpeningTree = useCallback(
-    (treeId: string) => {
-      const treeObj = slicedTrees.find((t) => t.id === treeId);
-      return selectOpeningTree(treeId, treeObj);
-    },
-    [selectOpeningTree, slicedTrees],
-  );
+  const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
 
   const linesForkCoverage = useMemo(
     () => linesSession.getForkCoverage(),

@@ -546,7 +546,7 @@ export function useLabGame(
         }
 
         if (drillPathRef.current.length > 0) {
-          const rootLength = activeOpeningTree.rootSan.length;
+          const rootLength = activeOpeningTree.rootPly ?? activeOpeningTree.rootSan.length;
 
           if (boundedIndex >= rootLength) {
             const stepIndex = boundedIndex - rootLength;

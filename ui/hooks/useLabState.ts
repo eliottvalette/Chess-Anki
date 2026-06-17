@@ -6,7 +6,12 @@ import type { GameMetadata, ReviewSide, StoredMove } from '@/lib/chess-analysis-
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback, OpeningSeedLine } from '@/lib/opening-training';
-import type { DrillPathStep, OpeningDrillExpectedMove, OpeningTreeDetail } from '@/lib/opening-tree';
+import type {
+  DrillPathStep,
+  OpeningDrillExpectedMove,
+  OpeningTreeDetail,
+  OpeningTreeSummary,
+} from '@/lib/opening-tree';
 import type { TrainingDeckSummary, TrainSessionStats, WorkspaceMode } from '../components/chess-lab-panels';
 import type { TrainingProfile } from '../lib/analysis-types';
 
@@ -76,7 +81,7 @@ export function useLabState() {
   const [deckLoadError, setDeckLoadError] = useState('');
   const [deckActionLoading, setDeckActionLoading] = useState(false);
   const [deckActionError, setDeckActionError] = useState('');
-  const [openingTrees, setOpeningTrees] = useState<OpeningTreeDetail[]>([]);
+  const [openingTrees, setOpeningTrees] = useState<OpeningTreeSummary[]>([]);
   const [minForcedPlies, setMinForcedPlies] = useState(() => readStoredLinesFilter('chess-lab-min-plies', 4));
   const [minNodes, setMinNodes] = useState(() => readStoredLinesFilter('chess-lab-min-nodes', 0));
   const [minDepth, setMinDepth] = useState(() => readStoredLinesFilter('chess-lab-min-depth', 0));

@@ -4,12 +4,7 @@ import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
 import type { ChessSoundKey } from '@/lib/chess-sounds';
-import {
-  DRILL_OPPONENT_DELAY_MS,
-  type OpeningTreesFullPayload,
-  type OpeningTreesPayload,
-  readJsonResponse,
-} from '@/lib/lab-helpers';
+import { DRILL_OPPONENT_DELAY_MS, type OpeningTreesPayload, readJsonResponse } from '@/lib/lab-helpers';
 import {
   buildDrillPath,
   buildOpeningDrillExpected,
@@ -17,8 +12,9 @@ import {
   findPathToNode,
   type OpeningSide,
   type OpeningTreeDetail,
-  type OpeningTreeNode,
   pickNextSchedulerAction,
+  prepareOpeningTreeForLines,
+  resolveCanonicalRootNode,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
@@ -75,6 +71,7 @@ export function useLabLines(
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,
+    minForcedPlies,
   } = state;
 
   const {
@@ -97,7 +94,9 @@ export function useLabLines(
       const rootMoves = buildStoredMovesFromSanList(null, tree.rootSan);
       const rootGame = restoreGameFromHistory(rootMoves, null, rootMoves.length);
       const rootNode =
-        tree.nodes.find((node: OpeningTreeNode) => node.ply === tree.rootSan.length) ?? tree.nodes[0] ?? null;
+        resolveCanonicalRootNode(tree, tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0)) ??
+        tree.nodes[0] ??
+        null;
 
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
@@ -168,22 +167,29 @@ export function useLabLines(
         }
 
         const tree = payload.tree ?? null;
-        setActiveOpeningTree(tree);
+        const displayTree = tree ? prepareOpeningTreeForLines(tree, minForcedPlies) : null;
+        setActiveOpeningTree(displayTree);
 
-        if (tree && options.syncBoard) {
-          loadOpeningTreeRootOnBoard(tree);
+        if (displayTree && options.syncBoard) {
+          loadOpeningTreeRootOnBoard(displayTree);
         } else {
-          setActiveOpeningNodeId(tree?.nodes[0]?.id ?? null);
+          setActiveOpeningNodeId(displayTree?.nodes[0]?.id ?? null);
         }
 
-        return tree;
+        return displayTree;
       } catch (error) {
         setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening tree.');
         setActiveOpeningTree(null);
         return null;
       }
     },
-    [loadOpeningTreeRootOnBoard, setActiveOpeningNodeId, setActiveOpeningTree, setOpeningTreeActionError],
+    [
+      loadOpeningTreeRootOnBoard,
+      minForcedPlies,
+      setActiveOpeningNodeId,
+      setActiveOpeningTree,
+      setOpeningTreeActionError,
+    ],
   );
 
   const loadOpeningTrees = useCallback(async () => {
@@ -191,8 +197,8 @@ export function useLabLines(
     setOpeningTreeActionError('');
 
     try {
-      const response = await fetch('/api/opening-trees?full=true', { credentials: 'same-origin' });
-      const payload = await readJsonResponse<OpeningTreesFullPayload>(response);
+      const response = await fetch('/api/opening-trees', { credentials: 'same-origin' });
+      const payload = await readJsonResponse<OpeningTreesPayload>(response);
 
       if (!response.ok) {
         throw new Error(payload.error ?? `Opening trees fetch failed: HTTP ${response.status}`);
@@ -676,7 +682,7 @@ export function useLabLines(
   ]);
 
   const selectOpeningTree = useCallback(
-    async (treeId: string, treeObj?: OpeningTreeDetail) => {
+    async (treeId: string) => {
       cancelDrillOpponentMove();
       deckPlaybackRequestIdRef.current += 1;
       setDeckPlaybackBusy(false);
@@ -701,13 +707,7 @@ export function useLabLines(
       setOpeningDrillStatus('');
       setOpeningDrillExpected(null);
 
-      let tree: OpeningTreeDetail | null = treeObj ?? null;
-      if (tree) {
-        setActiveOpeningTree(tree);
-        loadOpeningTreeRootOnBoard(tree);
-      } else {
-        tree = await loadOpeningTreeDetail(treeId, { syncBoard: true });
-      }
+      const tree = await loadOpeningTreeDetail(treeId, { syncBoard: true });
 
       if (tree) {
         startOpeningDrill(tree);
@@ -719,7 +719,6 @@ export function useLabLines(
       clearVariation,
       deckPlaybackRequestIdRef,
       loadOpeningTreeDetail,
-      loadOpeningTreeRootOnBoard,
       setActiveOpeningNodeId,
       setActiveOpeningTree,
       setGame,

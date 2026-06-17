@@ -153,7 +153,6 @@ export function LabSidebar() {
                   lab.startOpeningDrill(lab.labState.activeOpeningTree, side);
                 }
               }}
-              undoMove={lab.undoMove}
               trees={lab.labState.openingTrees}
               minForcedPlies={lab.labState.minForcedPlies}
               setMinForcedPlies={lab.labState.setMinForcedPlies}

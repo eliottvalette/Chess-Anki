@@ -41,7 +41,13 @@ type LichessExplorerResponse = {
 let localOpeningBookKeys: Set<string> | null = null;
 
 export function normalizeOpeningBookFen(fen: string) {
-  return fen.trim().split(' ').slice(0, 4).join(' ');
+  const parts = fen.trim().split(' ');
+
+  if (parts.length >= 4) {
+    parts[3] = '-';
+  }
+
+  return parts.slice(0, 4).join(' ');
 }
 
 export function buildLocalOpeningBookKeys() {

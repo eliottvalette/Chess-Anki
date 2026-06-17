@@ -8,7 +8,13 @@ const openingBookKeys = new Set(
 );
 
 export function normalizeOpeningBookFen(fen) {
-  return fen.trim().split(' ').slice(0, 4).join(' ');
+  const parts = fen.trim().split(' ');
+
+  if (parts.length >= 4) {
+    parts[3] = '-';
+  }
+
+  return parts.slice(0, 4).join(' ');
 }
 
 export function isMoveInOpeningBook(fenBefore, moveUci) {
