@@ -12,6 +12,7 @@ import {
   classifyOpeningDrillMove,
   classifyRootPrefixMove,
   filterOpeningTreeForDisplay,
+  filterOpeningTreeSummariesByIds,
   formatOpeningTreeDisplayName,
   LINES_MOVE_EVAL_GATE_CP,
   markForkEdgePlayed,
@@ -20,9 +21,11 @@ import {
   OPENING_TARGET_DEPTH_NORMAL,
   parseSanMoves,
   pickNextUnplayedOpponentEdge,
+  prepareOpeningTreeAtFenWithBoard,
   resolveAcceptedTrainMoveUcis,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
+  STANDARD_START_FEN_KEY,
   sliceOpeningForest,
 } from './opening-tree.ts';
 
@@ -1012,4 +1015,108 @@ test('classifyLinesMove accepts engine-tolerant moves within gate', () => {
   const classified = classifyLinesMove(tree, 'train-node', 'd2d4');
   assert.equal(classified.category, 'book');
   assert.ok(classified.evalLossCp != null && classified.evalLossCp <= LINES_MOVE_EVAL_GATE_CP);
+});
+
+test('filterOpeningTreeSummariesByIds keeps only matching tree ids when filter is active', () => {
+  const trees = [
+    { id: 'a', name: 'A' },
+    { id: 'b', name: 'B' },
+    { id: 'c', name: 'C' },
+  ];
+
+  assert.deepEqual(
+    filterOpeningTreeSummariesByIds(trees, null).map((tree) => tree.id),
+    ['a', 'b', 'c'],
+  );
+  assert.deepEqual(
+    filterOpeningTreeSummariesByIds(trees, ['b', 'c']).map((tree) => tree.id),
+    ['b', 'c'],
+  );
+});
+
+test('prepareOpeningTreeAtFenWithBoard re-roots tree prefix from board history', () => {
+  const tree = {
+    id: 'tree-1',
+    name: 'Italian',
+    library: 'e4',
+    rootFenKey: 'italian-root',
+    rootPly: 4,
+    rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
+    rootUci: ['e2e4', 'e7e5', 'g1f3', 'b8c6'],
+    sourceCount: 1,
+    targetDepth: 12,
+    nodeCount: 3,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'root',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 2 2',
+        fenKey: 'italian-root',
+        ply: 4,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-bc4',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+        fenKey: 'after-bc4',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: 'g8f6',
+        bestSan: 'Nf6',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-bc4',
+        fromNodeId: 'root',
+        toNodeId: 'after-bc4',
+        uci: 'f1c4',
+        san: 'Bc4',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const prepared = prepareOpeningTreeAtFenWithBoard(
+    tree,
+    'after-bc4',
+    [
+      { san: 'e4', uci: 'e2e4' },
+      { san: 'e5', uci: 'e7e5' },
+      { san: 'Nf3', uci: 'g1f3' },
+      { san: 'Nc6', uci: 'b8c6' },
+      { san: 'Bc4', uci: 'f1c4' },
+    ],
+    5,
+  );
+
+  assert.ok(prepared);
+  assert.equal(prepared.rootPly, 5);
+  assert.equal(prepared.rootFenKey, 'after-bc4');
+  assert.deepEqual(prepared.rootSan, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
+  assert.equal(STANDARD_START_FEN_KEY, normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'));
 });

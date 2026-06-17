@@ -330,13 +330,15 @@ export function LinesPanel({
               Lines
             </h2>
             <span className="text-sm leading-[1.45] text-(--text-muted)">
-              {loading ? 'loading' : `${trees.length} openings`}
+              {loading ? 'loading' : `${filteredTrees.length} openings`}
             </span>
           </div>
           {trees.length === 0 ? (
             <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
               Import your recent games to build opening trees grouped by the position after 4 plies.
             </p>
+          ) : filteredTrees.length === 0 ? (
+            <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">No openings match the current filters.</p>
           ) : (
             <div className="flex max-h-[300px] min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex flex-row gap-3 rounded-[10px] border border-(--border-soft) bg-(--surface-strong) px-3 py-2.5">

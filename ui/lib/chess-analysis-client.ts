@@ -1,5 +1,5 @@
 import type { ChartOptions, PointStyle } from 'chart.js';
-import { Chess } from 'chess.js';
+import { Chess, type Move } from 'chess.js';
 
 import type { AnalysisResult, AnalyzeRequest, PerspectiveScore, PerspectiveWdl, ScoreBound } from './analysis-types.ts';
 
@@ -380,16 +380,94 @@ export function buildMoveUciHistory(moves: StoredMove[]) {
 
 export function restoreGameFromHistory(moves: StoredMove[], initialFen: string | null, upto = moves.length) {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
+  const boundedUpto = Math.max(0, Math.min(upto, moves.length));
 
-  for (const move of moves.slice(0, upto)) {
-    chess.move({
-      from: move.from,
-      to: move.to,
-      ...(move.promotion ? { promotion: move.promotion } : {}),
-    });
+  for (let index = 0; index < boundedUpto; index += 1) {
+    const move = moves[index];
+
+    if (!move) {
+      throw new Error(`Missing history move at index ${index}`);
+    }
+
+    let applied: Move | null;
+
+    try {
+      applied = chess.move({
+        from: move.from,
+        to: move.to,
+        ...(move.promotion ? { promotion: move.promotion } : {}),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Invalid history move at index ${index}: ${message}`);
+    }
+
+    if (!applied) {
+      throw new Error(
+        `Invalid history move at index ${index}: ${JSON.stringify({
+          from: move.from,
+          to: move.to,
+          promotion: move.promotion,
+          uci: move.uci,
+        })}`,
+      );
+    }
   }
 
   return chess;
+}
+
+export function applyStoredMoveFromUci(fen: string, uci: string) {
+  const chess = new Chess(fen);
+  const from = uci.slice(0, 2);
+  const to = uci.slice(2, 4);
+  const promotion = uci.length === 5 ? uci[4] : undefined;
+  const applied = chess.move({
+    from,
+    to,
+    ...(promotion ? { promotion } : {}),
+  });
+
+  if (!applied) {
+    throw new Error(`Invalid uci move ${uci} on fen ${fen}`);
+  }
+
+  return {
+    nextFen: chess.fen(),
+    stored: toStoredMove(applied),
+  };
+}
+
+export function appendStoredMoveFromUci(
+  moveHistory: StoredMove[],
+  fen: string,
+  uci: string,
+): { moveHistory: StoredMove[]; nextFen: string; stored: StoredMove } {
+  const { stored, nextFen } = applyStoredMoveFromUci(fen, uci);
+
+  return {
+    moveHistory: [...moveHistory, stored],
+    nextFen,
+    stored,
+  };
+}
+
+export function linesJumpToHistoryIndex(
+  moveHistory: StoredMove[],
+  initialFen: string | null,
+  historyIndex: number,
+  targetIndex: number,
+) {
+  const boundedIndex = Math.max(0, Math.min(targetIndex, moveHistory.length));
+  const shouldTruncate = boundedIndex < historyIndex && boundedIndex === historyIndex - 1;
+  const historyForSync = shouldTruncate ? moveHistory.slice(0, boundedIndex) : moveHistory;
+  const game = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+
+  return {
+    moveHistory: historyForSync,
+    historyIndex: boundedIndex,
+    game,
+  };
 }
 
 export function buildTimelinePositions(moves: StoredMove[], initialFen: string | null) {

@@ -55,9 +55,15 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const treeId = url.searchParams.get('treeId');
   const full = url.searchParams.get('full') === 'true';
+  const atFenKey = url.searchParams.get('atFenKey');
 
   try {
     const supabase = createAdminClient();
+
+    if (atFenKey) {
+      const treeIds = await fetchTreeIdsAtFenKey(supabase, profile.id, atFenKey);
+      return NextResponse.json({ treeIds });
+    }
 
     if (treeId) {
       const detail = await fetchTreeDetail(supabase, profile.id, treeId);
@@ -604,6 +610,45 @@ async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
       // External explorer is opportunistic; recent games/cards remain the base tree.
     }
   }
+}
+
+async function fetchTreeIdsAtFenKey(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  fenKey: string,
+): Promise<string[]> {
+  const { data: ownerTrees, error } = await supabase
+    .from('opening_trees')
+    .select('id,root_fen_key')
+    .eq('owner_profile_id', profileId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const treeIds = new Set<string>();
+
+  for (const tree of ownerTrees ?? []) {
+    if (String(tree.root_fen_key ?? '') === fenKey) {
+      treeIds.add(String(tree.id));
+    }
+  }
+
+  const ownerTreeIds = (ownerTrees ?? []).map((tree) => String(tree.id));
+
+  if (ownerTreeIds.length === 0) {
+    return [...treeIds];
+  }
+
+  const nodeRows = await fetchAllRows<{ tree_id: string }>(supabase, 'opening_nodes', 'tree_id', (query) =>
+    query.in('tree_id', ownerTreeIds).eq('fen_key', fenKey),
+  );
+
+  for (const row of nodeRows) {
+    treeIds.add(String(row.tree_id));
+  }
+
+  return [...treeIds];
 }
 
 async function fetchTreeSummaries(

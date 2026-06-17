@@ -46,7 +46,10 @@ import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
   classifyLinesMoveAtHistoryIndex,
   filterOpeningTreeSummaries,
+  filterOpeningTreeSummariesByIds,
+  isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
+  normalizeOpeningFen,
 } from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
@@ -349,6 +352,69 @@ export function useLabOrchestrator() {
   const modeRef = useRef<WorkspaceMode>('review');
 
   const currentFen = useMemo(() => game.fen(), [game]);
+
+  useEffect(() => {
+    const shouldFilter =
+      mode === 'lines' && labState.linesStudyMode === 'idle' && !openingDrillActive && !labState.selectedOpeningTreeId;
+
+    if (!shouldFilter) {
+      labState.setLinesPositionFilterTreeIds(null);
+      labState.setLinesPositionFilterLoading(false);
+      return;
+    }
+
+    const fenKey = normalizeOpeningFen(currentFen);
+
+    if (isStandardStartFenKey(fenKey) && historyIndex === 0) {
+      labState.setLinesPositionFilterTreeIds(null);
+      labState.setLinesPositionFilterLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    labState.setLinesPositionFilterLoading(true);
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`, {
+          credentials: 'same-origin',
+        });
+        const payload = (await response.json()) as { treeIds?: string[]; error?: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!response.ok) {
+          throw new Error(payload.error ?? `Position filter failed: HTTP ${response.status}`);
+        }
+
+        labState.setLinesPositionFilterTreeIds((payload.treeIds ?? []).map((treeId) => String(treeId)));
+      } catch {
+        if (!cancelled) {
+          labState.setLinesPositionFilterTreeIds([]);
+        }
+      } finally {
+        if (!cancelled) {
+          labState.setLinesPositionFilterLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    currentFen,
+    historyIndex,
+    mode,
+    openingDrillActive,
+    labState.linesStudyMode,
+    labState.selectedOpeningTreeId,
+    labState.setLinesPositionFilterLoading,
+    labState.setLinesPositionFilterTreeIds,
+  ]);
+
   const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
   const currentMoves = useMemo(() => {
     if (variationBaseIndex != null) {
@@ -676,19 +742,34 @@ export function useLabOrchestrator() {
       return null;
     }
 
-    if (labState.linesLastPlayedMoveReview?.historyIndex === historyIndex) {
-      const classifiedMove = currentMoves[currentMoves.length - 1];
+    const inLinesSession = labState.linesStudyMode !== 'idle' || openingDrillActive;
 
-      if (classifiedMove && classifiedMove.uci === labState.linesLastPlayedMoveReview.uci) {
+    if (!inLinesSession) {
+      return null;
+    }
+
+    const storedReview = labState.linesLastPlayedMoveReview;
+
+    if (storedReview && storedReview.historyIndex <= historyIndex) {
+      const reviewedMove = moveHistory[storedReview.historyIndex - 1];
+
+      if (reviewedMove && reviewedMove.uci === storedReview.uci) {
         return {
-          move: classifiedMove,
-          category: labState.linesLastPlayedMoveReview.category,
+          move: reviewedMove,
+          category: storedReview.category,
         };
       }
     }
 
-    if (labState.linesStudyMode === 'idle' && !openingDrillActive) {
-      return null;
+    if (deckFeedback && !deckFeedback.pending) {
+      const feedbackMove = moveHistory[historyIndex - 1];
+
+      if (feedbackMove && feedbackMove.uci === deckFeedback.playedUci) {
+        return {
+          move: feedbackMove,
+          category: deckFeedback.correct ? (deckFeedback.exact ? 'best' : 'book') : 'miss',
+        };
+      }
     }
 
     const classified = classifyLinesMoveAtHistoryIndex(activeOpeningTree, moveHistory, historyIndex, activeTrainSide);
@@ -711,6 +792,7 @@ export function useLabOrchestrator() {
     activeOpeningTree,
     activeTrainSide,
     currentMoves,
+    deckFeedback,
     historyIndex,
     labState.linesLastPlayedMoveReview,
     labState.linesStudyMode,
@@ -2176,10 +2258,11 @@ export function useLabOrchestrator() {
     backgroundAttachment: 'fixed',
   } satisfies CSSProperties;
 
-  const filteredOpeningTrees = useMemo(
-    () => filterOpeningTreeSummaries(labState.openingTrees, labState.minForcedPlies),
-    [labState.openingTrees, labState.minForcedPlies],
-  );
+  const filteredOpeningTrees = useMemo(() => {
+    const plyFiltered = filterOpeningTreeSummaries(labState.openingTrees, labState.minForcedPlies);
+
+    return filterOpeningTreeSummariesByIds(plyFiltered, labState.linesPositionFilterTreeIds);
+  }, [labState.linesPositionFilterTreeIds, labState.minForcedPlies, labState.openingTrees]);
 
   const overriddenLabState = useMemo(
     () => ({

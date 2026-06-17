@@ -119,6 +119,8 @@ export function useLabState() {
     uci: string;
     category: 'best' | 'book' | 'miss';
   } | null>(null);
+  const [linesPositionFilterTreeIds, setLinesPositionFilterTreeIds] = useState<string[] | null>(null);
+  const [linesPositionFilterLoading, setLinesPositionFilterLoading] = useState(false);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);
   const drillPathIndexRef = useRef(0);
@@ -288,6 +290,10 @@ export function useLabState() {
     setLinesTrainPlyTotal,
     linesLastPlayedMoveReview,
     setLinesLastPlayedMoveReview,
+    linesPositionFilterTreeIds,
+    setLinesPositionFilterTreeIds,
+    linesPositionFilterLoading,
+    setLinesPositionFilterLoading,
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,

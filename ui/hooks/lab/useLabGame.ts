@@ -3,7 +3,7 @@ import type { CSSProperties } from 'react';
 import { useCallback } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
-import { formatBestMove, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
+import { formatBestMove, linesJumpToHistoryIndex, toStoredMove } from '@/lib/chess-analysis-client';
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
 import {
@@ -15,7 +15,6 @@ import {
 import {
   buildDrillPath,
   buildOpeningDrillExpected,
-  chooseWeightedOpponentEdge,
   classifyLinesMove,
   type DrillPathStep,
   resolveAcceptedTrainMoveUcis,
@@ -161,7 +160,7 @@ export function useLabGame(
         return;
       }
 
-      if (modeRef.current === 'lines' && activeOpeningNodeId && activeOpeningTree) {
+      if (modeRef.current === 'lines' && openingDrillActive && activeOpeningNodeId && activeOpeningTree) {
         const nodeId = activeOpeningNodeId;
         const drillExpected = openingDrillExpected;
         const acceptedMoves = drillExpected?.acceptedUcis ?? [];
@@ -306,46 +305,6 @@ export function useLabGame(
 
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
-
-            if (nextNode.sideToMove !== state.activeTrainSide) {
-              const opponentEdges = activeOpeningTree.edges.filter((edge) => edge.fromNodeId === nextNode.id);
-              const opponentEdge = chooseWeightedOpponentEdge(opponentEdges, Date.now());
-              const afterOpponent = opponentEdge
-                ? (activeOpeningTree.nodes.find((node) => node.id === opponentEdge.toNodeId) ?? null)
-                : null;
-
-              if (afterOpponent && opponentEdge) {
-                scheduleLinesOpponentAction(() => {
-                  setGame((prevGame) => {
-                    const nextGame = new Chess(prevGame.fen());
-                    try {
-                      const oppMove = nextGame.move({
-                        from: opponentEdge.uci.substring(0, 2),
-                        to: opponentEdge.uci.substring(2, 4),
-                        promotion: opponentEdge.uci.length === 5 ? opponentEdge.uci[4] : undefined,
-                      });
-                      if (oppMove) {
-                        setMoveHistory((prev) => [...prev, toStoredMove(oppMove)]);
-                        setHistoryIndex((prev) => prev + 1);
-                        playSoundSequence(
-                          getMoveSoundSequence({
-                            move: toStoredMove(oppMove),
-                            isSelfMove: false,
-                            isCheck: nextGame.isCheck(),
-                            isCheckmate: nextGame.isCheckmate(),
-                            isGameOver: nextGame.isGameOver(),
-                          }),
-                        );
-                      }
-                    } catch {
-                      // Fallback
-                    }
-                    return nextGame;
-                  });
-                  setActiveOpeningNodeId(afterOpponent.id);
-                });
-              }
-            }
           }
         }
 
@@ -525,37 +484,11 @@ export function useLabGame(
         linesGameTimeoutRef.current = null;
       }
 
-      const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
-      const canLinesStepUndo =
-        modeRef.current === 'lines' &&
-        linesStudyMode !== 'idle' &&
-        openingDrillActive &&
-        boundedIndex < historyIndex &&
-        boundedIndex === historyIndex - 1;
-      let nextGame: Chess;
-      let historyForSync = moveHistory;
+      const jumped = linesJumpToHistoryIndex(moveHistory, initialFen, historyIndex, index);
+      const { historyIndex: boundedIndex, game: nextGame, moveHistory: historyForSync } = jumped;
 
-      if (canLinesStepUndo) {
-        nextGame = new Chess(game.fen());
-        const undoneMove = nextGame.undo();
-
-        if (!undoneMove) {
-          throw new Error(`Lines undo failed at history index ${historyIndex}`);
-        }
-
-        const lastStoredMove = moveHistory[historyIndex - 1];
-        const undoneUci = `${undoneMove.from}${undoneMove.to}${undoneMove.promotion ?? ''}`;
-
-        if (lastStoredMove && lastStoredMove.uci !== undoneUci) {
-          throw new Error(
-            `Lines history desync at index ${historyIndex}: board ${undoneUci} vs history ${lastStoredMove.uci}`,
-          );
-        }
-
-        historyForSync = moveHistory.slice(0, boundedIndex);
+      if (boundedIndex < historyIndex && boundedIndex === historyIndex - 1) {
         setMoveHistory(historyForSync);
-      } else {
-        nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
       }
 
       if (options.playForwardSound && boundedIndex > historyIndex && boundedIndex <= moveHistory.length) {
@@ -614,7 +547,6 @@ export function useLabGame(
       activeOpeningTree,
       clearSelection,
       clearVariation,
-      game,
       historyIndex,
       initialFen,
       linesSession,

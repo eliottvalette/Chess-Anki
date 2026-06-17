@@ -1056,6 +1056,72 @@ export function normalizeOpeningFen(fen: string) {
   return fen.trim().split(' ').slice(0, 4).join(' ');
 }
 
+export const STANDARD_START_FEN_KEY = normalizeOpeningFen(new Chess().fen());
+
+export function isStandardStartFenKey(fenKey: string) {
+  return fenKey === STANDARD_START_FEN_KEY;
+}
+
+export function filterOpeningTreeSummariesByIds(
+  trees: OpeningTreeSummary[],
+  treeIds: string[] | null,
+): OpeningTreeSummary[] {
+  if (treeIds == null) {
+    return trees;
+  }
+
+  const allowedTreeIds = new Set(treeIds);
+
+  return trees.filter((tree) => allowedTreeIds.has(tree.id));
+}
+
+export function prepareOpeningTreeAtFen(tree: OpeningTreeDetail, fenKey: string): OpeningTreeDetail | null {
+  const node = tree.nodes.find((candidate) => candidate.fenKey === fenKey);
+
+  if (!node) {
+    if (tree.rootFenKey !== fenKey) {
+      return null;
+    }
+
+    return tree;
+  }
+
+  const filtered = filterOpeningTreeForDisplay(tree, node.ply);
+
+  return {
+    ...filtered,
+    rootPly: node.ply,
+    rootFenKey: fenKey,
+    rootSan: tree.rootSan,
+    rootUci: tree.rootUci,
+  };
+}
+
+export function prepareOpeningTreeAtFenWithBoard(
+  tree: OpeningTreeDetail,
+  fenKey: string,
+  moveHistory: Array<{ san: string; uci: string }>,
+  historyIndex: number,
+): OpeningTreeDetail | null {
+  const node = tree.nodes.find((candidate) => candidate.fenKey === fenKey);
+
+  if (!node) {
+    return null;
+  }
+
+  const filtered = filterOpeningTreeForDisplay(tree, node.ply);
+  const boardSans = moveHistory.slice(0, historyIndex).map((move) => move.san);
+  const boardUcis = moveHistory.slice(0, historyIndex).map((move) => move.uci);
+
+  return {
+    ...filtered,
+    rootPly: node.ply,
+    rootFenKey: fenKey,
+    rootSan: boardSans,
+    rootUci: boardUcis,
+  };
+}
+
 export function parseSanMoves(moves: string[], initialFen: string | null = null): OpeningMove[] {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
   const parsed: OpeningMove[] = [];
