@@ -441,40 +441,52 @@ export function LinesPanel({
             </button>
           </div>
           {!inSession ? (
-            <div className="flex w-full items-stretch gap-2" style={{ marginTop: '-4px' }}>
-              <button
-                className={`${trainSide === 'white' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
-                onClick={() => onChangeTrainSide('white')}
-                type="button"
-              >
-                White
-              </button>
-              <button
-                className={`${trainSide === 'black' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
-                onClick={() => onChangeTrainSide('black')}
-                type="button"
-              >
-                Black
-              </button>
-            </div>
-          ) : null}
-          {!inSession ? (
-            <div className="flex w-full items-stretch gap-2">
-              <button
-                className="box-border flex min-h-[42px] flex-1 items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]"
-                onClick={onStartLearn}
-                type="button"
-              >
-                Learn
-              </button>
-              <button
-                className="box-border flex min-h-[42px] flex-1 items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] disabled:cursor-not-allowed disabled:opacity-50"
-                disabled={reviewDueCount === 0}
-                onClick={onStartReview}
-                type="button"
-              >
-                Review ({reviewDueCount})
-              </button>
+            <div className="flex flex-col gap-2">
+              <div className="flex flex-col gap-0.5">
+                <p className="m-0 text-[10px] font-medium uppercase tracking-[0.08em] text-(--text-muted)">
+                  Your color
+                </p>
+                <div className="flex w-full items-stretch gap-2">
+                  <button
+                    className={`${trainSide === 'white' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
+                    onClick={() => onChangeTrainSide('white')}
+                    type="button"
+                  >
+                    White
+                  </button>
+                  <button
+                    className={`${trainSide === 'black' ? 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch' : 'box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-3.5 text-xs font-normal text-(--text) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch'}`}
+                    onClick={() => onChangeTrainSide('black')}
+                    type="button"
+                  >
+                    Black
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="m-0 text-[10px] font-medium uppercase tracking-[0.08em] text-(--text-muted)">
+                  Study mode
+                </p>
+                <div className="flex w-full items-stretch gap-2">
+                  <button
+                    className="box-border flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-[10px] border border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.18)] px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.62)] hover:bg-[rgba(56,148,115,0.28)]"
+                    onClick={onStartLearn}
+                    type="button"
+                  >
+                    <span className="text-[13px] font-medium text-[#d8f8ec]">Learn line</span>
+                    <span className="text-[10px] text-[#9fd9c0]">Full branch, step by step</span>
+                  </button>
+                  <button
+                    className="box-border flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-[10px] border border-[rgba(152,184,255,0.38)] bg-[rgba(72,98,168,0.2)] px-3 py-2 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-[border-color,background-color] duration-150 hover:border-[rgba(152,184,255,0.58)] hover:bg-[rgba(72,98,168,0.32)] disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={reviewDueCount === 0}
+                    onClick={onStartReview}
+                    type="button"
+                  >
+                    <span className="text-[13px] font-medium text-[#e8eeff]">Review weak spots</span>
+                    <span className="text-[10px] text-[#b8c8f0]">{reviewDueCount} positions due</span>
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
           {learnBranchComplete && !inSession && hasNextLearnBranch ? (
@@ -499,9 +511,15 @@ export function LinesPanel({
                   {formatOpeningTreeDisplayName(activeTree.name)}
                 </strong>
                 {inSession ? (
-                  <span className="text-[11px] text-(--text-soft)">
+                  <span
+                    className={`inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${
+                      linesStudyMode === 'learn'
+                        ? 'border border-[rgba(138,227,193,0.42)] bg-[rgba(56,148,115,0.2)] text-[#d8f8ec]'
+                        : 'border border-[rgba(152,184,255,0.38)] bg-[rgba(72,98,168,0.22)] text-[#e8eeff]'
+                    }`}
+                  >
                     {linesStudyMode === 'learn'
-                      ? `Learn · Coup ${sessionTrainPlyCurrent}/${sessionTrainPlyTotal}`
+                      ? `Learn · move ${sessionTrainPlyCurrent}/${sessionTrainPlyTotal}`
                       : `Review · ${reviewIndex + 1}/${reviewQueueLength}`}
                   </span>
                 ) : null}

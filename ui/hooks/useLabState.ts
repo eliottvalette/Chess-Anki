@@ -114,6 +114,11 @@ export function useLabState() {
   const linesCompletedBranchEdgeIdsRef = useRef<string[]>([]);
   const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
   const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
+  const [linesLastPlayedMoveReview, setLinesLastPlayedMoveReview] = useState<{
+    historyIndex: number;
+    uci: string;
+    category: 'best' | 'book' | 'miss';
+  } | null>(null);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);
   const drillPathIndexRef = useRef(0);
@@ -281,6 +286,8 @@ export function useLabState() {
     setLinesTrainPlyCurrent,
     linesTrainPlyTotal,
     setLinesTrainPlyTotal,
+    linesLastPlayedMoveReview,
+    setLinesLastPlayedMoveReview,
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,

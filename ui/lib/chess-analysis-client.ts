@@ -325,6 +325,30 @@ export function buildStoredMovesFromSanList(initialFen: string | null, sanMoves:
   return stored;
 }
 
+export function buildStoredMovesFromUciList(initialFen: string | null, uciMoves: string[]) {
+  const chess = initialFen ? new Chess(initialFen) : new Chess();
+  const stored: StoredMove[] = [];
+
+  for (const uci of uciMoves) {
+    const from = uci.slice(0, 2);
+    const to = uci.slice(2, 4);
+    const promotion = uci.length === 5 ? uci[4] : undefined;
+    const move = chess.move({
+      from,
+      to,
+      ...(promotion ? { promotion } : {}),
+    });
+
+    if (!move) {
+      throw new Error(`Invalid setup move: ${JSON.stringify({ from, to, promotion })}`);
+    }
+
+    stored.push(toStoredMove(move));
+  }
+
+  return stored;
+}
+
 export function toStoredMove(move: {
   from: string;
   to: string;

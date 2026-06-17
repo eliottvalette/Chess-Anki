@@ -18,6 +18,7 @@ import {
   chooseWeightedOpponentEdge,
   classifyLinesMove,
   type DrillPathStep,
+  resolveAcceptedTrainMoveUcis,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
@@ -79,6 +80,7 @@ export function useLabGame(
     setShowArrow,
     setOpeningDrillStatus,
     setActiveOpeningNodeId,
+    setLinesLastPlayedMoveReview,
   } = state;
 
   const {
@@ -177,9 +179,18 @@ export function useLabGame(
         const truncatedHistory =
           historyIndex < moveHistory.length ? [...moveHistory.slice(0, historyIndex), move] : [...moveHistory, move];
         const nextHistoryIndex = truncatedHistory.length;
+        const acceptedFallback = resolveAcceptedTrainMoveUcis(activeOpeningTree, nodeId);
+        const expectedUci = primaryUci ?? acceptedFallback.primaryUci ?? acceptedFallback.acceptedUcis[0] ?? null;
+        const expectedSan =
+          primarySan ?? acceptedFallback.primarySan ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
 
         setMoveHistory(truncatedHistory);
         setHistoryIndex(nextHistoryIndex);
+        setLinesLastPlayedMoveReview({
+          historyIndex: nextHistoryIndex,
+          uci: move.uci,
+          category: linesClassification.category,
+        });
         clearVariation();
         setGame(nextGame);
         setPositionAnalysis(null);
@@ -194,22 +205,26 @@ export function useLabGame(
             exact,
             playedSan: move.san,
             playedUci: move.uci,
-            expectedSan: primarySan ?? move.san,
-            expectedUci: primaryUci ?? move.uci,
+            expectedSan: expectedSan ?? move.san,
+            expectedUci: expectedUci ?? move.uci,
             validationMode: 'strict_best',
             pending: false,
             evalLossCp: linesClassification.evalLossCp ?? undefined,
           });
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
-        } else if (primarySan && primaryUci) {
+        } else {
+          if (!expectedUci || !expectedSan) {
+            throw new Error(`Lines miss feedback missing expected move for node ${nodeId}`);
+          }
+
           setDeckFeedback({
             correct: false,
             exact: false,
             playedSan: move.san,
             playedUci: move.uci,
-            expectedSan: primarySan,
-            expectedUci: primaryUci,
+            expectedSan,
+            expectedUci,
             validationMode: 'strict_best',
             pending: false,
             evalLossCp: linesClassification.evalLossCp ?? undefined,
@@ -284,9 +299,7 @@ export function useLabGame(
               setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
             }
           } else {
-            setOpeningDrillStatus(
-              `Miss. Best was ${primarySan ?? primaryUci ?? 'unknown'}. Use undo (left arrow) to retry.`,
-            );
+            setOpeningDrillStatus(`Miss. Best was ${expectedSan}. Use undo (left arrow) to retry.`);
           }
         } else if (correct && matchingEdge && linesStudyMode === 'learn') {
           const nextNode = activeOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
@@ -513,7 +526,37 @@ export function useLabGame(
       }
 
       const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
-      const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+      const canLinesStepUndo =
+        modeRef.current === 'lines' &&
+        linesStudyMode !== 'idle' &&
+        openingDrillActive &&
+        boundedIndex < historyIndex &&
+        boundedIndex === historyIndex - 1;
+      let nextGame: Chess;
+      let historyForSync = moveHistory;
+
+      if (canLinesStepUndo) {
+        nextGame = new Chess(game.fen());
+        const undoneMove = nextGame.undo();
+
+        if (!undoneMove) {
+          throw new Error(`Lines undo failed at history index ${historyIndex}`);
+        }
+
+        const lastStoredMove = moveHistory[historyIndex - 1];
+        const undoneUci = `${undoneMove.from}${undoneMove.to}${undoneMove.promotion ?? ''}`;
+
+        if (lastStoredMove && lastStoredMove.uci !== undoneUci) {
+          throw new Error(
+            `Lines history desync at index ${historyIndex}: board ${undoneUci} vs history ${lastStoredMove.uci}`,
+          );
+        }
+
+        historyForSync = moveHistory.slice(0, boundedIndex);
+        setMoveHistory(historyForSync);
+      } else {
+        nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+      }
 
       if (options.playForwardSound && boundedIndex > historyIndex && boundedIndex <= moveHistory.length) {
         const replayedMove = moveHistory[boundedIndex - 1];
@@ -534,6 +577,7 @@ export function useLabGame(
       setHistoryIndex(boundedIndex);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
+      setLinesLastPlayedMoveReview(null);
       setShowArrow(false);
       clearVariation();
       setGame(nextGame);
@@ -542,7 +586,7 @@ export function useLabGame(
       if (openingDrillActive && activeOpeningTree) {
         const synced = linesSession.resyncFromHistory(
           activeOpeningTree,
-          moveHistory,
+          historyForSync,
           boundedIndex,
           state.activeTrainSide,
         );
@@ -556,7 +600,7 @@ export function useLabGame(
           setOpeningDrillExpected(null);
         }
 
-        if (drillPathRef.current.length > 0) {
+        if (drillPathRef.current.length > 0 && linesStudyMode === 'learn') {
           const rootLength = activeOpeningTree.rootPly ?? activeOpeningTree.rootSan.length;
 
           if (boundedIndex >= rootLength) {
@@ -570,9 +614,12 @@ export function useLabGame(
       activeOpeningTree,
       clearSelection,
       clearVariation,
+      game,
       historyIndex,
       initialFen,
       linesSession,
+      linesStudyMode,
+      modeRef,
       moveHistory,
       openingDrillActive,
       advanceDrillToStepRef,
@@ -587,6 +634,8 @@ export function useLabGame(
       setHistoryIndex,
       setOpeningDrillExpected,
       setShowArrow,
+      setLinesLastPlayedMoveReview,
+      linesStudyMode,
       state.activeTrainSide,
     ],
   );

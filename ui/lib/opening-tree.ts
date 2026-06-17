@@ -1203,17 +1203,44 @@ export function countTrainPliesInDrillPath(path: DrillPathStep[]): number {
   return path.filter((step) => step.isTrainTurn).length;
 }
 
-export function countReviewDueNodes(tree: Pick<OpeningTreeDetail, 'nodes'>, trainSide: OpeningSide): number {
+export function isTrainableReviewNode(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, nodeId: string): boolean {
+  return resolveAcceptedTrainMoveUcis(tree, nodeId).acceptedUcis.length > 0;
+}
+
+export function countReviewDueNodes(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, trainSide: OpeningSide): number {
   return tree.nodes.filter(
-    (node) => node.sideToMove === trainSide && node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD,
+    (node) =>
+      node.sideToMove === trainSide &&
+      node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD &&
+      isTrainableReviewNode(tree, node.id),
   ).length;
 }
 
-export function buildReviewQueue(tree: Pick<OpeningTreeDetail, 'nodes'>, trainSide: OpeningSide): string[] {
+export function buildReviewQueue(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, trainSide: OpeningSide): string[] {
   return tree.nodes
-    .filter((node) => node.sideToMove === trainSide && node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD)
+    .filter(
+      (node) =>
+        node.sideToMove === trainSide &&
+        node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD &&
+        isTrainableReviewNode(tree, node.id),
+    )
     .sort((left, right) => left.masteryScore - right.masteryScore || left.ply - right.ply)
     .map((node) => node.id);
+}
+
+export function replayToNodeUcis(tree: OpeningTreeDetail, nodeId: string): string[] {
+  const path = findPathToNode(tree, nodeId);
+  const fullUcis = [...tree.rootUci];
+
+  for (let index = 1; index < path.length; index += 1) {
+    const uci = path[index]?.edgeUciFromParent;
+
+    if (uci) {
+      fullUcis.push(uci);
+    }
+  }
+
+  return fullUcis;
 }
 
 export function replayToNode(tree: OpeningTreeDetail, nodeId: string): string[] {

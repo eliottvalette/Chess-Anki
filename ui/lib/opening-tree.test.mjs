@@ -897,13 +897,28 @@ test('resolveOpeningNodeFromHistory maps root plies without jumping to the canon
   });
 });
 
-test('buildReviewQueue returns train-side nodes below mastery threshold sorted ascending', () => {
+test('buildReviewQueue returns trainable train-side nodes below mastery threshold sorted ascending', () => {
   const tree = {
     nodes: [
-      { id: 'weak', sideToMove: 'white', masteryScore: 12, ply: 5 },
-      { id: 'due', sideToMove: 'white', masteryScore: 55, ply: 7 },
-      { id: 'strong', sideToMove: 'white', masteryScore: 90, ply: 8 },
+      { id: 'weak', sideToMove: 'white', masteryScore: 12, ply: 5, bestUci: 'e2e4' },
+      { id: 'due', sideToMove: 'white', masteryScore: 55, ply: 7, bestUci: 'g1f3' },
+      { id: 'no-repertoire', sideToMove: 'white', masteryScore: 10, ply: 6 },
+      { id: 'strong', sideToMove: 'white', masteryScore: 90, ply: 8, bestUci: 'd2d4' },
       { id: 'opponent', sideToMove: 'black', masteryScore: 0, ply: 6 },
+    ],
+    edges: [
+      {
+        id: 'edge-weak',
+        fromNodeId: 'weak',
+        toNodeId: 'after-weak',
+        uci: 'e2e4',
+        san: 'e4',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        isEngineBest: true,
+        priority: 1,
+      },
     ],
   };
 

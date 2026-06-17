@@ -2,7 +2,12 @@ import { Chess } from 'chess.js';
 import { useCallback, useRef } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
-import { buildStoredMovesFromSanList, restoreGameFromHistory, toStoredMove } from '@/lib/chess-analysis-client';
+import {
+  buildStoredMovesFromSanList,
+  buildStoredMovesFromUciList,
+  restoreGameFromHistory,
+  toStoredMove,
+} from '@/lib/chess-analysis-client';
 import type { ChessSoundKey } from '@/lib/chess-sounds';
 import { DRILL_OPPONENT_DELAY_MS, type OpeningTreesPayload, readJsonResponse } from '@/lib/lab-helpers';
 import {
@@ -17,7 +22,7 @@ import {
   type OpeningTreeDetail,
   pickLearnBranch,
   prepareOpeningTreeForLines,
-  replayToNode,
+  replayToNodeUcis,
   resolveCanonicalRootNode,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
@@ -86,6 +91,7 @@ export function useLabLines(
     linesCompletedBranchEdgeIdsRef,
     setLinesTrainPlyCurrent,
     setLinesTrainPlyTotal,
+    setLinesLastPlayedMoveReview,
   } = state;
 
   const {
@@ -273,8 +279,8 @@ export function useLabLines(
   }, [linesGameTimeoutRef]);
 
   const replayMovesToIndex = useCallback(
-    async (fullSans: string[], trainSide: OpeningSide, targetIndex: number) => {
-      const moves = buildStoredMovesFromSanList(null, fullSans);
+    async (fullUcis: string[], trainSide: OpeningSide, targetIndex: number) => {
+      const moves = buildStoredMovesFromUciList(null, fullUcis);
       setInitialFen(null);
       setMoveHistory(moves);
       deckReplayInitialFenRef.current = null;
@@ -361,38 +367,28 @@ export function useLabLines(
           linesSession.markEdgeSeen(parentStep.nodeId, connectingEdge.id);
         }
 
+        const opponentUci = step.edgeUciFromParent;
+        const from = opponentUci.substring(0, 2);
+        const to = opponentUci.substring(2, 4);
+        const promotion = opponentUci.length === 5 ? opponentUci[4] : undefined;
+
         setGame((prevGame) => {
           const nextGame = new Chess(prevGame.fen());
-          try {
-            nextGame.move({
-              from: step.edgeUciFromParent!.substring(0, 2),
-              to: step.edgeUciFromParent!.substring(2, 4),
-              promotion: step.edgeUciFromParent!.length === 5 ? step.edgeUciFromParent![4] : undefined,
-            });
-          } catch {
-            return new Chess(step.fen);
+          const move = nextGame.move({
+            from,
+            to,
+            ...(promotion ? { promotion } : {}),
+          });
+
+          if (!move) {
+            throw new Error(`Invalid opponent drill move ${opponentUci} at drill step ${stepIndex}`);
           }
+
+          setMoveHistory((previousHistory) => [...previousHistory, toStoredMove(move)]);
+          setHistoryIndex((previousIndex) => previousIndex + 1);
+          playSound('move-opponent');
           return nextGame;
         });
-
-        if (step.edgeUciFromParent) {
-          // We just construct the move for the history independently to avoid side effects in setGame
-          const tempGame = new Chess(path[stepIndex - 1]?.fen ?? step.fen);
-          try {
-            const move = tempGame.move({
-              from: step.edgeUciFromParent.substring(0, 2),
-              to: step.edgeUciFromParent.substring(2, 4),
-              promotion: step.edgeUciFromParent.length === 5 ? step.edgeUciFromParent[4] : undefined,
-            });
-            if (move) {
-              setMoveHistory((prev) => [...prev, toStoredMove(move)]);
-              setHistoryIndex((prev) => prev + 1);
-              playSound('move-opponent');
-            }
-          } catch {
-            // ignore
-          }
-        }
       }
 
       setPositionAnalysis(null);
@@ -513,13 +509,16 @@ export function useLabLines(
       setOrientation(trainSide);
       playSound('game-start');
 
-      const fullSans = [...tree.rootSan];
+      const fullUcis = [...tree.rootUci];
+
       if (firstTrainIndex > 0) {
-        const sans = path
-          .slice(1, firstTrainIndex + 1)
-          .map((step) => step.edgeSanFromParent)
-          .filter(Boolean) as string[];
-        fullSans.push(...sans);
+        for (let index = 1; index <= firstTrainIndex; index += 1) {
+          const uci = path[index]?.edgeUciFromParent;
+
+          if (uci) {
+            fullUcis.push(uci);
+          }
+        }
       }
 
       const targetStep = path[firstTrainIndex] ?? path[0]!;
@@ -530,7 +529,7 @@ export function useLabLines(
 
       cancelDrillOpponentMove();
       drillTimeoutRef.current = window.setTimeout(async () => {
-        const replayCompleted = await replayMovesToIndex(fullSans, trainSide, fullSans.length);
+        const replayCompleted = await replayMovesToIndex(fullUcis, trainSide, fullUcis.length);
 
         if (replayCompleted === false) {
           return;
@@ -564,7 +563,7 @@ export function useLabLines(
 
   const replayReviewNode = useCallback(
     async (tree: OpeningTreeDetail, nodeId: string, trainSide: OpeningSide) => {
-      const fullSans = replayToNode(tree, nodeId);
+      const fullUcis = replayToNodeUcis(tree, nodeId);
       const path = findPathToNode(tree, nodeId);
       const trainStepIndex = path.findIndex((step) => step.nodeId === nodeId);
       const drillPath: DrillPathStep[] = path.map((step) => ({
@@ -582,7 +581,7 @@ export function useLabLines(
 
       cancelDrillOpponentMove();
       drillTimeoutRef.current = window.setTimeout(async () => {
-        const replayCompleted = await replayMovesToIndex(fullSans, trainSide, fullSans.length);
+        const replayCompleted = await replayMovesToIndex(fullUcis, trainSide, fullUcis.length);
 
         if (replayCompleted === false) {
           return;
@@ -768,6 +767,7 @@ export function useLabLines(
     setOpeningDrillExpected(null);
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
+    setLinesLastPlayedMoveReview(null);
     setShowArrow(false);
     setOpeningDrillStatus('');
     setLinesStudyMode('idle');
@@ -784,6 +784,7 @@ export function useLabLines(
     linesSession,
     setDeckFeedback,
     setDeckFeedbackArrowsVisible,
+    setLinesLastPlayedMoveReview,
     setLinesLearnBranchComplete,
     setLinesReviewIndex,
     setLinesReviewQueue,
@@ -866,10 +867,10 @@ export function useLabLines(
       if (!node) return;
 
       setActiveOpeningNodeId(nodeId);
-      const fullSans = replayToNode(tree, nodeId);
+      const fullUcis = replayToNodeUcis(tree, nodeId);
 
       try {
-        const moves = buildStoredMovesFromSanList(null, fullSans);
+        const moves = buildStoredMovesFromUciList(null, fullUcis);
         setInitialFen(null);
         setMoveHistory(moves);
         deckReplayInitialFenRef.current = null;

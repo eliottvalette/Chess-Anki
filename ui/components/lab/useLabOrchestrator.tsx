@@ -672,7 +672,22 @@ export function useLabOrchestrator() {
   );
   const activeReviewMoment = reviewMoments[reviewIndex] ?? null;
   const linesBoardClassification = useMemo(() => {
-    if (mode !== 'lines' || !openingDrillActive || !activeOpeningTree || historyIndex <= 0) {
+    if (mode !== 'lines' || !activeOpeningTree || historyIndex <= 0) {
+      return null;
+    }
+
+    if (labState.linesLastPlayedMoveReview?.historyIndex === historyIndex) {
+      const classifiedMove = currentMoves[currentMoves.length - 1];
+
+      if (classifiedMove && classifiedMove.uci === labState.linesLastPlayedMoveReview.uci) {
+        return {
+          move: classifiedMove,
+          category: labState.linesLastPlayedMoveReview.category,
+        };
+      }
+    }
+
+    if (labState.linesStudyMode === 'idle' && !openingDrillActive) {
       return null;
     }
 
@@ -692,7 +707,17 @@ export function useLabOrchestrator() {
       move: classifiedMove,
       category: classified.category,
     };
-  }, [activeOpeningTree, activeTrainSide, currentMoves, historyIndex, mode, moveHistory, openingDrillActive]);
+  }, [
+    activeOpeningTree,
+    activeTrainSide,
+    currentMoves,
+    historyIndex,
+    labState.linesLastPlayedMoveReview,
+    labState.linesStudyMode,
+    mode,
+    moveHistory,
+    openingDrillActive,
+  ]);
   const boardSquareStyles = useMemo(() => {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
@@ -1531,6 +1556,11 @@ export function useLabOrchestrator() {
           cancelReviewPlayback();
         }
 
+        if (mode === 'lines' && historyIndex > 0) {
+          jumpToIndex(historyIndex - 1);
+          return;
+        }
+
         if (openingDrillActive) {
           jumpToIndex(historyIndex - 1);
           return;
@@ -1570,6 +1600,11 @@ export function useLabOrchestrator() {
 
         if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
           cancelReviewPlayback();
+        }
+
+        if (mode === 'lines' && historyIndex < moveHistory.length) {
+          jumpToIndex(historyIndex + 1, { playForwardSound: true });
+          return;
         }
 
         if (openingDrillActive) {
