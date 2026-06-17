@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
 import { pruneOpeningTreeDraft } from '../../lib/opening-tree.ts';
+import { buildFreshOpeningForest, forestToUpsertRows } from '../../lib/opening-tree-import.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
 const DEFAULT_OPENING_ROOT_PLY = 4;
@@ -316,69 +317,64 @@ async function enrichLichessOpponentMoves(draft) {
   }
 }
 
-async function upsertTreeDraft(supabase, profileId, draft) {
+function graphAsDraft(graph) {
+  return {
+    id: graph.id,
+    name: graph.library,
+    library: graph.library,
+    rootFenKey: graph.graphRootFenKey,
+    rootPly: 0,
+    rootSan: [],
+    rootUci: [],
+    sourceCount: 0,
+    targetDepth: graph.targetDepth,
+    trainSide: graph.trainSide,
+    nodes: graph.nodes,
+    edges: graph.edges,
+  };
+}
+
+async function upsertForestDraft(supabase, profileId, forest) {
   const now = new Date().toISOString();
+  const rows = forestToUpsertRows(forest, now);
+  const graphIds = rows.graphs.map((graph) => graph.id);
 
-  const { error: treeError } = await supabase.from('opening_trees').upsert(
-    {
-      id: draft.id,
-      owner_profile_id: profileId,
-      library: draft.library,
-      name: draft.name,
-      root_fen_key: draft.rootFenKey,
-      root_ply: draft.rootPly,
-      root_san: draft.rootSan,
-      root_uci: draft.rootUci,
-      source_count: draft.sourceCount,
-      target_depth: draft.targetDepth,
-      updated_at: now,
-    },
-    { onConflict: 'owner_profile_id,library,root_fen_key' },
-  );
-
-  if (treeError) throw new Error(treeError.message);
-
-  if (draft.nodes.length > 0) {
-    const { error } = await supabase.from('opening_nodes').upsert(
-      draft.nodes.map((node) => ({
-        id: node.id,
-        tree_id: draft.id,
-        fen: node.fen,
-        fen_key: node.fenKey,
-        ply: node.ply,
-        side_to_move: node.sideToMove,
-        train_side: node.trainSide ?? draft.trainSide,
-        best_uci: node.bestUci ?? null,
-        best_san: node.bestSan ?? null,
-        eval_cp: node.evalCp ?? null,
-        recent_games: node.recentGames,
-        card_count: node.cardCount,
-        updated_at: now,
+  if (rows.graphs.length > 0) {
+    const { error: graphError } = await supabase.from('opening_graphs').upsert(
+      rows.graphs.map((graph) => ({
+        ...graph,
+        owner_profile_id: profileId,
       })),
-      { onConflict: 'tree_id,fen_key' },
+      { onConflict: 'owner_profile_id,library,train_side' },
     );
+
+    if (graphError) throw new Error(graphError.message);
+  }
+
+  if (rows.nodes.length > 0) {
+    const { error } = await supabase.from('opening_nodes').upsert(rows.nodes, { onConflict: 'graph_id,fen_key' });
     if (error) throw new Error(error.message);
   }
 
-  if (draft.edges.length > 0) {
-    const { error } = await supabase.from('opening_edges').upsert(
-      draft.edges.map((edge) => ({
-        id: edge.id,
-        tree_id: draft.id,
-        from_node_id: edge.fromNodeId,
-        to_node_id: edge.toNodeId,
-        uci: edge.uci,
-        san: edge.san,
-        move_by: edge.moveBy,
-        source: edge.source,
-        recent_count: edge.recentCount,
-        card_count: edge.cardCount,
-        masters_games: edge.mastersGames,
-        priority: edge.priority,
-        is_engine_best: edge.isEngineBest,
-        updated_at: now,
+  if (rows.edges.length > 0) {
+    const { error } = await supabase.from('opening_edges').upsert(rows.edges, {
+      onConflict: 'graph_id,from_node_id,uci',
+    });
+    if (error) throw new Error(error.message);
+  }
+
+  if (graphIds.length > 0) {
+    const { error: deleteError } = await supabase.from('opening_catalog').delete().in('graph_id', graphIds);
+    if (deleteError) throw new Error(deleteError.message);
+  }
+
+  if (rows.catalogs.length > 0) {
+    const { error } = await supabase.from('opening_catalog').upsert(
+      rows.catalogs.map((catalog) => ({
+        ...catalog,
+        owner_profile_id: profileId,
       })),
-      { onConflict: 'tree_id,from_node_id,uci' },
+      { onConflict: 'graph_id,fen_key,catalog_ply' },
     );
     if (error) throw new Error(error.message);
   }
@@ -416,21 +412,39 @@ export async function buildAndUpsertOpeningTrees({
   });
 
   const inputs = [...lineInputs, ...cardInputs].filter((input) => input.moves.length > 0);
-  const drafts = buildOpeningTrees(inputs, { ownerProfileId, targetDepth: DEFAULT_OPENING_TARGET_DEPTH });
+  const forest = buildFreshOpeningForest(inputs, {
+    ownerProfileId,
+    targetDepth: DEFAULT_OPENING_TARGET_DEPTH,
+  });
 
-  logProgress(`building ${drafts.length} opening trees...`);
+  logProgress(`building ${forest.graphs.length} graphs and ${forest.catalogs.length} catalog entries...`);
 
-  for (let i = 0; i < drafts.length; i++) {
-    const draft = drafts[i];
-    logProgress(`[${i + 1}/${drafts.length}] enriching "${draft.name}" (${draft.nodes.length} nodes)`);
-    await enrichEngineBestMoves(draft, analyzeBaseUrl);
-    await enrichLichessOpponentMoves(draft);
-    pruneOpeningTreeDraft(draft);
-    await upsertTreeDraft(supabase, ownerProfileId, draft);
+  for (let index = 0; index < forest.graphs.length; index += 1) {
+    const graph = forest.graphs[index];
+    logProgress(
+      `[${index + 1}/${forest.graphs.length}] enriching graph ${graph.library}/${graph.trainSide} (${graph.nodes.length} nodes)`,
+    );
+    await enrichEngineBestMoves(graphAsDraft(graph), analyzeBaseUrl);
+    await enrichLichessOpponentMoves(graphAsDraft(graph));
+    pruneOpeningTreeDraft({
+      id: graph.id,
+      name: graph.library,
+      library: graph.library,
+      rootFenKey: graph.graphRootFenKey,
+      rootPly: 0,
+      rootSan: [],
+      rootUci: [],
+      sourceCount: 0,
+      targetDepth: graph.targetDepth,
+      trainSide: graph.trainSide,
+      nodes: graph.nodes,
+      edges: graph.edges,
+    });
   }
 
-  logProgress(`done: upserted ${drafts.length} opening trees`);
-  return drafts.length;
+  await upsertForestDraft(supabase, ownerProfileId, forest);
+  logProgress(`done: upserted ${forest.catalogs.length} catalog entries across ${forest.graphs.length} graphs`);
+  return forest.catalogs.length;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

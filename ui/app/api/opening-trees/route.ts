@@ -5,6 +5,13 @@ import { NextResponse } from 'next/server';
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
+  catalogDraftFromRow,
+  graphDraftFromRows,
+  type OpeningGraphDraft,
+  projectCatalogSubgraph,
+} from '@/lib/opening-graph';
+
+import {
   applyOpeningAttemptScore,
   chooseWeightedOpponentEdge,
   DEFAULT_OPENING_TARGET_DEPTH,
@@ -16,8 +23,6 @@ import {
   type OpeningTreeBuildInput,
   type OpeningTreeDetail,
   type OpeningTreeDraft,
-  type OpeningTreeEdge,
-  type OpeningTreeNode,
   type OpeningTreeSummary,
   pruneOpeningTreeDraft,
   resolveTargetDepthForBuildMode,
@@ -25,7 +30,7 @@ import {
 import {
   buildFreshOpeningForest,
   buildInputsFromRows,
-  draftToUpsertRows,
+  forestToUpsertRows,
   listNodesNeedingEnrichment,
   mergeIncrementalOpeningForest,
   OPENING_BUILD_ROOT_PLY,
@@ -35,10 +40,12 @@ import { getStockfishSession } from '@/lib/stockfish-session';
 import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
 
-const TREE_SELECT = 'id,library,name,root_fen_key,root_ply,root_san,root_uci,source_count,target_depth,updated_at';
-const NODE_SELECT = 'id,tree_id,fen,fen_key,ply,side_to_move,best_uci,best_san,eval_cp,recent_games,card_count';
+const CATALOG_SELECT =
+  'id,graph_id,entry_node_id,catalog_ply,library,fen_key,name,display_san,display_uci,source_count,subgraph_node_count,target_depth,updated_at';
+const NODE_SELECT =
+  'id,graph_id,fen,fen_key,ply,side_to_move,train_side,best_uci,best_san,eval_cp,recent_games,card_count';
 const EDGE_SELECT =
-  'id,tree_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
+  'id,graph_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
 const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
 const MAX_ENGINE_IMPORT_NODES = 120;
 const MAX_LICHESS_IMPORT_NODES = 80;
@@ -143,17 +150,17 @@ async function importRecentOpeningTrees(
   );
 
   if (inputs.length === 0) {
-    return NextResponse.json({ imported: 0, nodes: 0, edges: 0, skippedGames } satisfies OpeningTreeImportResult);
+    return NextResponse.json({
+      imported: 0,
+      nodes: 0,
+      edges: 0,
+      skippedGames,
+      graphs: 0,
+      catalogs: 0,
+    } satisfies OpeningTreeImportResult);
   }
 
-  const touchedRootKeys = new Set(
-    buildFreshOpeningForest(inputs, {
-      ownerProfileId: profile.id,
-      targetDepth,
-      rootPly: OPENING_BUILD_ROOT_PLY,
-    }).map((draft) => draft.rootFenKey),
-  );
-  const existingBundles = await loadExistingTreeBundles(supabase, profile.id, [...touchedRootKeys]);
+  const existingBundles = await loadExistingGraphBundles(supabase, profile.id);
   const merged =
     existingBundles.length > 0
       ? mergeIncrementalOpeningForest(existingBundles, inputs, {
@@ -162,10 +169,10 @@ async function importRecentOpeningTrees(
           currentTargetDepth,
         })
       : {
-          drafts: buildFreshOpeningForest(inputs, {
+          forest: buildFreshOpeningForest(inputs, {
             ownerProfileId: profile.id,
             targetDepth,
-            rootPly: OPENING_BUILD_ROOT_PLY,
+            catalogPly: OPENING_BUILD_ROOT_PLY,
           }),
           newNodeCount: 0,
           newEdgeCount: 0,
@@ -174,18 +181,19 @@ async function importRecentOpeningTrees(
   let nodeCount = 0;
   let edgeCount = 0;
 
-  for (const draft of merged.drafts) {
+  for (const graph of merged.forest.graphs) {
     if (options.mode !== 'fast') {
-      await enrichOpeningTreeDraftLazy(draft, options.mode);
+      await enrichOpeningGraphDraft(graph, options.mode);
     } else {
-      await enrichLichessBookMoves(draft);
+      await enrichLichessBookMoves(asTreeDraft(graph));
     }
 
-    pruneOpeningTreeDraft(draft);
-    await upsertTreeDraft(supabase, profile.id, draft);
-    nodeCount += draft.nodes.length;
-    edgeCount += draft.edges.length;
+    pruneOpeningGraphDraft(graph);
   }
+
+  await upsertForestDraft(supabase, profile.id, merged.forest);
+  nodeCount = merged.forest.graphs.reduce((total, graph) => total + graph.nodes.length, 0);
+  edgeCount = merged.forest.graphs.reduce((total, graph) => total + graph.edges.length, 0);
 
   await saveBuildState(supabase, profile.id, options.timeClasses[0] ?? 'all', {
     build_mode: options.mode,
@@ -195,10 +203,12 @@ async function importRecentOpeningTrees(
   });
 
   return NextResponse.json({
-    imported: merged.drafts.length,
+    imported: merged.forest.catalogs.length,
     nodes: nodeCount,
     edges: edgeCount,
     skippedGames,
+    graphs: merged.forest.graphs.length,
+    catalogs: merged.forest.catalogs.length,
   } satisfies OpeningTreeImportResult);
 }
 
@@ -307,31 +317,37 @@ async function loadDeltaInputs(
   };
 }
 
-async function loadExistingTreeBundles(
-  supabase: ReturnType<typeof createAdminClient>,
-  profileId: string,
-  rootFenKeys: string[],
-) {
-  if (rootFenKeys.length === 0) {
-    return [];
-  }
-
-  const { data: trees, error } = await supabase
-    .from('opening_trees')
-    .select('id,library,name,root_fen_key,root_ply,root_san,root_uci,source_count,target_depth')
-    .eq('owner_profile_id', profileId)
-    .in('root_fen_key', rootFenKeys);
+async function loadExistingGraphBundles(supabase: ReturnType<typeof createAdminClient>, profileId: string) {
+  const { data: graphs, error } = await supabase
+    .from('opening_graphs')
+    .select('id,library,train_side,root_fen_key,target_depth,node_count,edge_count')
+    .eq('owner_profile_id', profileId);
 
   if (error) {
     throw new Error(error.message);
   }
 
   const bundles = [];
+  const graphIds = (graphs ?? []).map((graph) => String(graph.id));
 
-  for (const tree of trees ?? []) {
-    const treeId = String(tree.id);
-    const [nodeRows, edgeRows] = await Promise.all([fetchNodes(supabase, [treeId]), fetchEdges(supabase, [treeId])]);
-    bundles.push({ treeRow: tree, nodeRows, edgeRows });
+  if (graphIds.length === 0) {
+    return bundles;
+  }
+
+  const [nodeRows, edgeRows, catalogRows] = await Promise.all([
+    fetchNodes(supabase, graphIds),
+    fetchEdges(supabase, graphIds),
+    fetchCatalogs(supabase, profileId),
+  ]);
+
+  for (const graph of graphs ?? []) {
+    const graphId = String(graph.id);
+    bundles.push({
+      graphRow: graph,
+      nodeRows: nodeRows.filter((row) => String(row.graph_id) === graphId),
+      edgeRows: edgeRows.filter((row) => String(row.graph_id) === graphId),
+      catalogRows: catalogRows.filter((row) => String(row.graph_id) === graphId),
+    });
   }
 
   return bundles;
@@ -406,27 +422,31 @@ async function chooseNextStep(profile: TrainingProfileCookie, body: Record<strin
   return NextResponse.json({ edge: selected });
 }
 
-async function upsertTreeDraft(
+async function upsertForestDraft(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
-  draft: OpeningTreeDraft,
+  forest: ReturnType<typeof buildFreshOpeningForest>,
 ) {
   const now = new Date().toISOString();
-  const rows = draftToUpsertRows(draft, now);
-  const { error: treeError } = await supabase.from('opening_trees').upsert(
-    {
-      ...rows.tree,
-      owner_profile_id: profileId,
-    },
-    { onConflict: 'owner_profile_id,library,root_fen_key' },
-  );
+  const rows = forestToUpsertRows(forest, now);
+  const graphIds = rows.graphs.map((graph) => graph.id);
 
-  if (treeError) {
-    throw new Error(treeError.message);
+  if (rows.graphs.length > 0) {
+    const { error: graphError } = await supabase.from('opening_graphs').upsert(
+      rows.graphs.map((graph) => ({
+        ...graph,
+        owner_profile_id: profileId,
+      })),
+      { onConflict: 'owner_profile_id,library,train_side' },
+    );
+
+    if (graphError) {
+      throw new Error(graphError.message);
+    }
   }
 
   if (rows.nodes.length > 0) {
-    const { error } = await supabase.from('opening_nodes').upsert(rows.nodes, { onConflict: 'tree_id,fen_key' });
+    const { error } = await supabase.from('opening_nodes').upsert(rows.nodes, { onConflict: 'graph_id,fen_key' });
 
     if (error) {
       throw new Error(error.message);
@@ -435,102 +455,74 @@ async function upsertTreeDraft(
 
   if (rows.edges.length > 0) {
     const { error } = await supabase.from('opening_edges').upsert(rows.edges, {
-      onConflict: 'tree_id,from_node_id,uci',
+      onConflict: 'graph_id,from_node_id,uci',
     });
 
     if (error) {
       throw new Error(error.message);
     }
   }
+
+  if (graphIds.length > 0) {
+    const { error: deleteError } = await supabase.from('opening_catalog').delete().in('graph_id', graphIds);
+
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
+  }
+
+  if (rows.catalogs.length > 0) {
+    const { error } = await supabase.from('opening_catalog').upsert(
+      rows.catalogs.map((catalog) => ({
+        ...catalog,
+        owner_profile_id: profileId,
+      })),
+      { onConflict: 'graph_id,fen_key,catalog_ply' },
+    );
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
 }
 
-async function enrichOpeningTreeDraftLazy(draft: OpeningTreeDraft, mode: OpeningBuildMode) {
-  const nodesToEnrich = listNodesNeedingEnrichment(draft, mode);
-  const limitedDraft = { ...draft, nodes: nodesToEnrich };
+function asTreeDraft(graph: OpeningGraphDraft): OpeningTreeDraft {
+  return {
+    id: graph.id,
+    name: graph.library,
+    library: graph.library,
+    rootFenKey: graph.graphRootFenKey,
+    rootPly: 0,
+    rootSan: [],
+    rootUci: [],
+    sourceCount: 0,
+    targetDepth: graph.targetDepth,
+    trainSide: graph.trainSide,
+    nodes: graph.nodes,
+    edges: graph.edges,
+  };
+}
+
+function pruneOpeningGraphDraft(graph: OpeningGraphDraft) {
+  pruneOpeningTreeDraft(asTreeDraft(graph));
+}
+
+async function enrichOpeningGraphDraft(graph: OpeningGraphDraft, mode: OpeningBuildMode) {
+  const nodesToEnrich = listNodesNeedingEnrichment(graph, mode);
+  const limitedDraft = { ...asTreeDraft(graph), nodes: nodesToEnrich };
   await enrichEngineBestMoves(limitedDraft);
-  await enrichLichessBookMoves(draft);
-}
 
-async function _upsertTreeDraft(
-  supabase: ReturnType<typeof createAdminClient>,
-  profileId: string,
-  draft: ReturnType<typeof buildOpeningTrees>[number],
-) {
-  const now = new Date().toISOString();
-  const { error: treeError } = await supabase.from('opening_trees').upsert(
-    {
-      id: draft.id,
-      owner_profile_id: profileId,
-      library: draft.library,
-      name: draft.name,
-      root_fen_key: draft.rootFenKey,
-      root_ply: draft.rootPly,
-      root_san: draft.rootSan,
-      root_uci: draft.rootUci,
-      source_count: draft.sourceCount,
-      target_depth: draft.targetDepth,
-      updated_at: now,
-    },
-    { onConflict: 'owner_profile_id,library,root_fen_key' },
-  );
+  for (const node of nodesToEnrich) {
+    const updated = limitedDraft.nodes.find((candidate) => candidate.id === node.id);
 
-  if (treeError) {
-    throw new Error(treeError.message);
-  }
-
-  if (draft.nodes.length > 0) {
-    const { error } = await supabase.from('opening_nodes').upsert(
-      draft.nodes.map((node) => ({
-        id: node.id,
-        tree_id: draft.id,
-        fen: node.fen,
-        fen_key: node.fenKey,
-        ply: node.ply,
-        side_to_move: node.sideToMove,
-        best_uci: node.bestUci ?? null,
-        best_san: node.bestSan ?? null,
-        eval_cp: node.evalCp ?? null,
-        recent_games: node.recentGames,
-        card_count: node.cardCount,
-        updated_at: now,
-      })),
-      { onConflict: 'tree_id,fen_key' },
-    );
-
-    if (error) {
-      throw new Error(error.message);
+    if (updated) {
+      node.bestUci = updated.bestUci ?? null;
+      node.bestSan = updated.bestSan ?? null;
+      node.evalCp = updated.evalCp ?? null;
     }
   }
 
-  if (draft.edges.length > 0) {
-    const { error } = await supabase.from('opening_edges').upsert(
-      draft.edges.map((edge) => ({
-        id: edge.id,
-        tree_id: draft.id,
-        from_node_id: edge.fromNodeId,
-        to_node_id: edge.toNodeId,
-        uci: edge.uci,
-        san: edge.san,
-        move_by: edge.moveBy,
-        source: edge.source,
-        recent_count: edge.recentCount,
-        card_count: edge.cardCount,
-        masters_games: edge.mastersGames,
-        priority: edge.priority,
-        is_engine_best: edge.isEngineBest,
-        updated_at: now,
-      })),
-      { onConflict: 'tree_id,from_node_id,uci' },
-    );
-
-    if (error) {
-      throw new Error(error.message);
-    }
-  }
-}
-
-async function _enrichOpeningTreeDraft(draft: OpeningTreeDraft) {
-  await enrichOpeningTreeDraftLazy(draft, 'normal');
+  await enrichLichessBookMoves(asTreeDraft(graph));
 }
 
 async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
@@ -617,35 +609,65 @@ async function fetchTreeIdsAtFenKey(
   profileId: string,
   fenKey: string,
 ): Promise<string[]> {
-  const { data: ownerTrees, error } = await supabase
-    .from('opening_trees')
-    .select('id,root_fen_key')
-    .eq('owner_profile_id', profileId);
-
-  if (error) {
-    throw new Error(error.message);
-  }
-
   const treeIds = new Set<string>();
 
-  for (const tree of ownerTrees ?? []) {
-    if (String(tree.root_fen_key ?? '') === fenKey) {
-      treeIds.add(String(tree.id));
+  const { data: catalogRows, error: catalogError } = await supabase
+    .from('opening_catalog')
+    .select('id,fen_key')
+    .eq('owner_profile_id', profileId);
+
+  if (catalogError) {
+    throw new Error(catalogError.message);
+  }
+
+  for (const row of catalogRows ?? []) {
+    if (String(row.fen_key ?? '') === fenKey) {
+      treeIds.add(String(row.id));
     }
   }
 
-  const ownerTreeIds = (ownerTrees ?? []).map((tree) => String(tree.id));
+  const { data: graphs, error: graphError } = await supabase
+    .from('opening_graphs')
+    .select('id')
+    .eq('owner_profile_id', profileId);
 
-  if (ownerTreeIds.length === 0) {
+  if (graphError) {
+    throw new Error(graphError.message);
+  }
+
+  const graphIds = (graphs ?? []).map((graph) => String(graph.id));
+
+  if (graphIds.length === 0) {
     return [...treeIds];
   }
 
-  const nodeRows = await fetchAllRows<{ tree_id: string }>(supabase, 'opening_nodes', 'tree_id', (query) =>
-    query.in('tree_id', ownerTreeIds).eq('fen_key', fenKey),
+  const nodeRows = await fetchAllRows<{ graph_id: string }>(supabase, 'opening_nodes', 'graph_id', (query) =>
+    query.in('graph_id', graphIds).eq('fen_key', fenKey),
   );
 
-  for (const row of nodeRows) {
-    treeIds.add(String(row.tree_id));
+  if (nodeRows.length === 0) {
+    return [...treeIds];
+  }
+
+  const { data: catalogsForNodes, error: lookupError } = await supabase
+    .from('opening_catalog')
+    .select('id,entry_node_id')
+    .eq('owner_profile_id', profileId)
+    .in(
+      'entry_node_id',
+      (
+        await fetchAllRows<{ id: string }>(supabase, 'opening_nodes', 'id', (query) =>
+          query.in('graph_id', graphIds).eq('fen_key', fenKey),
+        )
+      ).map((row) => String(row.id)),
+    );
+
+  if (lookupError) {
+    throw new Error(lookupError.message);
+  }
+
+  for (const row of catalogsForNodes ?? []) {
+    treeIds.add(String(row.id));
   }
 
   return [...treeIds];
@@ -655,42 +677,19 @@ async function fetchTreeSummaries(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
 ): Promise<OpeningTreeSummary[]> {
-  const { data: trees, error } = await supabase
-    .from('opening_trees')
-    .select(TREE_SELECT)
+  const { data: catalogs, error } = await supabase
+    .from('opening_catalog')
+    .select(CATALOG_SELECT)
     .eq('owner_profile_id', profileId)
-    .order('library')
     .order('source_count', { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  const treeIds = (trees ?? []).map((tree) => String(tree.id));
-  const [nodeIndexRows, progress] = await Promise.all([
-    fetchAllRows<{ id: string; tree_id: string }>(supabase, 'opening_nodes', 'id,tree_id', (query) =>
-      query.in('tree_id', treeIds),
-    ),
-    fetchProgress(supabase, profileId),
-  ]);
-  const nodeCountByTree = new Map<string, number>();
-  const nodeIdsByTree = new Map<string, string[]>();
+  const progress = await fetchProgress(supabase, profileId);
 
-  for (const row of nodeIndexRows) {
-    const treeId = String(row.tree_id);
-    nodeCountByTree.set(treeId, (nodeCountByTree.get(treeId) ?? 0) + 1);
-    const nodeIds = nodeIdsByTree.get(treeId) ?? [];
-    nodeIds.push(String(row.id));
-    nodeIdsByTree.set(treeId, nodeIds);
-  }
-
-  return (trees ?? []).map((tree) => {
-    const treeId = String(tree.id);
-    const nodeIds = nodeIdsByTree.get(treeId) ?? [];
-    const nodeRows = nodeIds.map((nodeId) => ({ id: nodeId, tree_id: treeId }));
-
-    return summarizeTree(tree, nodeRows, progress, nodeCountByTree.get(treeId) ?? 0);
-  });
+  return (catalogs ?? []).map((row) => summarizeCatalog(row, progress));
 }
 
 async function fetchTreeDetail(
@@ -698,9 +697,9 @@ async function fetchTreeDetail(
   profileId: string,
   treeId: string,
 ): Promise<OpeningTreeDetail | null> {
-  const { data: tree, error } = await supabase
-    .from('opening_trees')
-    .select(TREE_SELECT)
+  const { data: catalogRow, error } = await supabase
+    .from('opening_catalog')
+    .select(CATALOG_SELECT)
     .eq('owner_profile_id', profileId)
     .eq('id', treeId)
     .maybeSingle();
@@ -709,149 +708,125 @@ async function fetchTreeDetail(
     throw new Error(error.message);
   }
 
-  if (!tree) {
+  if (!catalogRow) {
     return null;
   }
 
-  const [nodeRows, edgeRows, progress] = await Promise.all([
-    fetchNodes(supabase, [treeId]),
-    fetchEdges(supabase, [treeId]),
+  const graphId = String(catalogRow.graph_id);
+  const [graphRow, nodeRows, edgeRows, progress] = await Promise.all([
+    supabase
+      .from('opening_graphs')
+      .select('id,library,train_side,root_fen_key,target_depth')
+      .eq('id', graphId)
+      .maybeSingle(),
+    fetchNodes(supabase, [graphId]),
+    fetchEdges(supabase, [graphId]),
     fetchProgress(supabase, profileId),
   ]);
-  const summary = summarizeTree(tree, nodeRows, progress, nodeRows.length);
-  const nodes: OpeningTreeNode[] = nodeRows.map((row) => {
-    const entry = progress.get(String(row.id));
-    return {
-      id: String(row.id),
-      fen: String(row.fen),
-      fenKey: String(row.fen_key),
-      ply: Number(row.ply ?? 0),
-      sideToMove: row.side_to_move === 'black' ? 'black' : 'white',
-      bestUci: row.best_uci ? String(row.best_uci) : null,
-      bestSan: row.best_san ? String(row.best_san) : null,
-      evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
-      recentGames: Number(row.recent_games ?? 0),
-      cardCount: Number(row.card_count ?? 0),
-      masteryScore: entry?.masteryScore ?? 0,
-      seenCount: entry?.seenCount ?? 0,
-      correctCount: entry?.correctCount ?? 0,
-      missCount: entry?.missCount ?? 0,
-    };
-  });
-  const edges: OpeningTreeEdge[] = edgeRows.map((row) => ({
-    id: String(row.id),
-    fromNodeId: String(row.from_node_id),
-    toNodeId: String(row.to_node_id),
-    uci: String(row.uci),
-    san: String(row.san),
-    moveBy: row.move_by === 'black' ? 'black' : 'white',
-    source: normalizeEdgeSource(row.source),
-    recentCount: Number(row.recent_count ?? 0),
-    cardCount: Number(row.card_count ?? 0),
-    mastersGames: Number(row.masters_games ?? 0),
-    priority: Number(row.priority ?? 0),
-    isEngineBest: Boolean(row.is_engine_best),
-  }));
 
-  return { ...summary, nodes, edges };
+  if (graphRow.error) {
+    throw new Error(graphRow.error.message);
+  }
+
+  if (!graphRow.data) {
+    return null;
+  }
+
+  const graph = graphDraftFromRows(graphRow.data, nodeRows, edgeRows);
+  const catalog = catalogDraftFromRow(catalogRow);
+  const progressMap = new Map(
+    [...progress.entries()].map(([nodeId, entry]) => [
+      nodeId,
+      {
+        seenCount: entry.seenCount,
+        correctCount: entry.correctCount,
+        missCount: entry.missCount,
+        masteryScore: entry.masteryScore,
+      },
+    ]),
+  );
+
+  return projectCatalogSubgraph(graph, graph.nodes, graph.edges, catalog, progressMap);
 }
 
 async function fetchFullTrees(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
 ): Promise<OpeningTreeDetail[]> {
-  const { data: trees, error } = await supabase
-    .from('opening_trees')
-    .select(TREE_SELECT)
+  const { data: catalogs, error } = await supabase
+    .from('opening_catalog')
+    .select(CATALOG_SELECT)
     .eq('owner_profile_id', profileId)
-    .order('library')
     .order('source_count', { ascending: false });
 
   if (error) {
     throw new Error(error.message);
   }
 
-  if (!trees || trees.length === 0) {
+  if (!catalogs || catalogs.length === 0) {
     return [];
   }
 
-  const treeIds = trees.map((tree) => String(tree.id));
-  const [nodeRows, edgeRows, progress] = await Promise.all([
-    fetchNodes(supabase, treeIds),
-    fetchEdges(supabase, treeIds),
+  const graphIds = [...new Set(catalogs.map((row) => String(row.graph_id)))];
+  const [graphRows, nodeRows, edgeRows, progress] = await Promise.all([
+    supabase.from('opening_graphs').select('id,library,train_side,root_fen_key,target_depth').in('id', graphIds),
+    fetchNodes(supabase, graphIds),
+    fetchEdges(supabase, graphIds),
     fetchProgress(supabase, profileId),
   ]);
 
-  return trees.map((tree) => {
-    const treeId = String(tree.id);
-    const treeNodeRows = nodeRows.filter((row) => String(row.tree_id) === treeId);
-    const treeEdgeRows = edgeRows.filter((row) => String(row.tree_id) === treeId);
-    const summary = summarizeTree(tree, treeNodeRows, progress, treeNodeRows.length);
+  if (graphRows.error) {
+    throw new Error(graphRows.error.message);
+  }
 
-    const nodes: OpeningTreeNode[] = treeNodeRows.map((row) => {
-      const entry = progress.get(String(row.id));
-      return {
-        id: String(row.id),
-        fen: String(row.fen),
-        fenKey: String(row.fen_key),
-        ply: Number(row.ply ?? 0),
-        sideToMove: row.side_to_move === 'black' ? 'black' : 'white',
-        bestUci: row.best_uci ? String(row.best_uci) : null,
-        bestSan: row.best_san ? String(row.best_san) : null,
-        evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
-        recentGames: Number(row.recent_games ?? 0),
-        cardCount: Number(row.card_count ?? 0),
-        masteryScore: entry?.masteryScore ?? 0,
-        seenCount: entry?.seenCount ?? 0,
-        correctCount: entry?.correctCount ?? 0,
-        missCount: entry?.missCount ?? 0,
-      };
-    });
+  const graphById = new Map(
+    (graphRows.data ?? []).map((row) => [
+      String(row.id),
+      graphDraftFromRows(
+        row,
+        nodeRows.filter((node) => String(node.graph_id) === String(row.id)),
+        edgeRows.filter((edge) => String(edge.graph_id) === String(row.id)),
+      ),
+    ]),
+  );
+  const progressMap = new Map(
+    [...progress.entries()].map(([nodeId, entry]) => [
+      nodeId,
+      {
+        seenCount: entry.seenCount,
+        correctCount: entry.correctCount,
+        missCount: entry.missCount,
+        masteryScore: entry.masteryScore,
+      },
+    ]),
+  );
 
-    const edges: OpeningTreeEdge[] = treeEdgeRows.map((row) => ({
-      id: String(row.id),
-      fromNodeId: String(row.from_node_id),
-      toNodeId: String(row.to_node_id),
-      uci: String(row.uci),
-      san: String(row.san),
-      moveBy: row.move_by === 'black' ? 'black' : 'white',
-      source: normalizeEdgeSource(row.source),
-      recentCount: Number(row.recent_count ?? 0),
-      cardCount: Number(row.card_count ?? 0),
-      mastersGames: Number(row.masters_games ?? 0),
-      priority: Number(row.priority ?? 0),
-      isEngineBest: Boolean(row.is_engine_best),
-    }));
+  return catalogs.map((row) => {
+    const graph = graphById.get(String(row.graph_id));
 
-    return { ...summary, nodes, edges };
+    if (!graph) {
+      throw new Error(`Missing graph ${String(row.graph_id)} for catalog ${String(row.id)}`);
+    }
+
+    return projectCatalogSubgraph(graph, graph.nodes, graph.edges, catalogDraftFromRow(row), progressMap);
   });
 }
 
-function summarizeTree(
-  tree: Record<string, unknown>,
-  nodes: Array<{ id: string | number }>,
-  progress: Map<string, ProgressEntry>,
-  nodeCount = nodes.length,
-): OpeningTreeSummary {
-  const scores = nodes.map((node) => progress.get(String(node.id))?.masteryScore ?? 0);
-  const masteryScore =
-    scores.length > 0 ? Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length) : 0;
-  const dueCount = nodes.filter((node) => (progress.get(String(node.id))?.masteryScore ?? 0) < 80).length;
-
+function summarizeCatalog(catalog: Record<string, unknown>, progress: Map<string, ProgressEntry>): OpeningTreeSummary {
   return {
-    id: String(tree.id),
-    name: String(tree.name ?? 'Opening'),
-    library: normalizeLibrary(tree.library),
-    rootFenKey: String(tree.root_fen_key ?? ''),
-    rootPly: Number(tree.root_ply ?? 0),
-    rootSan: toStringArray(tree.root_san),
-    rootUci: toStringArray(tree.root_uci),
-    sourceCount: Number(tree.source_count ?? 0),
-    targetDepth: Number(tree.target_depth ?? DEFAULT_OPENING_TARGET_DEPTH),
-    nodeCount,
-    dueCount,
-    masteryScore,
-    updatedAt: tree.updated_at ? String(tree.updated_at) : null,
+    id: String(catalog.id),
+    name: String(catalog.name ?? 'Opening'),
+    library: normalizeLibrary(catalog.library),
+    rootFenKey: String(catalog.fen_key ?? ''),
+    rootPly: Number(catalog.catalog_ply ?? OPENING_BUILD_ROOT_PLY),
+    rootSan: toStringArray(catalog.display_san),
+    rootUci: toStringArray(catalog.display_uci),
+    sourceCount: Number(catalog.source_count ?? 0),
+    targetDepth: Number(catalog.target_depth ?? DEFAULT_OPENING_TARGET_DEPTH),
+    nodeCount: Number(catalog.subgraph_node_count ?? 0),
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: catalog.updated_at ? String(catalog.updated_at) : null,
   };
 }
 
@@ -944,20 +919,33 @@ async function fetchAllRows<T extends Record<string, unknown>>(
   return rows;
 }
 
-async function fetchNodes(supabase: ReturnType<typeof createAdminClient>, treeIds: string[]) {
-  if (treeIds.length === 0) {
+async function fetchNodes(supabase: ReturnType<typeof createAdminClient>, graphIds: string[]) {
+  if (graphIds.length === 0) {
     return [];
   }
 
-  return fetchAllRows(supabase, 'opening_nodes', NODE_SELECT, (query) => query.in('tree_id', treeIds));
+  return fetchAllRows(supabase, 'opening_nodes', NODE_SELECT, (query) => query.in('graph_id', graphIds));
 }
 
-async function fetchEdges(supabase: ReturnType<typeof createAdminClient>, treeIds: string[]) {
-  if (treeIds.length === 0) {
+async function fetchEdges(supabase: ReturnType<typeof createAdminClient>, graphIds: string[]) {
+  if (graphIds.length === 0) {
     return [];
   }
 
-  return fetchAllRows(supabase, 'opening_edges', EDGE_SELECT, (query) => query.in('tree_id', treeIds));
+  return fetchAllRows(supabase, 'opening_edges', EDGE_SELECT, (query) => query.in('graph_id', graphIds));
+}
+
+async function fetchCatalogs(supabase: ReturnType<typeof createAdminClient>, profileId: string) {
+  const { data, error } = await supabase
+    .from('opening_catalog')
+    .select(CATALOG_SELECT)
+    .eq('owner_profile_id', profileId);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data ?? [];
 }
 
 async function fetchProgress(supabase: ReturnType<typeof createAdminClient>, profileId: string) {

@@ -959,70 +959,7 @@ export function draftFromPreloadedTree(
   };
 }
 
-export function mergeOpeningTreeDelta(
-  existing: OpeningTreeDraft,
-  deltaInputs: OpeningTreeBuildInput[],
-  options: { ownerProfileId: string; targetDepth: number; rootPly: number },
-): { draft: OpeningTreeDraft; newNodeIds: Set<string>; newEdgeIds: Set<string> } {
-  const freshTrees = buildOpeningTrees(deltaInputs, {
-    ownerProfileId: options.ownerProfileId,
-    targetDepth: options.targetDepth,
-    rootPly: options.rootPly,
-  });
-  const matching = freshTrees.find((tree) => tree.rootFenKey === existing.rootFenKey);
-
-  if (!matching) {
-    return { draft: existing, newNodeIds: new Set(), newEdgeIds: new Set() };
-  }
-
-  const nodeByFenKey = new Map(existing.nodes.map((node) => [node.fenKey, node]));
-  const edgeByKey = new Map(existing.edges.map((edge) => [`${edge.fromNodeId}:${edge.uci}`, edge]));
-  const newNodeIds = new Set<string>();
-  const newEdgeIds = new Set<string>();
-
-  for (const node of matching.nodes) {
-    const current = nodeByFenKey.get(node.fenKey);
-
-    if (!current) {
-      existing.nodes.push({ ...node, trainSide: node.trainSide ?? existing.trainSide });
-      nodeByFenKey.set(node.fenKey, node);
-      newNodeIds.add(node.id);
-      continue;
-    }
-
-    current.recentGames += node.recentGames;
-    current.cardCount += node.cardCount;
-  }
-
-  for (const edge of matching.edges) {
-    const key = `${edge.fromNodeId}:${edge.uci}`;
-    const current = edgeByKey.get(key);
-
-    if (!current) {
-      existing.edges.push(edge);
-      edgeByKey.set(key, edge);
-      newEdgeIds.add(edge.id);
-      continue;
-    }
-
-    current.recentCount += edge.recentCount;
-    current.cardCount += edge.cardCount;
-    current.priority = Math.max(current.priority, edge.priority);
-    current.source =
-      current.source === edge.source
-        ? current.source
-        : current.source === 'recent_game' || current.source === 'card'
-          ? 'mixed'
-          : current.source;
-  }
-
-  existing.sourceCount += matching.sourceCount;
-  existing.targetDepth = Math.max(existing.targetDepth, options.targetDepth);
-  existing.nodes.sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id));
-  existing.edges.sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id));
-
-  return { draft: existing, newNodeIds, newEdgeIds };
-}
+export { buildOpeningTrees, mergeOpeningTreeDelta } from './opening-graph.ts';
 
 export function shouldSkipNodeEnrichment(_node: OpeningNodeDraft, _staleBeforeMs: number): boolean {
   return false;
@@ -1189,47 +1126,6 @@ export function resolveOpeningLibrary(parsedMoves: OpeningMove[]): OpeningLibrar
   }
 
   return 'other';
-}
-
-export function buildOpeningTrees(
-  inputs: OpeningTreeBuildInput[],
-  options: { ownerProfileId: string; targetDepth?: number; rootPly?: number },
-) {
-  const rootPly = options.rootPly ?? DEFAULT_OPENING_ROOT_PLY;
-  const targetDepth = options.targetDepth ?? DEFAULT_OPENING_TARGET_DEPTH;
-  const groups = new Map<
-    string,
-    { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[]
-  >();
-
-  for (const input of inputs) {
-    const parsed = parseSanMoves(input.moves);
-
-    if (parsed.length < rootPly) {
-      continue;
-    }
-
-    const library = resolveOpeningLibrary(parsed);
-    const rootFen = rootPly === 0 ? new Chess().fen() : parsed[rootPly - 1]?.fenAfter;
-
-    if (!rootFen) {
-      continue;
-    }
-
-    const rootFenKey = normalizeOpeningFen(rootFen);
-    const key = rootFenKey;
-    const bucket = groups.get(key) ?? [];
-    bucket.push({ input, parsed, library, rootFenKey });
-    groups.set(key, bucket);
-  }
-
-  return [...groups.values()].map((group) =>
-    buildTreeForGroup(group, {
-      ownerProfileId: options.ownerProfileId,
-      rootPly,
-      targetDepth,
-    }),
-  );
 }
 
 export function chooseWeightedOpponentEdge(edges: OpeningTreeEdge[], seed = Date.now()) {
@@ -1740,7 +1636,7 @@ function seededUnit(seed: number) {
   return value - Math.floor(value);
 }
 
-function shortHash(value: string) {
+export function shortHash(value: string) {
   let hash = 2166136261;
 
   for (let index = 0; index < value.length; index += 1) {
