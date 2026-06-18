@@ -688,6 +688,7 @@ export function projectCatalogSubgraph(
     nodeCount: nodes.length,
     dueCount: 0,
     masteryScore: 0,
+    updatedAt: null,
     nodes,
     edges,
   };

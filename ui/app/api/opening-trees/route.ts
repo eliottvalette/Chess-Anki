@@ -327,7 +327,12 @@ async function loadExistingGraphBundles(supabase: ReturnType<typeof createAdminC
     throw new Error(error.message);
   }
 
-  const bundles = [];
+  const bundles: Array<{
+    graphRow: Record<string, unknown>;
+    nodeRows: Array<Record<string, unknown>>;
+    edgeRows: Array<Record<string, unknown>>;
+    catalogRows: Array<Record<string, unknown>>;
+  }> = [];
   const graphIds = (graphs ?? []).map((graph) => String(graph.id));
 
   if (graphIds.length === 0) {
@@ -877,25 +882,27 @@ function _buildInputsFromRows(
   return [...lineInputs, ...cardInputs];
 }
 
+type OpeningTablePagedQuery = ReturnType<
+  ReturnType<ReturnType<ReturnType<typeof createAdminClient>['from']>['select']>['range']
+>;
+
 async function fetchAllRows<T extends Record<string, unknown>>(
   supabase: ReturnType<typeof createAdminClient>,
   table: 'opening_nodes' | 'opening_edges',
   select: string,
-  applyFilter: (
-    query: ReturnType<ReturnType<typeof createAdminClient>['from']>,
-  ) => ReturnType<ReturnType<typeof createAdminClient>['from']>,
+  applyFilter: (query: OpeningTablePagedQuery) => OpeningTablePagedQuery,
 ) {
   const pageSize = 1000;
   const rows: T[] = [];
   let offset = 0;
 
   while (true) {
-    let query = supabase
+    const baseQuery = supabase
       .from(table)
       .select(select)
       .range(offset, offset + pageSize - 1);
-    query = applyFilter(query);
-    const { data, error } = await query;
+    const filteredQuery = applyFilter(baseQuery as OpeningTablePagedQuery);
+    const { data, error } = await filteredQuery;
 
     if (error) {
       throw new Error(error.message);

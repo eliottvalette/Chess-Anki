@@ -1,5 +1,7 @@
 import { Chess } from 'chess.js';
 
+import { buildOpeningTrees, mergeOpeningTreeDelta } from './opening-graph.ts';
+
 export type OpeningLibrary = 'e4' | 'd4' | 'c4' | 'nf3' | 'other';
 export type OpeningSide = 'white' | 'black';
 export type OpeningEdgeSource = 'recent_game' | 'card' | 'lichess_masters' | 'engine_best' | 'mixed';
@@ -426,14 +428,19 @@ export function filterOpeningTreeForDisplay(
 export function pruneOpeningTreeDraft(draft: OpeningTreeDraft): OpeningTreeDraft {
   const rootNode = resolveCanonicalRootNode(
     {
+      rootFenKey: draft.rootFenKey,
+      rootPly: draft.rootPly,
+      rootSan: draft.rootSan,
       nodes: draft.nodes.map((node) => ({
         ...node,
+        bestUci: node.bestUci ?? null,
+        bestSan: node.bestSan ?? null,
+        evalCp: node.evalCp ?? null,
         masteryScore: 0,
         seenCount: 0,
         correctCount: 0,
         missCount: 0,
       })),
-      rootSan: draft.rootSan,
     },
     draft.rootPly,
   );
@@ -771,7 +778,7 @@ export function pickNextSchedulerAction(tree: OpeningTreeDetail, session: LinesS
 }
 
 export function resolveOpeningNodeFromHistory(
-  tree: OpeningTreeDetail,
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'rootUci'>,
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
 ): { nodeId: string | null; plyInTree: number } {
@@ -992,7 +999,7 @@ export function draftFromPreloadedTree(
   };
 }
 
-export { buildOpeningTrees, mergeOpeningTreeDelta } from './opening-graph.ts';
+export { buildOpeningTrees, mergeOpeningTreeDelta };
 
 export function shouldSkipNodeEnrichment(_node: OpeningNodeDraft, _staleBeforeMs: number): boolean {
   return false;
@@ -1656,7 +1663,7 @@ export function buildLearnDrillReplayUcis(path: DrillPathStep[]): string[] {
 }
 
 export function resolveDrillPathStepIndexFromHistory(
-  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'rootUci'>,
   path: DrillPathStep[],
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,

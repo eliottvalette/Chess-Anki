@@ -358,7 +358,7 @@ export type TrainingDeckPayload = {
   decks?: TrainingDeckSummary[];
   deck?: TrainingDeckSummary | null;
   lines?: Array<{ id: string; name: string; eco: string; side: string; moves: string[] | null }>;
-  cards?: DeckCard[];
+  cards?: TrainingDeckCardRow[];
   error?: string;
 };
 
