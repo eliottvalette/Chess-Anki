@@ -4,12 +4,17 @@ import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import {
   appendStoredMoveFromUci,
-  buildStoredMovesFromSanList,
   buildStoredMovesFromUciList,
   restoreGameFromHistory,
 } from '@/lib/chess-analysis-client';
 import type { ChessSoundKey } from '@/lib/chess-sounds';
-import { DRILL_OPPONENT_DELAY_MS, type OpeningTreesPayload, readJsonResponse } from '@/lib/lab-helpers';
+import {
+  DRILL_OPPONENT_DELAY_MS,
+  delay,
+  LINES_LINE_PREVIEW_DELAY_MS,
+  type OpeningTreesPayload,
+  readJsonResponse,
+} from '@/lib/lab-helpers';
 import {
   buildOpeningDrillExpected,
   buildReviewQueue,
@@ -38,7 +43,11 @@ export function useLabLines(
   context: {
     playSound: (key: ChessSoundKey) => void;
     playSoundSequence: (keys: ChessSoundKey[]) => void;
-    playDeckReplayToIndex: (targetIndex: number, trainSide: OpeningSide) => Promise<boolean | undefined>;
+    playDeckReplayToIndex: (
+      targetIndex: number,
+      trainSide: OpeningSide,
+      startIndex?: number,
+    ) => Promise<boolean | undefined>;
     clearSelection: () => void;
     clearVariation: () => void;
     positionRequestIdRef: React.MutableRefObject<number>;
@@ -64,6 +73,7 @@ export function useLabLines(
     setOpeningDrillStatus,
     setOpeningDrillExpected,
     setDeckPlaybackBusy,
+    deckPlaybackBusy,
     setInitialFen,
     setMoveHistory,
     setHistoryIndex,
@@ -94,7 +104,6 @@ export function useLabLines(
     linesCompletedBranchEdgeIdsRef,
     setLinesTrainPlyCurrent,
     setLinesTrainPlyTotal,
-    setLinesLastPlayedMoveReview,
     game,
     moveHistory,
     historyIndex,
@@ -126,10 +135,74 @@ export function useLabLines(
     linesSession,
   } = context;
 
+  const drillTimeoutRef = useRef<number | null>(null);
+
+  const cancelDrillOpponentMove = useCallback(() => {
+    if (drillTimeoutRef.current) {
+      window.clearTimeout(drillTimeoutRef.current);
+      drillTimeoutRef.current = null;
+    }
+
+    if (linesGameTimeoutRef.current != null) {
+      window.clearTimeout(linesGameTimeoutRef.current);
+      linesGameTimeoutRef.current = null;
+    }
+  }, [linesGameTimeoutRef]);
+
+  const replayMovesToIndex = useCallback(
+    async (fullUcis: string[], trainSide: OpeningSide, targetIndex: number) => {
+      const requestId = ++deckPlaybackRequestIdRef.current;
+      cancelDrillOpponentMove();
+      setDeckPlaybackBusy(true);
+      setOpeningDrillStatus('Loading line...');
+      clearSelection();
+
+      await delay(LINES_LINE_PREVIEW_DELAY_MS);
+
+      if (deckPlaybackRequestIdRef.current !== requestId) {
+        setDeckPlaybackBusy(false);
+        return false;
+      }
+
+      const moves = buildStoredMovesFromUciList(null, fullUcis);
+      setInitialFen(null);
+      setMoveHistory(moves);
+      deckReplayInitialFenRef.current = null;
+      deckReplayMovesRef.current = moves;
+      setHistoryIndex(0);
+      clearVariation();
+      setGame(new Chess());
+      setOpeningDrillExpected(null);
+      setOpeningDrillStatus('');
+
+      const completed = await playDeckReplayToIndex(targetIndex, trainSide, 0);
+
+      if (completed) {
+        setOpeningDrillStatus('Preview position.');
+      }
+
+      return completed;
+    },
+    [
+      cancelDrillOpponentMove,
+      clearSelection,
+      clearVariation,
+      deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
+      playDeckReplayToIndex,
+      setDeckPlaybackBusy,
+      setGame,
+      setHistoryIndex,
+      setInitialFen,
+      setMoveHistory,
+      setOpeningDrillExpected,
+      setOpeningDrillStatus,
+    ],
+  );
+
   const loadOpeningTreeRootOnBoard = useCallback(
     (tree: OpeningTreeDetail) => {
-      const rootMoves = buildStoredMovesFromSanList(null, tree.rootSan);
-      const rootGame = restoreGameFromHistory(rootMoves, null, rootMoves.length);
       const rootNode =
         resolveCanonicalRootNode(tree, tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0)) ??
         tree.nodes[0] ??
@@ -139,11 +212,6 @@ export function useLabLines(
       timelineRequestIdRef.current += 1;
       setMode('lines');
       modeRef.current = 'lines';
-      setInitialFen(null);
-      setMoveHistory(rootMoves);
-      setHistoryIndex(rootMoves.length);
-      clearVariation();
-      setGame(rootGame);
       setMetadata(null);
       setFileName('');
       setPositionAnalysis(null);
@@ -161,21 +229,18 @@ export function useLabLines(
       }
       setShowArrow(false);
       clearSelection();
+      void replayMovesToIndex(tree.rootUci, activeTrainSide, tree.rootUci.length);
     },
     [
       activeTrainSide,
       clearSelection,
-      clearVariation,
       modeRef,
       positionRequestIdRef,
+      replayMovesToIndex,
       setActiveOpeningNodeId,
       setFileName,
-      setGame,
-      setHistoryIndex,
-      setInitialFen,
       setMetadata,
       setMode,
-      setMoveHistory,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
       setOrientation,
@@ -306,59 +371,11 @@ export function useLabLines(
     }
   }, [loadOpeningTrees, setOpeningTreeActionError, setOpeningTreeActionLoading]);
 
-  const drillTimeoutRef = useRef<number | null>(null);
   const activeBranchEdgeIdRef = useRef<string | null>(null);
   const advanceDrillToStepRef = useRef<
     (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
   >(() => {});
   const advanceReviewCardRef = useRef<() => void>(() => {});
-
-  const cancelDrillOpponentMove = useCallback(() => {
-    if (drillTimeoutRef.current) {
-      window.clearTimeout(drillTimeoutRef.current);
-      drillTimeoutRef.current = null;
-    }
-
-    if (linesGameTimeoutRef.current != null) {
-      window.clearTimeout(linesGameTimeoutRef.current);
-      linesGameTimeoutRef.current = null;
-    }
-  }, [linesGameTimeoutRef]);
-
-  const replayMovesToIndex = useCallback(
-    async (fullUcis: string[], trainSide: OpeningSide, targetIndex: number) => {
-      const moves = buildStoredMovesFromUciList(null, fullUcis);
-      setInitialFen(null);
-      setMoveHistory(moves);
-      deckReplayInitialFenRef.current = null;
-      deckReplayMovesRef.current = moves;
-      setHistoryIndex(0);
-      clearVariation();
-      setGame(new Chess());
-      setOpeningDrillExpected(null);
-      clearSelection();
-      cancelDrillOpponentMove();
-      deckPlaybackRequestIdRef.current += 1;
-      setDeckPlaybackBusy(false);
-
-      return playDeckReplayToIndex(targetIndex, trainSide);
-    },
-    [
-      cancelDrillOpponentMove,
-      clearSelection,
-      clearVariation,
-      deckPlaybackRequestIdRef,
-      deckReplayInitialFenRef,
-      deckReplayMovesRef,
-      playDeckReplayToIndex,
-      setDeckPlaybackBusy,
-      setGame,
-      setHistoryIndex,
-      setInitialFen,
-      setMoveHistory,
-      setOpeningDrillExpected,
-    ],
-  );
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -542,7 +559,6 @@ export function useLabLines(
       setOpeningDrillActive(true);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
-      setLinesLastPlayedMoveReview(null);
       setShowArrow(false);
       setOrientation(trainSide);
       playSound('game-start');
@@ -616,8 +632,6 @@ export function useLabLines(
       setOpeningDrillActive(true);
       setOpeningDrillExpected(null);
       setOpeningDrillStatus('');
-      setLinesLastPlayedMoveReview(null);
-
       cancelDrillOpponentMove();
       drillTimeoutRef.current = window.setTimeout(async () => {
         const replayCompleted = await replayMovesToIndex(fullUcis, trainSide, fullUcis.length);
@@ -664,7 +678,6 @@ export function useLabLines(
     setLinesReviewIndex(nextIndex);
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
-    setLinesLastPlayedMoveReview(null);
     void replayReviewNode(tree, linesReviewQueue[nextIndex]!, activeTrainSide);
   }, [
     activeOpeningTree,
@@ -754,7 +767,6 @@ export function useLabLines(
       setLinesLearnBranchComplete(false);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
-      setLinesLastPlayedMoveReview(null);
       setOrientation(trainSide);
       setShowArrow(false);
       linesSession.resetSession(tree, trainSide);
@@ -808,7 +820,6 @@ export function useLabLines(
     setOpeningDrillExpected(null);
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
-    setLinesLastPlayedMoveReview(null);
     setShowArrow(false);
     setOpeningDrillStatus('');
     setLinesStudyMode('idle');
@@ -825,7 +836,6 @@ export function useLabLines(
     linesSession,
     setDeckFeedback,
     setDeckFeedbackArrowsVisible,
-    setLinesLastPlayedMoveReview,
     setLinesLearnBranchComplete,
     setLinesReviewIndex,
     setLinesReviewQueue,
@@ -840,6 +850,10 @@ export function useLabLines(
 
   const selectOpeningTree = useCallback(
     async (treeId: string) => {
+      if (deckPlaybackBusy) {
+        return;
+      }
+
       cancelDrillOpponentMove();
       deckPlaybackRequestIdRef.current += 1;
       setDeckPlaybackBusy(false);
@@ -882,6 +896,7 @@ export function useLabLines(
       cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
+      deckPlaybackBusy,
       deckPlaybackRequestIdRef,
       game,
       historyIndex,
@@ -906,7 +921,7 @@ export function useLabLines(
 
   const selectOpeningNode = useCallback(
     (nodeId: string) => {
-      if (linesStudyMode !== 'idle') {
+      if (linesStudyMode !== 'idle' || deckPlaybackBusy) {
         return;
       }
 
@@ -916,41 +931,26 @@ export function useLabLines(
       const node = tree.nodes.find((candidate) => candidate.id === nodeId);
       if (!node) return;
 
+      cancelDrillOpponentMove();
+      deckPlaybackRequestIdRef.current += 1;
       setActiveOpeningNodeId(nodeId);
       const fullUcis = replayToNodeUcis(tree, nodeId);
-
-      try {
-        const moves = buildStoredMovesFromUciList(null, fullUcis);
-        setInitialFen(null);
-        setMoveHistory(moves);
-        deckReplayInitialFenRef.current = null;
-        deckReplayMovesRef.current = moves;
-        setHistoryIndex(moves.length);
-        clearVariation();
-        setGame(restoreGameFromHistory(moves, null, moves.length));
-        setOpeningDrillExpected(null);
-        setOpeningDrillStatus('Preview position.');
-        clearSelection();
-        setOrientation(activeTrainSide);
-      } catch (error) {
-        console.error('Failed to preview opening node', error);
-      }
+      setOpeningDrillExpected(null);
+      clearSelection();
+      setOrientation(activeTrainSide);
+      void replayMovesToIndex(fullUcis, activeTrainSide, fullUcis.length);
     },
     [
       activeOpeningTree,
       activeTrainSide,
+      cancelDrillOpponentMove,
       clearSelection,
-      clearVariation,
-      deckReplayInitialFenRef,
-      deckReplayMovesRef,
+      deckPlaybackBusy,
+      deckPlaybackRequestIdRef,
       linesStudyMode,
+      replayMovesToIndex,
       setActiveOpeningNodeId,
-      setGame,
-      setHistoryIndex,
-      setInitialFen,
-      setMoveHistory,
       setOpeningDrillExpected,
-      setOpeningDrillStatus,
       setOrientation,
     ],
   );

@@ -131,6 +131,7 @@ export function LabSidebar() {
               activeTree={lab.labState.activeOpeningTree}
               activeTreeId={lab.labState.selectedOpeningTreeId}
               deckFeedback={lab.labState.deckFeedback}
+              deckPlaybackBusy={lab.labState.deckPlaybackBusy}
               drillActive={lab.labState.openingDrillActive}
               forkCoverage={lab.linesForkCoverage}
               hasNextLearnBranch={lab.linesHasNextLearnBranch}

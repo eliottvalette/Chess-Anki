@@ -114,11 +114,6 @@ export function useLabState() {
   const linesCompletedBranchEdgeIdsRef = useRef<string[]>([]);
   const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
   const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
-  const [linesLastPlayedMoveReview, setLinesLastPlayedMoveReview] = useState<{
-    historyIndex: number;
-    uci: string;
-    category: 'best' | 'book' | 'miss';
-  } | null>(null);
   const [linesPositionFilterTreeIds, setLinesPositionFilterTreeIds] = useState<string[] | null>(null);
   const [linesPositionFilterLoading, setLinesPositionFilterLoading] = useState(false);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
@@ -288,8 +283,6 @@ export function useLabState() {
     setLinesTrainPlyCurrent,
     linesTrainPlyTotal,
     setLinesTrainPlyTotal,
-    linesLastPlayedMoveReview,
-    setLinesLastPlayedMoveReview,
     linesPositionFilterTreeIds,
     setLinesPositionFilterTreeIds,
     linesPositionFilterLoading,

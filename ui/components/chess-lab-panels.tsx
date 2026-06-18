@@ -202,6 +202,7 @@ export function LinesPanel({
   activeTree,
   activeTreeId,
   deckFeedback,
+  deckPlaybackBusy,
   drillActive,
   forkCoverage,
   hasNextLearnBranch,
@@ -235,6 +236,7 @@ export function LinesPanel({
   activeTree: OpeningTreeDetail | null;
   activeTreeId: string | null;
   deckFeedback: DeckFeedback | null;
+  deckPlaybackBusy: boolean;
   drillActive: boolean;
   forkCoverage?: Record<string, { playedEdgeIds: string[]; remainingEdgeIds: string[] }>;
   hasNextLearnBranch: boolean;
@@ -541,7 +543,12 @@ export function LinesPanel({
               ) : null}
             </div>
 
-            <div className="w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
+            <div className="relative w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
+              {deckPlaybackBusy && !inSession ? (
+                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[rgba(4,8,15,0.58)] text-sm text-(--text-muted)">
+                  Loading line...
+                </div>
+              ) : null}
               <OpeningTreeGraphInteractionContext.Provider value={graphInteraction}>
                 <ReactFlowProvider key={activeTreeId ?? 'none'}>
                   <ReactFlow

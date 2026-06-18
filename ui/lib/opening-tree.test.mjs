@@ -7,6 +7,7 @@ import {
   buildOpeningTrees,
   buildReviewQueue,
   chooseWeightedOpponentEdge,
+  classifyBoardMoveAtHistoryIndex,
   classifyLinesMove,
   classifyLinesMoveAtHistoryIndex,
   classifyOpeningDrillMove,
@@ -864,6 +865,46 @@ const rootPrefixTree = {
   ],
 };
 
+const italianDrillTree = {
+  ...rootPrefixTree,
+  nodes: [
+    ...rootPrefixTree.nodes,
+    {
+      id: 'italian-grandchild',
+      fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+      fenKey: 'italian-grandchild',
+      ply: 6,
+      sideToMove: 'white',
+      bestUci: 'e1g1',
+      bestSan: 'O-O',
+      evalCp: 18,
+      recentGames: 0,
+      cardCount: 0,
+      masteryScore: 0,
+      seenCount: 0,
+      correctCount: 0,
+      missCount: 0,
+    },
+  ],
+  edges: [
+    ...rootPrefixTree.edges,
+    {
+      id: 'nf6-edge',
+      fromNodeId: 'italian-child',
+      toNodeId: 'italian-grandchild',
+      uci: 'g8f6',
+      san: 'Nf6',
+      moveBy: 'black',
+      source: 'recent_game',
+      recentCount: 3,
+      cardCount: 0,
+      mastersGames: 0,
+      priority: 8,
+      isEngineBest: false,
+    },
+  ],
+};
+
 test('classifyRootPrefixMove marks matching forced plies as book and deviations as miss', () => {
   assert.equal(classifyRootPrefixMove(rootPrefixTree, 0, 'e2e4'), 'book');
   assert.equal(classifyRootPrefixMove(rootPrefixTree, 2, 'g1f3'), 'book');
@@ -871,7 +912,48 @@ test('classifyRootPrefixMove marks matching forced plies as book and deviations 
   assert.equal(classifyRootPrefixMove(rootPrefixTree, 4, 'f1c4'), null);
 });
 
-test('classifyLinesMoveAtHistoryIndex skips forced prefix plies', () => {
+test('classifyBoardMoveAtHistoryIndex works without an active learn or review session', () => {
+  const moveHistory = [{ uci: 'e2e4' }, { uci: 'e7e5' }, { uci: 'g1f3' }, { uci: 'b8c6' }, { uci: 'f1c4' }];
+
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, moveHistory, 5, 'white'), {
+    moveUci: 'f1c4',
+    category: 'best',
+  });
+});
+
+test('classifyBoardMoveAtHistoryIndex classifies prefix train and opponent moves from history alone', () => {
+  const prefixHistory = [{ uci: 'e2e4' }, { uci: 'e7e5' }, { uci: 'g1f3' }, { uci: 'b8c6' }];
+
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 1, 'white'), {
+    moveUci: 'e2e4',
+    category: 'book',
+  });
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 2, 'white'), {
+    moveUci: 'e7e5',
+    category: 'book',
+  });
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 3, 'white'), {
+    moveUci: 'g1f3',
+    category: 'book',
+  });
+
+  const drillHistory = [...prefixHistory, { uci: 'f1c4' }, { uci: 'g8f6' }];
+
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 5, 'white'), {
+    moveUci: 'f1c4',
+    category: 'best',
+  });
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 6, 'white'), {
+    moveUci: 'g8f6',
+    category: 'book',
+  });
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 5, 'white'), {
+    moveUci: 'f1c4',
+    category: 'best',
+  });
+});
+
+test('classifyLinesMoveAtHistoryIndex delegates to board history classifier', () => {
   const moveHistory = [
     { uci: 'e2e4', san: 'e4' },
     { uci: 'e7e5', san: 'e5' },
@@ -879,8 +961,14 @@ test('classifyLinesMoveAtHistoryIndex skips forced prefix plies', () => {
     { uci: 'b8c6', san: 'Nc6' },
   ];
 
-  assert.equal(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 1, 'white'), null);
-  assert.equal(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 3, 'white'), null);
+  assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 1, 'white'), {
+    moveUci: 'e2e4',
+    category: 'book',
+  });
+  assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 3, 'white'), {
+    moveUci: 'g1f3',
+    category: 'book',
+  });
 });
 
 test('resolveOpeningNodeFromHistory maps root plies without jumping to the canonical root node', () => {

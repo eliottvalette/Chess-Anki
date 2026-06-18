@@ -825,7 +825,7 @@ export function resolveOpeningNodeFromHistory(
   return { nodeId: currentNode?.id ?? null, plyInTree: boundedIndex };
 }
 
-export function classifyLinesMoveAtHistoryIndex(
+export function classifyBoardMoveAtHistoryIndex(
   tree: OpeningTreeDetail,
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
@@ -845,22 +845,51 @@ export function classifyLinesMoveAtHistoryIndex(
   const rootLength = getOpeningTreeRootLength(tree);
 
   if (moveIndex < rootLength) {
-    return null;
+    const prefixCategory = classifyRootPrefixMove(tree, moveIndex, move.uci);
+
+    if (!prefixCategory) {
+      return null;
+    }
+
+    return { moveUci: move.uci, category: prefixCategory };
   }
 
   const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, moveIndex);
-  const node = nodeId ? tree.nodes.find((candidate) => candidate.id === nodeId) : null;
 
-  if (!node || node.sideToMove !== trainSide) {
+  if (!nodeId) {
     return null;
   }
 
-  const classified = classifyLinesMove(tree, nodeId!, move.uci);
+  const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+
+  if (!node) {
+    return null;
+  }
+
+  if (node.sideToMove === trainSide) {
+    const classified = classifyLinesMove(tree, nodeId, move.uci);
+
+    return {
+      moveUci: move.uci,
+      category: classified.category,
+    };
+  }
+
+  const edge = tree.edges.find((candidate) => candidate.fromNodeId === nodeId && candidate.uci === move.uci);
 
   return {
     moveUci: move.uci,
-    category: classified.category,
+    category: edge ? 'book' : 'miss',
   };
+}
+
+export function classifyLinesMoveAtHistoryIndex(
+  tree: OpeningTreeDetail,
+  moveHistory: Array<{ uci: string }>,
+  historyIndex: number,
+  trainSide: OpeningSide,
+): { moveUci: string; category: LinesMoveCategory } | null {
+  return classifyBoardMoveAtHistoryIndex(tree, moveHistory, historyIndex, trainSide);
 }
 
 export function linesMoveCategoryToReviewCategory(category: LinesMoveCategory) {

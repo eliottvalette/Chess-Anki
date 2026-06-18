@@ -334,6 +334,7 @@ export function delay(ms: number) {
 }
 
 export const DRILL_OPPONENT_DELAY_MS = 400;
+export const LINES_LINE_PREVIEW_DELAY_MS = 450;
 
 export function parseJsonResponse<T>(response: Response, bodyText: string): T {
   if (!bodyText.trim()) {

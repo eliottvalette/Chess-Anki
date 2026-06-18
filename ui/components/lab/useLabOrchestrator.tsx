@@ -44,7 +44,7 @@ import {
 } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
-  classifyLinesMoveAtHistoryIndex,
+  classifyBoardMoveAtHistoryIndex,
   filterOpeningTreeSummaries,
   filterOpeningTreeSummariesByIds,
   isStandardStartFenKey,
@@ -742,64 +742,23 @@ export function useLabOrchestrator() {
       return null;
     }
 
-    const inLinesSession = labState.linesStudyMode !== 'idle' || openingDrillActive;
-
-    if (!inLinesSession) {
-      return null;
-    }
-
-    const storedReview = labState.linesLastPlayedMoveReview;
-
-    if (storedReview && storedReview.historyIndex <= historyIndex) {
-      const reviewedMove = moveHistory[storedReview.historyIndex - 1];
-
-      if (reviewedMove && reviewedMove.uci === storedReview.uci) {
-        return {
-          move: reviewedMove,
-          category: storedReview.category,
-        };
-      }
-    }
-
-    if (deckFeedback && !deckFeedback.pending) {
-      const feedbackMove = moveHistory[historyIndex - 1];
-
-      if (feedbackMove && feedbackMove.uci === deckFeedback.playedUci) {
-        return {
-          move: feedbackMove,
-          category: deckFeedback.correct ? (deckFeedback.exact ? 'best' : 'book') : 'miss',
-        };
-      }
-    }
-
-    const classified = classifyLinesMoveAtHistoryIndex(activeOpeningTree, moveHistory, historyIndex, activeTrainSide);
+    const classified = classifyBoardMoveAtHistoryIndex(activeOpeningTree, moveHistory, historyIndex, activeTrainSide);
 
     if (!classified) {
       return null;
     }
 
-    const classifiedMove = currentMoves.find((move) => move.uci === classified.moveUci) ?? null;
+    const move = moveHistory[historyIndex - 1];
 
-    if (!classifiedMove) {
+    if (!move || move.uci !== classified.moveUci) {
       return null;
     }
 
     return {
-      move: classifiedMove,
+      move,
       category: classified.category,
     };
-  }, [
-    activeOpeningTree,
-    activeTrainSide,
-    currentMoves,
-    deckFeedback,
-    historyIndex,
-    labState.linesLastPlayedMoveReview,
-    labState.linesStudyMode,
-    mode,
-    moveHistory,
-    openingDrillActive,
-  ]);
+  }, [activeOpeningTree, activeTrainSide, historyIndex, mode, moveHistory]);
   const boardSquareStyles = useMemo(() => {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
@@ -939,6 +898,9 @@ export function useLabOrchestrator() {
   const advanceReviewCardRef = useRef<() => void>(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
   const linesGameTimeoutRef = useRef<number | null>(null);
+  const playDeckReplayToIndexRef = useRef<
+    ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
+  >(null);
   const linesSession = useLinesSession();
 
   const gameContext = useMemo(
@@ -956,12 +918,19 @@ export function useLabOrchestrator() {
       drillPathRef,
       drillPathIndexRef,
       linesSession,
+      playDeckReplayToIndexRef,
+      deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
     }),
     [
       playSoundSequence,
       playSound,
       saveTrainingAttempt,
       timelineRefineRequestIdRef,
+      deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
       drillPathRef,
       drillPathIndexRef,
       linesSession,
@@ -1146,6 +1115,10 @@ export function useLabOrchestrator() {
     labState,
     trainingContext,
   );
+
+  useEffect(() => {
+    playDeckReplayToIndexRef.current = playDeckReplayToIndex;
+  }, [playDeckReplayToIndex]);
 
   const deckProgressRef = useRef(deckProgress);
   const deckFeedbackRef = useRef(deckFeedback);
@@ -1634,6 +1607,10 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
+        if (mode === 'lines' && deckPlaybackBusy) {
+          return;
+        }
+
         if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
           cancelReviewPlayback();
         }
@@ -1679,6 +1656,10 @@ export function useLabOrchestrator() {
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         event.stopPropagation();
+
+        if (mode === 'lines' && deckPlaybackBusy) {
+          return;
+        }
 
         if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
           cancelReviewPlayback();

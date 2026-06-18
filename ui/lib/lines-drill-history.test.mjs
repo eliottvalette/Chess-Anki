@@ -327,6 +327,23 @@ test('undo after miss then correct train and opponent keeps replayable history',
   assert.equal(undoTrain.moveHistory.map((move) => move.uci).join(' '), FOUR_KNIGHTS_ROOT_UCI.join(' '));
 });
 
+test('lines browse undo keeps full move list so redo can replay forced plies', () => {
+  const full = buildStoredMovesFromUciList(null, FOUR_KNIGHTS_ROOT_UCI);
+  const historyIndex = full.length;
+  const undoTarget = historyIndex - 1;
+  const nextGame = restoreGameFromHistory(full, null, undoTarget);
+
+  assert.equal(nextGame.fen().split(' ')[1], 'b');
+  assert.equal(full.length, FOUR_KNIGHTS_ROOT_UCI.length);
+  assert.equal(full.map((move) => move.uci).join(' '), FOUR_KNIGHTS_ROOT_UCI.join(' '));
+
+  const redoTarget = undoTarget + 1;
+  const redoGame = restoreGameFromHistory(full, null, redoTarget);
+
+  assert.equal(redoGame.fen().split(' ')[1], 'w');
+  assert.equal(full[redoTarget - 1]?.uci, FOUR_KNIGHTS_ROOT_UCI[redoTarget - 1]);
+});
+
 test('branching history truncates on undo when index trails stored moves', () => {
   const root = buildStoredMovesFromUciList(null, FOUR_KNIGHTS_ROOT_UCI);
   const branch = appendOpponentLikeDrill(root, root.length, 'f1c4');

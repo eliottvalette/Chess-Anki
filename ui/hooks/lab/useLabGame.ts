@@ -3,7 +3,12 @@ import type { CSSProperties } from 'react';
 import { useCallback } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
-import { formatBestMove, linesJumpToHistoryIndex, toStoredMove } from '@/lib/chess-analysis-client';
+import {
+  formatBestMove,
+  linesJumpToHistoryIndex,
+  restoreGameFromHistory,
+  toStoredMove,
+} from '@/lib/chess-analysis-client';
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
 import {
@@ -44,6 +49,12 @@ export function useLabGame(
     drillPathRef: React.MutableRefObject<DrillPathStep[]>;
     drillPathIndexRef: React.MutableRefObject<number>;
     linesSession: LinesSessionApi;
+    playDeckReplayToIndexRef: React.MutableRefObject<
+      ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
+    >;
+    deckPlaybackRequestIdRef: React.MutableRefObject<number>;
+    deckReplayInitialFenRef: React.MutableRefObject<string | null>;
+    deckReplayMovesRef: React.MutableRefObject<StoredMove[]>;
   },
 ) {
   const {
@@ -61,6 +72,7 @@ export function useLabGame(
     activeOpeningTree,
     trainAllSession,
     linesStudyMode,
+    activeTrainSide,
     initialFen,
     setVariationBaseIndex,
     setVariationMoves,
@@ -79,7 +91,6 @@ export function useLabGame(
     setShowArrow,
     setOpeningDrillStatus,
     setActiveOpeningNodeId,
-    setLinesLastPlayedMoveReview,
   } = state;
 
   const {
@@ -96,6 +107,10 @@ export function useLabGame(
     drillPathRef,
     drillPathIndexRef,
     linesSession,
+    playDeckReplayToIndexRef,
+    deckPlaybackRequestIdRef,
+    deckReplayInitialFenRef,
+    deckReplayMovesRef,
   } = context;
 
   const currentFen = game.fen();
@@ -185,11 +200,6 @@ export function useLabGame(
 
         setMoveHistory(truncatedHistory);
         setHistoryIndex(nextHistoryIndex);
-        setLinesLastPlayedMoveReview({
-          historyIndex: nextHistoryIndex,
-          uci: move.uci,
-          category: linesClassification.category,
-        });
         clearVariation();
         setGame(nextGame);
         setPositionAnalysis(null);
@@ -484,6 +494,34 @@ export function useLabGame(
         linesGameTimeoutRef.current = null;
       }
 
+      const isLinesBrowse =
+        modeRef.current === 'lines' && activeOpeningTree && linesStudyMode === 'idle' && !openingDrillActive;
+      const boundedTarget = Math.max(0, Math.min(index, moveHistory.length));
+
+      if (isLinesBrowse) {
+        if (boundedTarget > historyIndex && playDeckReplayToIndexRef.current) {
+          deckPlaybackRequestIdRef.current += 1;
+          deckReplayMovesRef.current = moveHistory;
+          deckReplayInitialFenRef.current = initialFen;
+          void playDeckReplayToIndexRef.current(boundedTarget, activeTrainSide, historyIndex);
+          return;
+        }
+
+        if (boundedTarget !== historyIndex) {
+          const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedTarget);
+
+          setHistoryIndex(boundedTarget);
+          setDeckFeedback(null);
+          setDeckFeedbackArrowsVisible(false);
+          setShowArrow(false);
+          clearVariation();
+          setGame(nextGame);
+          clearSelection();
+        }
+
+        return;
+      }
+
       const jumped = linesJumpToHistoryIndex(moveHistory, initialFen, historyIndex, index);
       const { historyIndex: boundedIndex, game: nextGame, moveHistory: historyForSync } = jumped;
 
@@ -510,7 +548,6 @@ export function useLabGame(
       setHistoryIndex(boundedIndex);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
-      setLinesLastPlayedMoveReview(null);
       setShowArrow(false);
       clearVariation();
       setGame(nextGame);
@@ -545,8 +582,12 @@ export function useLabGame(
     },
     [
       activeOpeningTree,
+      activeTrainSide,
       clearSelection,
       clearVariation,
+      deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
       historyIndex,
       initialFen,
       linesSession,
@@ -554,6 +595,7 @@ export function useLabGame(
       modeRef,
       moveHistory,
       openingDrillActive,
+      playDeckReplayToIndexRef,
       advanceDrillToStepRef,
       cancelDrillOpponentMoveRef,
       drillPathRef,
@@ -564,10 +606,9 @@ export function useLabGame(
       setDeckFeedbackArrowsVisible,
       setGame,
       setHistoryIndex,
+      setMoveHistory,
       setOpeningDrillExpected,
       setShowArrow,
-      setLinesLastPlayedMoveReview,
-      linesStudyMode,
       state.activeTrainSide,
     ],
   );

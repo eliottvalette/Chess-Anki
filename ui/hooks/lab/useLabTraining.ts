@@ -166,19 +166,20 @@ export function useLabTraining(
   );
 
   const playDeckReplayToIndex = useCallback(
-    async (targetIndex: number, trainSide: DeckCard['side']) => {
+    async (targetIndex: number, trainSide: DeckCard['side'], startIndex = 0) => {
       const requestId = ++deckPlaybackRequestIdRef.current;
       const moves = deckReplayMovesRef.current;
       const startFen = deckReplayInitialFenRef.current;
-      const boundedTarget = Math.max(0, Math.min(targetIndex, moves.length));
+      const boundedStart = Math.max(0, Math.min(startIndex, moves.length));
+      const boundedTarget = Math.max(boundedStart, Math.min(targetIndex, moves.length));
 
-      if (boundedTarget === 0) {
+      if (boundedTarget <= boundedStart) {
         return true;
       }
 
       setDeckPlaybackBusy(true);
 
-      for (let nextIndex = 1; nextIndex <= boundedTarget; nextIndex += 1) {
+      for (let nextIndex = boundedStart + 1; nextIndex <= boundedTarget; nextIndex += 1) {
         if (deckPlaybackRequestIdRef.current !== requestId) {
           setDeckPlaybackBusy(false);
           return false;
