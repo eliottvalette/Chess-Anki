@@ -52,6 +52,7 @@ import {
   isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
   normalizeOpeningFen,
+  resolveOpeningNodeFromHistory,
 } from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
@@ -529,21 +530,32 @@ export function useLabOrchestrator() {
     return preMoveAnalyses[historyIndex] ?? null;
   }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex]);
   const displayAnalysis = reviewDisplayAnalysis ?? positionAnalysis;
-  const boardScoreLabel = useMemo(() => {
-    if (mode === 'lines' && activeOpeningTree && activeOpeningNodeId) {
-      const openingNode = activeOpeningTree.nodes.find((node) => node.id === activeOpeningNodeId);
+  const linesBoardEvalCp = useMemo(() => {
+    if (mode !== 'lines' || !activeOpeningTree) {
+      return null;
+    }
 
-      if (openingNode?.evalCp != null) {
-        return formatEvalCpLabel(openingNode.evalCp, orientation);
+    const resolvedNodeId = resolveOpeningNodeFromHistory(activeOpeningTree, moveHistory, historyIndex).nodeId;
+    const nodeId = resolvedNodeId ?? activeOpeningNodeId;
+    const openingNode = nodeId ? activeOpeningTree.nodes.find((node) => node.id === nodeId) : null;
+
+    return openingNode?.evalCp ?? null;
+  }, [activeOpeningNodeId, activeOpeningTree, historyIndex, mode, moveHistory]);
+  const boardScoreLabel = useMemo(() => {
+    if (displayAnalysis) {
+      return formatScoreLabel(displayAnalysis, orientation);
+    }
+
+    if (mode === 'lines') {
+      if (linesBoardEvalCp != null) {
+        return formatEvalCpLabel(linesBoardEvalCp, orientation);
       }
+
+      return positionLoading ? '...' : '0.0';
     }
 
     if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
       return formatEvalCpLabel(activeTrainMoveReview.whiteEvalCp, orientation);
-    }
-
-    if (displayAnalysis) {
-      return formatScoreLabel(displayAnalysis, orientation);
     }
 
     if (activeDeckCard && historyIndex > 0) {
@@ -554,37 +566,29 @@ export function useLabOrchestrator() {
       }
     }
 
-    if (mode === 'lines') {
-      return '0.0';
-    }
-
     return formatScoreLabel(displayAnalysis, orientation);
   }, [
     activeDeckCard,
-    activeOpeningNodeId,
-    activeOpeningTree,
     activeTrainMoveReview,
     displayAnalysis,
     historyIndex,
+    linesBoardEvalCp,
     mode,
     orientation,
+    positionLoading,
     trainUsesLivePositionEval,
   ]);
   const whiteAdvantage = useMemo(() => {
-    if (mode === 'lines' && activeOpeningTree && activeOpeningNodeId) {
-      const openingNode = activeOpeningTree.nodes.find((node) => node.id === activeOpeningNodeId);
+    if (displayAnalysis) {
+      return getAdvantageMeter(displayAnalysis);
+    }
 
-      if (openingNode?.evalCp != null) {
-        return getAdvantageMeterFromEvalCp(openingNode.evalCp);
-      }
+    if (mode === 'lines' && linesBoardEvalCp != null) {
+      return getAdvantageMeterFromEvalCp(linesBoardEvalCp);
     }
 
     if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
       return getAdvantageMeterFromEvalCp(activeTrainMoveReview.whiteEvalCp);
-    }
-
-    if (displayAnalysis) {
-      return getAdvantageMeter(displayAnalysis);
     }
 
     if (activeDeckCard && historyIndex > 0) {
@@ -598,11 +602,10 @@ export function useLabOrchestrator() {
     return getAdvantageMeter(displayAnalysis);
   }, [
     activeDeckCard,
-    activeOpeningNodeId,
-    activeOpeningTree,
     activeTrainMoveReview,
     displayAnalysis,
     historyIndex,
+    linesBoardEvalCp,
     mode,
     trainUsesLivePositionEval,
   ]);
@@ -920,7 +923,6 @@ export function useLabOrchestrator() {
       modeRef,
       drillPathRef,
       drillPathIndexRef,
-      learnBranchForkConfirmedRef,
       linesSession,
       playDeckReplayToIndexRef,
       deckPlaybackRequestIdRef,
@@ -937,7 +939,6 @@ export function useLabOrchestrator() {
       deckReplayMovesRef,
       drillPathRef,
       drillPathIndexRef,
-      learnBranchForkConfirmedRef,
       linesSession,
     ],
   );

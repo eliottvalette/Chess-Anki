@@ -17,7 +17,7 @@ export function LabSidebar() {
   return (
     <>
       <section
-        className={`min-w-0 min-h-0 overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) shadow-(--glass-shadow) backdrop-blur-[22px] backdrop-saturate-[1.2] flex flex-col gap-3.5 p-[18px]`}
+        className={`min-h-0 min-w-0 flex flex-1 flex-col gap-3.5 overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) p-[18px] shadow-(--glass-shadow) backdrop-blur-[22px] backdrop-saturate-[1.2]`}
       >
         <div className="grid grid-cols-3 gap-2">
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
@@ -33,7 +33,7 @@ export function LabSidebar() {
         </div>
 
         <div
-          className={`min-h-0 flex flex-1 flex-col gap-(--panel-scroll-gap) overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${lab.labState.mode === 'review' && lab.hasLoadedGame ? 'overflow-hidden pr-0' : ''}`}
+          className={`min-h-0 flex flex-1 flex-col gap-(--panel-scroll-gap) overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${lab.labState.mode === 'review' && lab.hasLoadedGame ? 'overflow-hidden pr-0' : ''} ${lab.labState.mode === 'lines' && lab.labState.activeOpeningTree ? 'overflow-hidden pr-0' : ''}`}
         >
           {lab.labState.mode === 'review' ? (
             <ReviewPanel

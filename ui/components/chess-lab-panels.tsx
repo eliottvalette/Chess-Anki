@@ -438,8 +438,8 @@ export function LinesPanel({
       ) : null}
 
       {activeTree ? (
-        <>
-          <div className="flex w-full items-stretch gap-2">
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+          <div className="flex w-full shrink-0 items-stretch gap-2">
             <button
               className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(255,120,120,0.34)] bg-[rgba(120,28,28,0.18)] px-3.5 text-xs font-normal text-[#ffc8c6] shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(255,120,120,0.52)] hover:bg-[rgba(120,28,28,0.28)] hover:text-[#ffe0df] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch`}
               onClick={() => (inSession ? onQuitSession() : onSelectTree(''))}
@@ -449,7 +449,7 @@ export function LinesPanel({
             </button>
           </div>
           {!inSession ? (
-            <div className="flex flex-col gap-2">
+            <div className="flex shrink-0 flex-col gap-2">
               <div className="flex flex-col gap-0.5">
                 <p className="m-0 text-[10px] font-medium uppercase tracking-[0.08em] text-(--text-muted)">
                   Your color
@@ -498,7 +498,7 @@ export function LinesPanel({
             </div>
           ) : (
             <button
-              className="box-border flex min-h-[42px] w-full items-center justify-center rounded-[10px] border border-[rgba(152,184,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-medium text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(152,184,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]"
+              className="box-border flex min-h-[42px] w-full shrink-0 items-center justify-center rounded-[10px] border border-[rgba(152,184,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-medium text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(152,184,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]"
               onClick={() => void handleCopyStudyDebug()}
               type="button"
             >
@@ -507,22 +507,22 @@ export function LinesPanel({
           )}
           {learnBranchComplete && !inSession && hasNextLearnBranch ? (
             <button
-              className="box-border flex min-h-[48px] w-full items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.52)] bg-[rgba(56,148,115,0.34)] px-4 text-sm font-medium text-[#d8f8ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.72)] hover:bg-[rgba(56,148,115,0.48)]"
+              className="box-border flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.52)] bg-[rgba(56,148,115,0.34)] px-4 text-sm font-medium text-[#d8f8ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.72)] hover:bg-[rgba(56,148,115,0.48)]"
               onClick={onNextLearnBranch}
               type="button"
             >
               Next branch
             </button>
           ) : learnBranchComplete && !inSession ? (
-            <p className="m-0 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.12)] px-3 py-2 text-xs text-[#d8f8ec]">
+            <p className="m-0 shrink-0 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.12)] px-3 py-2 text-xs text-[#d8f8ec]">
               Branch complete.
             </p>
           ) : null}
 
           <section
-            className={`relative min-h-0 h-full rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
+            className={`relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
           >
-            <div className="flex min-w-0 items-center justify-between gap-2.5">
+            <div className="flex min-w-0 shrink-0 items-center justify-between gap-2.5">
               <div className="flex min-w-0 flex-col gap-1">
                 <strong className="text-base leading-[1.2] tracking-normal text-(--text) wrap-anywhere">
                   {formatOpeningTreeDisplayName(activeTree.name)}
@@ -545,7 +545,7 @@ export function LinesPanel({
 
             <DrillFeedbackBlock deckFeedback={deckFeedback} />
 
-            <div className="flex items-center justify-between gap-2.5 text-xs text-(--text-soft)">
+            <div className="flex shrink-0 items-center justify-between gap-2.5 text-xs text-(--text-soft)">
               <span>depth {activeTree.targetDepth}</span>
               <span>{activeTree.nodes?.length ?? activeTree.nodeCount} nodes</span>
               {activeTree.dueCount > 0 ? <span>{activeTree.dueCount} weak</span> : null}
@@ -556,7 +556,7 @@ export function LinesPanel({
               ) : null}
             </div>
 
-            <div className="relative w-full h-[430px] min-h-[320px] flex-[1_1_430px] overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
+            <div className="relative min-h-0 flex-1 overflow-hidden rounded-[10px] border border-(--border) bg-[radial-gradient(circle_at_18%_16%,rgba(152,184,255,0.1),transparent_28%),rgba(4,8,15,0.58)] [&_.react-flow]:size-full [&_.react-flow__pane]:cursor-grab [&_.react-flow__pane.dragging]:cursor-grabbing [&_.react-flow__viewport]:cursor-grab [&_.react-flow__edge-text]:fill-[#eef5ff] [&_.react-flow__edge-text]:text-[11px] [&_.react-flow__edge-text]:font-normal [&_.react-flow__edge-textbg]:fill-[rgba(5,10,17,0.88)] [&_.react-flow__edge-textbg]:stroke-[rgba(214,226,244,0.18)] [&_.react-flow__edge-path]:stroke-[rgba(143,156,178,0.68)] [&_.react-flow__edge-path]:stroke-[1.7] [&_.react-flow__node-default]:p-0 [&_.react-flow__node-default]:text-(--text)">
               {deckPlaybackBusy && !inSession ? (
                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-[rgba(4,8,15,0.58)] text-sm text-(--text-muted)">
                   Loading line...
@@ -587,7 +587,7 @@ export function LinesPanel({
               </OpeningTreeGraphInteractionContext.Provider>
             </div>
           </section>
-        </>
+        </div>
       ) : null}
     </>
   );

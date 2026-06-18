@@ -305,30 +305,6 @@ export function buildOpeningDrillExpected(
   };
 }
 
-export function buildLearnBranchDrillExpected(
-  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
-  nodeId: string,
-  activeBranch: LearnBranchCompletion | null,
-): OpeningDrillExpectedMove | null {
-  const expected = buildOpeningDrillExpected(tree, nodeId);
-
-  if (!expected || !activeBranch || nodeId !== activeBranch.forkNodeId) {
-    return expected;
-  }
-
-  const branchEdge =
-    tree.edges.find((edge) => edge.id === activeBranch.edgeId) ??
-    tree.edges.find((edge) => edge.fromNodeId === activeBranch.forkNodeId && edge.uci === activeBranch.edgeUci) ??
-    null;
-
-  return {
-    nodeId,
-    uci: activeBranch.edgeUci,
-    san: branchEdge?.san ?? expected.san,
-    acceptedUcis: [activeBranch.edgeUci],
-  };
-}
-
 export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string, acceptedUcis: string[]) {
   return acceptedUcis.includes(playedUci);
 }
@@ -1332,6 +1308,94 @@ export function listRepertoireForkNodeIds(
   return forkNodeIds;
 }
 
+export function listOpponentForkNodeIds(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+  trainSide: OpeningSide,
+): string[] {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode) {
+    return [];
+  }
+
+  const forkNodeIds: string[] = [];
+  const queue = [rootNode.id];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+
+    if (visited.has(nodeId)) {
+      continue;
+    }
+
+    visited.add(nodeId);
+    const node = tree.nodes.find((candidate) => candidate.id === nodeId);
+
+    if (!node) {
+      continue;
+    }
+
+    const repertoireOutgoing = tree.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
+
+    if (node.sideToMove !== trainSide && repertoireOutgoing.length >= 2) {
+      forkNodeIds.push(nodeId);
+    }
+
+    for (const edge of repertoireOutgoing) {
+      queue.push(edge.toNodeId);
+    }
+  }
+
+  return forkNodeIds;
+}
+
+export function listOpponentForksOnMainLine(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
+): string[] {
+  const mainPath = buildDrillPath(tree, { trainSide });
+  const forkNodeIds: string[] = [];
+
+  for (const step of mainPath) {
+    if (step.sideToMove === trainSide) {
+      continue;
+    }
+
+    const repertoireOutgoing = tree.edges.filter((edge) => edge.fromNodeId === step.nodeId && isRepertoireEdge(edge));
+
+    if (repertoireOutgoing.length >= 2) {
+      forkNodeIds.push(step.nodeId);
+    }
+  }
+
+  return forkNodeIds;
+}
+
+function listLearnBranchForkCandidates(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
+): string[] {
+  const mainLineForks = listOpponentForksOnMainLine(tree, trainSide);
+  const allOpponentForks = listOpponentForkNodeIds(tree, trainSide);
+  const orderedForks: string[] = [];
+
+  for (const forkNodeId of mainLineForks) {
+    if (!orderedForks.includes(forkNodeId)) {
+      orderedForks.push(forkNodeId);
+    }
+  }
+
+  for (const forkNodeId of allOpponentForks) {
+    if (!orderedForks.includes(forkNodeId)) {
+      orderedForks.push(forkNodeId);
+    }
+  }
+
+  return orderedForks;
+}
+
 export type LearnBranchCompletion = {
   forkNodeId: string;
   edgeId: string;
@@ -1349,38 +1413,12 @@ export function isLearnBranchEdgeCompleted(
 }
 
 export function findEarliestForkNodeId(
-  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
 ): string | null {
-  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
-  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+  const forkNodeIds = listOpponentForksOnMainLine(tree, trainSide);
 
-  if (!rootNode) {
-    return null;
-  }
-
-  const queue = [rootNode.id];
-  const visited = new Set<string>();
-
-  while (queue.length > 0) {
-    const nodeId = queue.shift()!;
-
-    if (visited.has(nodeId)) {
-      continue;
-    }
-
-    visited.add(nodeId);
-    const repertoireOutgoing = tree.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
-
-    if (repertoireOutgoing.length >= 2) {
-      return nodeId;
-    }
-
-    for (const edge of repertoireOutgoing) {
-      queue.push(edge.toNodeId);
-    }
-  }
-
-  return null;
+  return forkNodeIds[0] ?? listOpponentForkNodeIds(tree, trainSide)[0] ?? null;
 }
 
 function scoreBranchEdge(
@@ -1410,7 +1448,7 @@ export function pickLearnBranch(
   branchForkNodeId: string | null;
   branchEdgeUci: string | null;
 } {
-  const forkNodeIds = listRepertoireForkNodeIds(tree);
+  const forkNodeIds = listLearnBranchForkCandidates(tree, trainSide);
 
   if (forkNodeIds.length === 0) {
     return {
@@ -1589,6 +1627,32 @@ export function buildDrillPath(
   }
 
   return path;
+}
+
+export function buildLearnDrillReplayUcis(path: DrillPathStep[]): string[] {
+  const firstTrainIndex = path.findIndex((step) => step.isTrainTurn);
+
+  if (firstTrainIndex < 0) {
+    return [];
+  }
+
+  const replayUcis: string[] = [];
+
+  for (let index = 1; index <= firstTrainIndex; index += 1) {
+    const parentStep = path[index - 1];
+
+    if (!parentStep || parentStep.isTrainTurn) {
+      continue;
+    }
+
+    const uci = path[index]?.edgeUciFromParent;
+
+    if (uci) {
+      replayUcis.push(uci);
+    }
+  }
+
+  return replayUcis;
 }
 
 export function resolveDrillPathStepIndexFromHistory(

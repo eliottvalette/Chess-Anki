@@ -50,7 +50,6 @@ export function useLabGame(
     drillPathRef: React.MutableRefObject<DrillPathStep[]>;
     drillPathIndexRef: React.MutableRefObject<number>;
     linesSession: LinesSessionApi;
-    learnBranchForkConfirmedRef: React.MutableRefObject<boolean>;
     playDeckReplayToIndexRef: React.MutableRefObject<
       ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
     >;
@@ -76,7 +75,6 @@ export function useLabGame(
     linesStudyMode,
     linesLearnBranchComplete,
     activeTrainSide,
-    linesActiveLearnBranch,
     initialFen,
     setLinesStudySessionLog,
     setVariationBaseIndex,
@@ -111,7 +109,6 @@ export function useLabGame(
     modeRef,
     drillPathRef,
     drillPathIndexRef,
-    learnBranchForkConfirmedRef,
     linesSession,
     playDeckReplayToIndexRef,
     deckPlaybackRequestIdRef,
@@ -282,26 +279,6 @@ export function useLabGame(
           });
         });
 
-        if (
-          correct &&
-          linesStudyMode === 'learn' &&
-          linesActiveLearnBranch &&
-          nodeId === linesActiveLearnBranch.forkNodeId &&
-          move.uci === linesActiveLearnBranch.edgeUci
-        ) {
-          learnBranchForkConfirmedRef.current = true;
-          setLinesStudySessionLog((current) => {
-            if (!current) {
-              return current;
-            }
-
-            return appendLinesStudySessionEntry(current, 'branch_fork_confirmed', {
-              forkNodeId: linesActiveLearnBranch.forkNodeId,
-              edgeUci: linesActiveLearnBranch.edgeUci,
-            });
-          });
-        }
-
         void fetch('/api/opening-trees', {
           method: 'POST',
           credentials: 'same-origin',
@@ -330,17 +307,13 @@ export function useLabGame(
             if (matchingEdge) {
               const targetNodeId = matchingEdge.toNodeId;
               const nextStep = drillPathRef.current[nextStepIndex];
-              const atLearnBranchFork =
-                linesStudyMode === 'learn' &&
-                linesActiveLearnBranch != null &&
-                nodeId === linesActiveLearnBranch.forkNodeId;
 
               if (!nextStep || nextStep.nodeId !== targetNodeId) {
                 const forcedStepIndex = drillPathRef.current.findIndex((step) => step.nodeId === targetNodeId);
 
                 if (forcedStepIndex >= 0) {
                   nextStepIndex = forcedStepIndex;
-                } else if (!atLearnBranchFork) {
+                } else {
                   const newPath = buildDrillPath(activeOpeningTree, {
                     trainSide: state.activeTrainSide,
                     startNodeId: targetNodeId,
@@ -471,8 +444,6 @@ export function useLabGame(
       drillPathRef,
       hasLoadedGame,
       historyIndex,
-      learnBranchForkConfirmedRef,
-      linesActiveLearnBranch,
       linesLearnBranchComplete,
       linesSession,
       linesStudyMode,

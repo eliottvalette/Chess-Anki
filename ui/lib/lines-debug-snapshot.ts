@@ -89,7 +89,7 @@ export function buildLinesStudyDebugSnapshot(input: LinesStudyDebugInput) {
 
     if (input.activeLearnBranch) {
       lines.push(
-        `active branch: ${input.activeLearnBranch.forkNodeId}:${input.activeLearnBranch.edgeUci} (${input.activeLearnBranch.edgeId})`,
+        `active branch: opponent ${input.activeLearnBranch.forkNodeId}:${input.activeLearnBranch.edgeUci} (${input.activeLearnBranch.edgeId})`,
       );
     }
 

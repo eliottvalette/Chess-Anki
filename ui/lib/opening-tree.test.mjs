@@ -4,7 +4,7 @@ import test from 'node:test';
 import {
   buildDrillPath,
   buildForkCoverage,
-  buildLearnBranchDrillExpected,
+  buildLearnDrillReplayUcis,
   buildOpeningDrillExpected,
   buildOpeningTrees,
   buildReviewQueue,
@@ -174,13 +174,17 @@ test('buildOpeningDrillExpected returns null on terminal node without repertoire
   assert.equal(buildOpeningDrillExpected(tree, 'leaf-node'), null);
 });
 
-test('buildLearnBranchDrillExpected restricts fork prompt to the picked branch move', () => {
-  const tree = {
+function buildOpponentForkLearnTree() {
+  return {
+    rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
+    rootPly: 4,
+    rootFenKey: 'root',
+    targetDepth: 22,
     nodes: [
       {
-        id: 'fork-node',
-        fen: 'fen',
-        fenKey: 'fork',
+        id: 'root-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+        fenKey: 'root',
         ply: 4,
         sideToMove: 'white',
         bestUci: 'd2d4',
@@ -193,46 +197,145 @@ test('buildLearnBranchDrillExpected restricts fork prompt to the picked branch m
         correctCount: 0,
         missCount: 0,
       },
+      {
+        id: 'after-d4',
+        fen: 'rnbqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3',
+        fenKey: 'after-d4',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 18,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-nf6',
+        fen: 'fen-nf6',
+        fenKey: 'after-nf6',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'd4d5',
+        bestSan: 'd5',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 10,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-be7',
+        fen: 'fen-be7',
+        fenKey: 'after-be7',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'd4d5',
+        bestSan: 'd5',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 20,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
     ],
     edges: [
       {
         id: 'edge-d4',
-        fromNodeId: 'fork-node',
+        fromNodeId: 'root-node',
         toNodeId: 'after-d4',
         uci: 'd2d4',
         san: 'd4',
+        moveBy: 'white',
+        source: 'lichess_masters',
         recentCount: 10,
         cardCount: 0,
-        mastersGames: 0,
+        mastersGames: 40,
+        priority: 8,
         isEngineBest: true,
-        priority: 1,
       },
       {
         id: 'edge-bc4',
-        fromNodeId: 'fork-node',
-        toNodeId: 'after-bc4',
+        fromNodeId: 'root-node',
+        toNodeId: 'after-be7',
         uci: 'f1c4',
         san: 'Bc4',
-        recentCount: 5,
+        moveBy: 'white',
+        source: 'lichess_masters',
+        recentCount: 1,
         cardCount: 0,
-        mastersGames: 0,
+        mastersGames: 5,
+        priority: 8,
         isEngineBest: false,
-        priority: 1,
+      },
+      {
+        id: 'edge-nf6',
+        fromNodeId: 'after-d4',
+        toNodeId: 'after-nf6',
+        uci: 'g8f6',
+        san: 'Nf6',
+        moveBy: 'black',
+        source: 'lichess_masters',
+        recentCount: 8,
+        cardCount: 0,
+        mastersGames: 30,
+        priority: 8,
+        isEngineBest: false,
+      },
+      {
+        id: 'edge-be7',
+        fromNodeId: 'after-d4',
+        toNodeId: 'after-be7',
+        uci: 'f8e7',
+        san: 'Be7',
+        moveBy: 'black',
+        source: 'lichess_masters',
+        recentCount: 3,
+        cardCount: 0,
+        mastersGames: 10,
+        priority: 8,
+        isEngineBest: false,
       },
     ],
   };
+}
 
-  const unrestricted = buildOpeningDrillExpected(tree, 'fork-node');
-  const restricted = buildLearnBranchDrillExpected(tree, 'fork-node', {
-    forkNodeId: 'fork-node',
-    edgeId: 'edge-bc4',
-    edgeUci: 'f1c4',
-  });
+test('pickLearnBranch varies opponent replies on the main line while user keeps the best move', () => {
+  const tree = buildOpponentForkLearnTree();
+  const first = pickLearnBranch(tree, 'white', []);
 
-  assert.deepEqual(unrestricted?.acceptedUcis.sort(), ['d2d4', 'f1c4']);
-  assert.equal(restricted?.uci, 'f1c4');
-  assert.equal(restricted?.san, 'Bc4');
-  assert.deepEqual(restricted?.acceptedUcis, ['f1c4']);
+  assert.equal(first.branchForkNodeId, 'after-d4');
+  assert.equal(first.path[0]?.nodeId, 'root-node');
+  assert.equal(first.path[1]?.edgeUciFromParent, 'd2d4');
+  assert.ok(['g8f6', 'f8e7'].includes(first.branchEdgeUci ?? ''));
+
+  const second = pickLearnBranch(tree, 'white', [
+    {
+      forkNodeId: first.branchForkNodeId,
+      edgeId: first.branchEdgeId,
+      edgeUci: first.branchEdgeUci,
+    },
+  ]);
+
+  assert.equal(second.branchForkNodeId, 'after-d4');
+  assert.notEqual(second.branchEdgeUci, first.branchEdgeUci);
+  assert.equal(second.path[1]?.edgeUciFromParent, 'd2d4');
+});
+
+test('buildLearnDrillReplayUcis auto-plays opponent moves only, never train-side moves', () => {
+  const tree = buildOpponentForkLearnTree();
+  const { path } = pickLearnBranch(tree, 'white', []);
+
+  assert.deepEqual(buildLearnDrillReplayUcis(path), []);
+  assert.equal(path[0]?.isTrainTurn, true);
+  assert.equal(path[0]?.nodeId, 'root-node');
 });
 
 test('classifyOpeningDrillMove marks best, book, and miss', () => {
@@ -1299,93 +1402,8 @@ test('prepareOpeningTreeAtFenWithBoard re-roots tree prefix from board history',
   assert.equal(STANDARD_START_FEN_KEY, normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'));
 });
 
-test('pickLearnBranch skips completed branch edges', () => {
-  const tree = {
-    rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
-    rootPly: 4,
-    rootFenKey: 'root',
-    targetDepth: 12,
-    nodes: [
-      {
-        id: 'root-node',
-        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
-        fenKey: 'root',
-        ply: 4,
-        sideToMove: 'white',
-        bestUci: 'f1b5',
-        bestSan: 'Bb5',
-        evalCp: 20,
-        recentGames: 0,
-        cardCount: 0,
-        masteryScore: 50,
-        seenCount: 0,
-        correctCount: 0,
-        missCount: 0,
-      },
-      {
-        id: 'after-bb5',
-        fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
-        fenKey: 'after-bb5',
-        ply: 5,
-        sideToMove: 'black',
-        bestUci: null,
-        bestSan: null,
-        evalCp: 18,
-        recentGames: 0,
-        cardCount: 0,
-        masteryScore: 0,
-        seenCount: 0,
-        correctCount: 0,
-        missCount: 0,
-      },
-      {
-        id: 'after-bc4',
-        fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
-        fenKey: 'after-bc4',
-        ply: 5,
-        sideToMove: 'black',
-        bestUci: null,
-        bestSan: null,
-        evalCp: 19,
-        recentGames: 0,
-        cardCount: 0,
-        masteryScore: 0,
-        seenCount: 0,
-        correctCount: 0,
-        missCount: 0,
-      },
-    ],
-    edges: [
-      {
-        id: 'branch-bb5',
-        fromNodeId: 'root-node',
-        toNodeId: 'after-bb5',
-        uci: 'f1b5',
-        san: 'Bb5',
-        moveBy: 'white',
-        source: 'lichess_masters',
-        recentCount: 2,
-        cardCount: 0,
-        mastersGames: 40,
-        priority: 8,
-        isEngineBest: false,
-      },
-      {
-        id: 'branch-bc4',
-        fromNodeId: 'root-node',
-        toNodeId: 'after-bc4',
-        uci: 'f1c4',
-        san: 'Bc4',
-        moveBy: 'white',
-        source: 'lichess_masters',
-        recentCount: 1,
-        cardCount: 0,
-        mastersGames: 30,
-        priority: 8,
-        isEngineBest: false,
-      },
-    ],
-  };
+test('pickLearnBranch skips completed opponent branch edges', () => {
+  const tree = buildOpponentForkLearnTree();
 
   const first = pickLearnBranch(tree, 'white', []);
   const second = pickLearnBranch(tree, 'white', [
@@ -1396,7 +1414,6 @@ test('pickLearnBranch skips completed branch edges', () => {
     },
   ]);
 
-  assert.equal(first.branchEdgeId, 'branch-bb5');
-  assert.equal(second.branchEdgeId, 'branch-bc4');
   assert.notEqual(first.branchEdgeUci, second.branchEdgeUci);
+  assert.equal(second.branchForkNodeId, 'after-d4');
 });

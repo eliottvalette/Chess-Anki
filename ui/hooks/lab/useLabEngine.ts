@@ -138,14 +138,9 @@ export function useLabEngine(
 
   // 1. Fetch current position analysis on history index / move change
   useEffect(() => {
-    if (mode === 'lines') {
-      setPositionLoading(false);
-      setPositionAnalysis(null);
-      return undefined;
-    }
-
     const requestId = ++positionRequestIdRef.current;
-    const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
+    const positionProfile: PositionAnalysisProfile =
+      mode === 'lines' ? 'review' : activeDeckCard ? 'training' : 'review';
     const cacheKey = getPositionCacheKey(initialFen, currentMoveList, positionProfile);
     const cachedAnalysis = positionCacheRef.current.get(cacheKey);
 

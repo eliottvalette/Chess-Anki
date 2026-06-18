@@ -17,7 +17,7 @@ import {
 } from '@/lib/lab-helpers';
 import { appendLinesStudySessionEntry, createLinesStudySessionLog } from '@/lib/lines-study-session-log.ts';
 import {
-  buildLearnBranchDrillExpected,
+  buildLearnDrillReplayUcis,
   buildOpeningDrillExpected,
   buildReviewQueue,
   countTrainPliesInDrillPath,
@@ -412,7 +412,7 @@ export function useLabLines(
 
     if (!learnBranchForkConfirmedRef.current) {
       appendStudySessionLog('branch_complete_skipped', {
-        reason: 'fork_move_not_played',
+        reason: 'opponent_branch_not_played',
         forkNodeId: branch.forkNodeId,
         edgeId: branch.edgeId,
         edgeUci: branch.edgeUci,
@@ -490,6 +490,21 @@ export function useLabLines(
           linesSession.markEdgeSeen(parentStep.nodeId, connectingEdge.id);
         }
 
+        const activeBranch = activeLearnBranchRef.current;
+
+        if (
+          activeBranch &&
+          step.edgeUciFromParent === activeBranch.edgeUci &&
+          path[stepIndex - 1]?.nodeId === activeBranch.forkNodeId
+        ) {
+          learnBranchForkConfirmedRef.current = true;
+          appendStudySessionLog('opponent_branch_played', {
+            forkNodeId: activeBranch.forkNodeId,
+            edgeId: activeBranch.edgeId,
+            edgeUci: activeBranch.edgeUci,
+          });
+        }
+
         const opponentUci = step.edgeUciFromParent;
         const currentHistory = moveHistoryRef.current;
         const currentIndex = historyIndexRef.current;
@@ -513,9 +528,8 @@ export function useLabLines(
       clearSelection();
 
       if (step.isTrainTurn) {
-        const activeBranch = linesStudyMode === 'learn' ? activeLearnBranchRef.current : null;
         const drillExpected = activeOpeningTree
-          ? buildLearnBranchDrillExpected(activeOpeningTree, step.nodeId, activeBranch)
+          ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
           : step.bestUci
             ? {
                 nodeId: step.nodeId,
@@ -638,18 +652,9 @@ export function useLabLines(
       }
 
       const forkStepIndex = branchForkNodeId ? path.findIndex((step) => step.nodeId === branchForkNodeId) : -1;
-      const replayThroughIndex = Math.max(firstTrainIndex, forkStepIndex);
-      const replayUcis: string[] = [];
-
-      if (replayThroughIndex > 0) {
-        for (let index = 1; index <= replayThroughIndex; index += 1) {
-          const uci = path[index]?.edgeUciFromParent;
-
-          if (uci) {
-            replayUcis.push(uci);
-          }
-        }
-      }
+      const replayUcis = buildLearnDrillReplayUcis(path);
+      const replayThroughIndex =
+        replayUcis.length > 0 ? path.findIndex((step) => step.edgeUciFromParent === replayUcis.at(-1)) : -1;
 
       const remainingAtFork =
         branchForkNodeId != null ? listSiblingBranchEdges(tree, branchForkNodeId, completedBefore) : [];
@@ -665,6 +670,7 @@ export function useLabLines(
         replayUcis,
         pathLength: path.length,
         firstTrainIndex,
+        forkStepIndex,
         replayThroughIndex,
         pathNodeIds: path.map((step) => step.nodeId),
       });
@@ -1135,6 +1141,7 @@ export function useLabLines(
     [
       activeOpeningTree,
       activeTrainSide,
+      appendStudySessionLog,
       cancelDrillOpponentMove,
       clearSelection,
       deckPlaybackBusy,

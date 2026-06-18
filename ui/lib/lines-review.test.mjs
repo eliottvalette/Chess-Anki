@@ -402,8 +402,8 @@ test('resolveDrillPathStepIndexFromHistory tracks review drill path position', (
   assert.equal(drillPath[stepIndex]?.nodeId, nodeId);
 });
 
-test('pickLearnBranch excludes completed branches by uci even with a different edge id', () => {
-  const tree = {
+function buildOpponentForkLearnTree() {
+  return {
     rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
     rootPly: 4,
     rootFenKey: 'root',
@@ -415,8 +415,8 @@ test('pickLearnBranch excludes completed branches by uci even with a different e
         fenKey: 'root',
         ply: 4,
         sideToMove: 'white',
-        bestUci: 'f1b5',
-        bestSan: 'Bb5',
+        bestUci: 'd2d4',
+        bestSan: 'd4',
         evalCp: 20,
         recentGames: 0,
         cardCount: 0,
@@ -426,9 +426,9 @@ test('pickLearnBranch excludes completed branches by uci even with a different e
         missCount: 0,
       },
       {
-        id: 'after-bb5',
-        fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
-        fenKey: 'after-bb5',
+        id: 'after-d4',
+        fen: 'rnbqkbnr/pppp1ppp/2n5/4p3/3PP3/5N2/PPP2PPP/RNBQKB1R b KQkq - 0 3',
+        fenKey: 'after-d4',
         ply: 5,
         sideToMove: 'black',
         bestUci: null,
@@ -442,17 +442,33 @@ test('pickLearnBranch excludes completed branches by uci even with a different e
         missCount: 0,
       },
       {
-        id: 'after-bc4',
-        fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
-        fenKey: 'after-bc4',
-        ply: 5,
-        sideToMove: 'black',
-        bestUci: null,
-        bestSan: null,
-        evalCp: 19,
+        id: 'after-nf6',
+        fen: 'fen-nf6',
+        fenKey: 'after-nf6',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'd4d5',
+        bestSan: 'd5',
+        evalCp: 20,
         recentGames: 0,
         cardCount: 0,
-        masteryScore: 0,
+        masteryScore: 10,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-be7',
+        fen: 'fen-be7',
+        fenKey: 'after-be7',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'd4d5',
+        bestSan: 'd5',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 20,
         seenCount: 0,
         correctCount: 0,
         missCount: 0,
@@ -460,46 +476,78 @@ test('pickLearnBranch excludes completed branches by uci even with a different e
     ],
     edges: [
       {
-        id: 'branch-bb5-a',
+        id: 'edge-d4',
         fromNodeId: 'root-node',
-        toNodeId: 'after-bb5',
-        uci: 'f1b5',
-        san: 'Bb5',
+        toNodeId: 'after-d4',
+        uci: 'd2d4',
+        san: 'd4',
         moveBy: 'white',
         source: 'lichess_masters',
-        recentCount: 2,
+        recentCount: 10,
         cardCount: 0,
         mastersGames: 40,
         priority: 8,
-        isEngineBest: false,
+        isEngineBest: true,
       },
       {
-        id: 'branch-bc4',
+        id: 'edge-bc4',
         fromNodeId: 'root-node',
-        toNodeId: 'after-bc4',
+        toNodeId: 'after-be7',
         uci: 'f1c4',
         san: 'Bc4',
         moveBy: 'white',
         source: 'lichess_masters',
         recentCount: 1,
         cardCount: 0,
+        mastersGames: 5,
+        priority: 8,
+        isEngineBest: false,
+      },
+      {
+        id: 'edge-nf6',
+        fromNodeId: 'after-d4',
+        toNodeId: 'after-nf6',
+        uci: 'g8f6',
+        san: 'Nf6',
+        moveBy: 'black',
+        source: 'lichess_masters',
+        recentCount: 8,
+        cardCount: 0,
         mastersGames: 30,
+        priority: 8,
+        isEngineBest: false,
+      },
+      {
+        id: 'edge-be7',
+        fromNodeId: 'after-d4',
+        toNodeId: 'after-be7',
+        uci: 'f8e7',
+        san: 'Be7',
+        moveBy: 'black',
+        source: 'lichess_masters',
+        recentCount: 3,
+        cardCount: 0,
+        mastersGames: 10,
         priority: 8,
         isEngineBest: false,
       },
     ],
   };
+}
+
+test('pickLearnBranch excludes completed opponent branches by uci even with a different edge id', () => {
+  const tree = buildOpponentForkLearnTree();
 
   const first = pickLearnBranch(tree, 'white', []);
   const completed = [
     {
-      forkNodeId: 'root-node',
+      forkNodeId: 'after-d4',
       edgeId: 'duplicate-id',
       edgeUci: first.branchEdgeUci,
     },
   ];
 
-  assert.equal(isLearnBranchEdgeCompleted('root-node', { id: 'branch-bb5-a', uci: 'f1b5' }, completed), true);
+  assert.equal(isLearnBranchEdgeCompleted('after-d4', { id: 'edge-nf6', uci: first.branchEdgeUci }, completed), true);
 
   const second = pickLearnBranch(tree, 'white', completed);
 
