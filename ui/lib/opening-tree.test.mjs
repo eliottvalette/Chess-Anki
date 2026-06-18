@@ -39,6 +39,7 @@ import {
   pickLearnBranch,
   pickNextUnplayedOpponentEdge,
   prepareOpeningTreeAtFenWithBoard,
+  replayToNodeUcis,
   resolveAcceptedTrainMoveUcis,
   resolveLinesBoardContext,
   resolveOpeningLibrary,
@@ -595,6 +596,52 @@ test('buildDrillPath trailing opponent step edgeUciFromParent is the preceding t
   assert.equal(lastTrainIndex, 0);
   assert.equal(trailingOpponentStep?.isTrainTurn, false);
   assert.equal(trailingOpponentStep?.edgeUciFromParent, 'g1f3');
+});
+
+test('buildDrillPath follows bestUci on train turns even when another move is more frequent', () => {
+  const node = (id, sideToMove, bestUci = null) => ({
+    id,
+    fen: id,
+    fenKey: id,
+    ply: id === 'root' ? 0 : 1,
+    sideToMove,
+    bestUci,
+    bestSan: bestUci === 'e2e4' ? 'e4' : null,
+    evalCp: null,
+    recentGames: 1,
+    cardCount: 0,
+    masteryScore: 0,
+    seenCount: 0,
+    correctCount: 0,
+    missCount: 0,
+  });
+  const edge = (id, toNodeId, uci, recentCount, isEngineBest = false) => ({
+    id,
+    fromNodeId: 'root',
+    toNodeId,
+    uci,
+    san: uci === 'e2e4' ? 'e4' : 'd4',
+    moveBy: 'white',
+    source: isEngineBest ? 'engine_best' : 'recent_game',
+    recentCount,
+    cardCount: 0,
+    mastersGames: 0,
+    priority: 0,
+    isEngineBest,
+  });
+  const tree = {
+    rootSan: [],
+    rootUci: [],
+    rootPly: 0,
+    rootFenKey: 'root',
+    nodes: [node('root', 'white', 'e2e4'), node('after-e4', 'black'), node('after-d4', 'black')],
+    edges: [edge('best', 'after-e4', 'e2e4', 1, true), edge('frequent', 'after-d4', 'd2d4', 20)],
+  };
+
+  const path = buildDrillPath(tree, { trainSide: 'white' });
+
+  assert.equal(path[1]?.nodeId, 'after-e4');
+  assert.equal(path[1]?.edgeUciFromParent, 'e2e4');
 });
 
 test('extendDrillPathFromNode appends continuation when the initial path stops at a leaf', () => {
@@ -1700,6 +1747,69 @@ test('buildReviewQueue returns trainable train-side nodes below mastery threshol
   };
 
   assert.deepEqual(buildReviewQueue(tree, 'white'), ['weak', 'due']);
+});
+
+test('buildReviewQueue excludes weak spots reached through a non-best train move', () => {
+  const node = (id, ply, sideToMove, masteryScore, bestUci = null) => ({
+    id,
+    fen: id,
+    fenKey: id,
+    ply,
+    sideToMove,
+    bestUci,
+    bestSan: null,
+    evalCp: null,
+    recentGames: 1,
+    cardCount: 0,
+    masteryScore,
+    seenCount: 0,
+    correctCount: 0,
+    missCount: 0,
+  });
+  const edge = (id, fromNodeId, toNodeId, uci, isEngineBest = false) => ({
+    id,
+    fromNodeId,
+    toNodeId,
+    uci,
+    san: uci,
+    moveBy: fromNodeId === 'root' ? 'white' : 'black',
+    source: isEngineBest ? 'engine_best' : 'recent_game',
+    recentCount: 1,
+    cardCount: 0,
+    mastersGames: 0,
+    priority: 1,
+    isEngineBest,
+  });
+  const tree = {
+    rootSan: [],
+    rootUci: [],
+    rootPly: 0,
+    rootFenKey: 'root',
+    nodes: [
+      node('root', 0, 'white', 90, 'e2e4'),
+      node('after-best', 1, 'black', 0),
+      node('after-old-move', 1, 'black', 0),
+      node('reachable-weak', 2, 'white', 20, 'g1f3'),
+      node('off-path-weak', 2, 'white', 10, 'b1c3'),
+      node('after-reachable-answer', 3, 'black', 0),
+      node('after-off-path-answer', 3, 'black', 0),
+    ],
+    edges: [
+      edge('best', 'root', 'after-best', 'e2e4', true),
+      edge('old', 'root', 'after-old-move', 'd2d4'),
+      edge('reply-best', 'after-best', 'reachable-weak', 'e7e5'),
+      edge('reply-old', 'after-old-move', 'off-path-weak', 'd7d5'),
+      edge('reachable-answer', 'reachable-weak', 'after-reachable-answer', 'g1f3', true),
+      edge('off-path-answer', 'off-path-weak', 'after-off-path-answer', 'b1c3', true),
+    ],
+  };
+
+  assert.deepEqual(buildReviewQueue(tree, 'white'), ['reachable-weak']);
+  assert.deepEqual(replayToNodeUcis(tree, 'reachable-weak', { trainSide: 'white', bestTrainMovesOnly: true }), [
+    'e2e4',
+    'e7e5',
+  ]);
+  assert.deepEqual(replayToNodeUcis(tree, 'off-path-weak', { trainSide: 'white', bestTrainMovesOnly: true }), []);
 });
 
 test('classifyLinesMove accepts engine-tolerant moves within gate', () => {

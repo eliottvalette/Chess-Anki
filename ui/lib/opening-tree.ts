@@ -1451,6 +1451,7 @@ function rankTrainEdgesForDrill(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
   node: OpeningTreeNode,
 ): OpeningTreeEdge[] {
+  const bestEdge = node.bestUci ? outgoing.find((edge) => edge.uci === node.bestUci) : null;
   const validMoves = outgoing.filter((edge) => {
     if (edge.isEngineBest || edge.mastersGames > 0) {
       return true;
@@ -1467,8 +1468,11 @@ function rankTrainEdgesForDrill(
     return swing > -30;
   });
   const pool = validMoves.length > 0 ? validMoves : outgoing;
+  const ranked = [...pool]
+    .filter((edge) => edge.id !== bestEdge?.id)
+    .sort((left, right) => right.recentCount - left.recentCount);
 
-  return [...pool].sort((left, right) => right.recentCount - left.recentCount);
+  return bestEdge ? [bestEdge, ...ranked] : ranked;
 }
 
 function pickDrillOutgoingEdge(
@@ -1522,19 +1526,78 @@ export function isTrainableReviewNode(tree: Pick<OpeningTreeDetail, 'nodes' | 'e
   return resolveAcceptedTrainMoveUcis(tree, nodeId).acceptedUcis.length > 0;
 }
 
-export function countReviewDueNodes(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, trainSide: OpeningSide): number {
-  return tree.nodes.filter(
-    (node) =>
-      node.sideToMove === trainSide &&
-      node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD &&
-      isTrainableReviewNode(tree, node.id),
-  ).length;
+type ReviewTree = Pick<OpeningTreeDetail, 'nodes' | 'edges'> &
+  Partial<Pick<OpeningTreeDetail, 'rootFenKey' | 'rootPly' | 'rootSan'>>;
+
+export type ReviewPathOptions = {
+  trainSide: OpeningSide;
+  bestTrainMovesOnly: true;
+};
+
+function isReviewPathEdge(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  edge: OpeningTreeEdge,
+  trainSide: OpeningSide,
+) {
+  if (!isRepertoireEdge(edge)) {
+    return false;
+  }
+
+  const sourceNode = tree.nodes.find((node) => node.id === edge.fromNodeId);
+
+  if (!sourceNode || sourceNode.sideToMove !== trainSide) {
+    return true;
+  }
+
+  const expectedUci = sourceNode.bestUci ?? resolveAcceptedTrainMoveUcis(tree, sourceNode.id).primaryUci;
+  return expectedUci != null && edge.uci === expectedUci;
 }
 
-export function buildReviewQueue(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, trainSide: OpeningSide): string[] {
+function collectReviewReachableNodeIds(tree: ReviewTree, trainSide: OpeningSide): Set<string> | null {
+  const rootPly = tree.rootPly ?? tree.rootSan?.length;
+
+  if (rootPly == null) {
+    return null;
+  }
+
+  const rootNode = tree.rootFenKey
+    ? tree.nodes.find((node) => node.fenKey === tree.rootFenKey && node.ply === rootPly)
+    : tree.nodes.find((node) => node.ply === rootPly);
+
+  if (!rootNode) {
+    return null;
+  }
+
+  const reachable = new Set<string>([rootNode.id]);
+  const queue = [rootNode.id];
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+
+    for (const edge of tree.edges) {
+      if (edge.fromNodeId !== nodeId || reachable.has(edge.toNodeId) || !isReviewPathEdge(tree, edge, trainSide)) {
+        continue;
+      }
+
+      reachable.add(edge.toNodeId);
+      queue.push(edge.toNodeId);
+    }
+  }
+
+  return reachable;
+}
+
+export function countReviewDueNodes(tree: ReviewTree, trainSide: OpeningSide): number {
+  return buildReviewQueue(tree, trainSide).length;
+}
+
+export function buildReviewQueue(tree: ReviewTree, trainSide: OpeningSide): string[] {
+  const reachableNodeIds = collectReviewReachableNodeIds(tree, trainSide);
+
   return tree.nodes
     .filter(
       (node) =>
+        (reachableNodeIds == null || reachableNodeIds.has(node.id)) &&
         node.sideToMove === trainSide &&
         node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD &&
         isTrainableReviewNode(tree, node.id),
@@ -1562,8 +1625,13 @@ export function resolveReviewAdvance(
   return { kind: 'next', nextIndex, nextNodeId };
 }
 
-export function replayToNodeUcis(tree: OpeningTreeDetail, nodeId: string): string[] {
-  const path = findPathToNode(tree, nodeId);
+export function replayToNodeUcis(tree: OpeningTreeDetail, nodeId: string, options?: ReviewPathOptions): string[] {
+  const path = findPathToNode(tree, nodeId, options);
+
+  if (path.length === 0) {
+    return [];
+  }
+
   const fullUcis = [...tree.rootUci];
 
   for (let index = 1; index < path.length; index += 1) {
@@ -2056,7 +2124,11 @@ export function resolveDrillPathStepIndexFromHistory(
   return stepIndex >= 0 ? stepIndex : 0;
 }
 
-export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): DrillPathStep[] {
+export function findPathToNode(
+  tree: OpeningTreeDetail,
+  targetNodeId: string,
+  options?: ReviewPathOptions,
+): DrillPathStep[] {
   const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
   const rootNode = resolveCanonicalRootNode(tree, rootPly);
   const queue: { nodeId: string; path: string[] }[] = [];
@@ -2093,7 +2165,11 @@ export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): D
       break;
     }
 
-    const outgoing = tree.edges.filter((e) => e.fromNodeId === current.nodeId);
+    const outgoing = tree.edges.filter(
+      (edge) =>
+        edge.fromNodeId === current.nodeId &&
+        (!options?.bestTrainMovesOnly || isReviewPathEdge(tree, edge, options.trainSide)),
+    );
     for (const edge of outgoing) {
       if (!visited.has(edge.toNodeId)) {
         visited.add(edge.toNodeId);

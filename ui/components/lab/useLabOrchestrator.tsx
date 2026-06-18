@@ -49,6 +49,7 @@ import {
   resolveLinesBoardScoreLabel,
   resolveLinesBoardWhiteAdvantage,
 } from '@/lib/lines-board-eval';
+import { resolveLinesBoardReviewCategory } from '@/lib/lines-board-review';
 import { buildLinesStudyDebugSnapshot } from '@/lib/lines-debug-snapshot';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
@@ -797,13 +798,27 @@ export function useLabOrchestrator() {
       category: classified.category,
     };
   }, [activeOpeningTree, activeTrainSide, historyIndex, mode, moveHistory]);
+  const linesBoardReviewCategory = useMemo(() => {
+    const lastMove = currentMoves[currentMoves.length - 1];
+    const classifiedMove = linesBoardClassification?.move ?? lastMove;
+    const baseCategory = linesBoardClassification
+      ? linesMoveCategoryToReviewCategory(linesBoardClassification.category)
+      : null;
+
+    return resolveLinesBoardReviewCategory({
+      baseCategory,
+      feedback: deckFeedback,
+      lastMoveUci: classifiedMove?.uci ?? null,
+      studyMode: labState.linesStudyMode,
+    });
+  }, [currentMoves, deckFeedback, labState.linesStudyMode, linesBoardClassification]);
   const boardSquareStyles = useMemo(() => {
     const nextStyles: Record<string, CSSProperties> = {};
     const lastMove = currentMoves[currentMoves.length - 1];
     const reviewCategory = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
       : linesBoardClassification
-        ? linesMoveCategoryToReviewCategory(linesBoardClassification.category)
+        ? linesBoardReviewCategory
         : hasLoadedGame && variationBaseIndex == null && historyIndex > 0
           ? timelineReviews[historyIndex - 1]?.category
           : null;
@@ -826,6 +841,7 @@ export function useLabOrchestrator() {
     hasLoadedGame,
     historyIndex,
     linesBoardClassification,
+    linesBoardReviewCategory,
     squareStyles,
     timelineReviews,
     variationBaseIndex,
@@ -839,7 +855,7 @@ export function useLabOrchestrator() {
     const category = activeDeckCard
       ? (activeTrainMoveReview?.category ?? null)
       : linesBoardClassification
-        ? linesMoveCategoryToReviewCategory(linesBoardClassification.category)
+        ? linesBoardReviewCategory
         : hasLoadedGame
           ? timelineReviews[historyIndex - 1]?.category
           : null;
@@ -870,6 +886,7 @@ export function useLabOrchestrator() {
     hasLoadedGame,
     historyIndex,
     linesBoardClassification,
+    linesBoardReviewCategory,
     orientation,
     timelineReviews,
     variationBaseIndex,

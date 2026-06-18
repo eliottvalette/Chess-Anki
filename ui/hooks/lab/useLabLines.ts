@@ -881,8 +881,9 @@ export function useLabLines(
         });
       }
 
-      const fullUcis = replayToNodeUcis(tree, nodeId);
-      const path = findPathToNode(tree, nodeId);
+      const reviewPathOptions = { trainSide, bestTrainMovesOnly: true } as const;
+      const fullUcis = replayToNodeUcis(tree, nodeId, reviewPathOptions);
+      const path = findPathToNode(tree, nodeId, reviewPathOptions);
       const trainStepIndex = path.findIndex((step) => step.nodeId === nodeId);
       const drillPath: DrillPathStep[] = path.map((step) => ({
         ...step,
