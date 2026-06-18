@@ -216,7 +216,7 @@ export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedbac
   );
 }
 
-export function LinesPanel({
+export const LinesPanel = memo(function LinesPanel({
   actionError,
   actionLoading,
   activeNodeId,
@@ -312,19 +312,23 @@ export function LinesPanel({
     () => buildOpeningTreeGraphEdges(activeTree, drillActive, forkCoverage ?? {}),
     [activeTree, drillActive, forkCoverage],
   );
+  const inSession = linesStudyMode !== 'idle';
+  const graphSelectedNodeId = inSession ? null : activeNodeId;
   const graphInteraction = useMemo(
-    () => ({ drillActive: linesStudyMode !== 'idle' || drillActive, onSelectNode }),
-    [drillActive, linesStudyMode, onSelectNode],
+    () => ({
+      drillActive: linesStudyMode !== 'idle' || drillActive,
+      onSelectNode,
+      selectedNodeId: graphSelectedNodeId,
+    }),
+    [drillActive, graphSelectedNodeId, linesStudyMode, onSelectNode],
   );
   const graphReadOnly = linesStudyMode !== 'idle';
   const reviewDueCount = useMemo(
     () => (activeTree ? countReviewDueNodes(activeTree, trainSide) : 0),
     [activeTree, trainSide],
   );
-  const inSession = linesStudyMode !== 'idle';
   const showNextLearnBranch = hasNextLearnBranch && learnBranchComplete && !inSession;
   const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
-  const graphSelectedNodeId = inSession ? null : activeNodeId;
 
   const handleCopyStudyDebug = async () => {
     await navigator.clipboard.writeText(studyDebugSnapshot());
@@ -336,13 +340,10 @@ export function LinesPanel({
 
   const graph = useMemo(
     () => ({
-      nodes: graphNodes.map((node) => ({
-        ...node,
-        selected: node.id === graphSelectedNodeId,
-      })),
+      nodes: graphNodes,
       edges: graphEdges,
     }),
-    [graphNodes, graphEdges, graphSelectedNodeId],
+    [graphEdges, graphNodes],
   );
   const activeForkStats = useMemo(() => {
     if (!activeTree || !activeNodeId) {
@@ -669,7 +670,7 @@ export function LinesPanel({
       ) : null}
     </>
   );
-}
+});
 
 const OPENING_LIBRARY_ORDER: OpeningLibrary[] = ['e4', 'd4', 'c4', 'nf3', 'other'];
 
@@ -762,16 +763,19 @@ type OpeningTreeGraphNodeData = {
 type OpeningTreeGraphInteraction = {
   drillActive: boolean;
   onSelectNode: (nodeId: string) => void;
+  selectedNodeId: string | null;
 };
 
 const OpeningTreeGraphInteractionContext = createContext<OpeningTreeGraphInteraction>({
   drillActive: false,
   onSelectNode: () => undefined,
+  selectedNodeId: null,
 });
 
-const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data, selected }: NodeProps) {
+const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data }: NodeProps) {
   const nodeData = data as OpeningTreeGraphNodeData;
-  const { drillActive, onSelectNode } = useContext(OpeningTreeGraphInteractionContext);
+  const { drillActive, onSelectNode, selectedNodeId } = useContext(OpeningTreeGraphInteractionContext);
+  const selected = selectedNodeId === id;
   const isTrainTurn = nodeData.sideToMove === nodeData.trainSide;
   const isWeak = nodeData.masteryScore < 60 && isTrainTurn;
   const showAnswer = isTrainTurn && nodeData.bestSan && !drillActive;

@@ -2559,3 +2559,7 @@ export function ensureDraftEdge(
   edge.priority += options.priority ?? 0;
   edge.isEngineBest ||= Boolean(options.isEngineBest);
 }
+
+export function buildOpeningTreeNodeByFenKey(tree: OpeningTreeDetail): Map<string, string> {
+  return new Map(tree.nodes.map((node) => [node.fenKey, node.id]));
+}

@@ -45,18 +45,15 @@
     "@types/dagre": "^0.7.54",
     "@vercel/analytics": "^2.0.1",
     "@xyflow/react": "^12.11.0",
-    "chart.js": "^4.5.1",
     "chess.js": "^1.4.0",
     "dagre": "^0.8.5",
     "next": "^16.2.6",
     "pg": "^8.21.0",
     "postcss": "^8.5.10",
     "react": "19.2.4",
-    "react-chartjs-2": "^5.3.1",
     "react-chessboard": "^5.10.0",
     "react-dom": "19.2.4",
-    "stockfish": "^18.0.7",
-    "zustand": "^5.0.14"
+    "stockfish": "^18.0.7"
   },
   "overrides": {
     "postcss": "^8.5.10"

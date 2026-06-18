@@ -4,8 +4,8 @@ import { Chess } from 'chess.js';
 import { type ChangeEvent, type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { WorkspaceMode } from '@/components/chess-lab-panels';
 import { buildDeterministicAnalyzeRequest } from '@/lib/analysis-profile';
-
 import type { AnalysisResult } from '@/lib/analysis-types';
+import { releaseBrowserEnginePool } from '@/lib/browser-analysis-engine';
 import {
   buildLiveTrainMoveReview,
   cardMoveReviewsFromTimeline,
@@ -33,7 +33,7 @@ import {
   type TimelineReview,
   toStoredMove,
 } from '@/lib/chess-analysis-client';
-import { getMoveSoundSequence, getPrimaryMoveSound } from '@/lib/chess-sounds';
+import { type ChessSoundKey, getMoveSoundSequence, getPrimaryMoveSound } from '@/lib/chess-sounds';
 import type { ChessComRecentGameSummary } from '@/lib/chesscom';
 import {
   getDeckProgressEntry,
@@ -62,7 +62,6 @@ import {
   openingTreeDetailToSummary,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
-import { requestOpeningTreesJson } from '@/lib/opening-trees-client';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
 import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
@@ -89,7 +88,7 @@ import {
   loadCachedTimelineAnalysis,
   normalizeWorkspaceSnapshot,
   persistTrainingCredentials,
-  recentGameAnalysisMemoryCache,
+  readRecentGameAnalysis,
   saveCachedTimelineAnalysis,
 } from '../../lib/lab-helpers';
 
@@ -100,7 +99,7 @@ const LAST_MOVE_STYLE = {
   backgroundColor: 'rgba(84, 173, 255, 0.26)',
   boxShadow: 'inset 0 0 0 2px rgba(181, 222, 255, 0.42)',
 } satisfies CSSProperties;
-const RECENT_GAMES_PRELOAD_SCAN_MS = 1_000;
+const RECENT_GAMES_PRELOAD_SCAN_MS = 10_000;
 
 function getReviewMoveStyle(category: ReviewCategory | null | undefined): CSSProperties {
   if (!category) {
@@ -389,17 +388,30 @@ export function useLabOrchestrator() {
     }
 
     let cancelled = false;
+    let debounceTimer: number | null = null;
+    let fetchController: AbortController | null = null;
     labState.setLinesPositionFilterLoading(true);
 
-    const debounceTimer = window.setTimeout(() => {
+    debounceTimer = window.setTimeout(() => {
+      fetchController = new AbortController();
+
       void (async () => {
         try {
-          const payload = await requestOpeningTreesJson<{ tree?: OpeningTreeDetail | null }>(
-            `/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`,
-          );
+          const response = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`, {
+            credentials: 'same-origin',
+            signal: fetchController?.signal,
+          });
+          const payload = (await response.json().catch(() => ({}))) as {
+            error?: string;
+            tree?: OpeningTreeDetail | null;
+          };
 
           if (cancelled) {
             return;
+          }
+
+          if (!response.ok) {
+            throw new Error(payload.error ?? `Opening trees request failed: HTTP ${response.status}`);
           }
 
           if (payload.tree) {
@@ -407,10 +419,12 @@ export function useLabOrchestrator() {
           } else {
             labState.setLinesBrowseOverrideTrees([]);
           }
-        } catch {
-          if (!cancelled) {
-            labState.setLinesBrowseOverrideTrees([]);
+        } catch (error) {
+          if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) {
+            return;
           }
+
+          labState.setLinesBrowseOverrideTrees([]);
         } finally {
           if (!cancelled) {
             labState.setLinesPositionFilterLoading(false);
@@ -421,7 +435,12 @@ export function useLabOrchestrator() {
 
     return () => {
       cancelled = true;
-      window.clearTimeout(debounceTimer);
+
+      if (debounceTimer != null) {
+        window.clearTimeout(debounceTimer);
+      }
+
+      fetchController?.abort();
     };
   }, [
     currentFen,
@@ -462,6 +481,16 @@ export function useLabOrchestrator() {
   const { analyzeTimelineDeep, clearEngineCache, positionCacheRef, positionInFlightRef, timelineBatchInFlightRef } =
     useLabEngine(labState, engineContext);
 
+  const linesEngineSuspended = engineContext.skipLinesEngineAnalysis;
+
+  useEffect(() => {
+    if (linesEngineSuspended) {
+      void releaseBrowserEnginePool();
+    }
+  }, [linesEngineSuspended]);
+
+  const recentGamesAnalysis = useMemo(() => ({ analyzeTimelineDeep }), [analyzeTimelineDeep]);
+
   const recentGamesRefs = useMemo(
     () => ({
       modeRef,
@@ -474,9 +503,7 @@ export function useLabOrchestrator() {
   const { fetchRecentChessGames, preloadRecentGameAnalysis, cancelRecentPreload } = useRecentGames(
     labState,
     recentGamesRefs,
-    {
-      analyzeTimelineDeep: (...args) => analyzeTimelineDeep(...args),
-    },
+    recentGamesAnalysis,
   );
 
   const trainingProfileRefs = useMemo(
@@ -504,9 +531,11 @@ export function useLabOrchestrator() {
     [deckFeedback],
   );
   const trainPositionAnalyses = useMemo(() => {
+    const prefetchComplete = Boolean(activeDeckCard && deckFeedback && !deckFeedback.pending);
+    const maxMoveCount = prefetchComplete ? moveHistory.length : Math.min(moveHistory.length, historyIndex + 1);
     const analyses: Array<AnalysisResult | null> = [];
 
-    for (let moveCount = 0; moveCount <= currentMoves.length; moveCount += 1) {
+    for (let moveCount = 0; moveCount <= maxMoveCount; moveCount += 1) {
       const moveList = buildMoveUciHistory(currentMoves.slice(0, moveCount));
       const cacheKey = getPositionCacheKey(initialFen, moveList, 'training');
       analyses[moveCount] = positionCacheRef.current.get(cacheKey) ?? null;
@@ -518,7 +547,17 @@ export function useLabOrchestrator() {
 
     return analyses;
     // trainAnalysisTick busts stale reads from positionCacheRef after async analysis completes.
-  }, [currentMoves, historyIndex, initialFen, positionAnalysis, trainAnalysisTick, positionCacheRef]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    activeDeckCard,
+    currentMoves,
+    deckFeedback,
+    historyIndex,
+    initialFen,
+    moveHistory.length,
+    positionAnalysis,
+    trainAnalysisTick,
+    positionCacheRef,
+  ]);
   const activeTrainMoveReview = useMemo(() => {
     if (!activeDeckCard || historyIndex <= 0) {
       return null;
@@ -928,16 +967,20 @@ export function useLabOrchestrator() {
     };
   }, []);
   useEffect(() => {
-    if (recentChessGames.length === 0) {
+    if (recentChessGames.length === 0 || mode !== 'review') {
       return undefined;
     }
 
     const timer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
       void preloadRecentGameAnalysis();
     }, RECENT_GAMES_PRELOAD_SCAN_MS);
 
     return () => window.clearInterval(timer);
-  }, [preloadRecentGameAnalysis, recentChessGames]);
+  }, [mode, preloadRecentGameAnalysis, recentChessGames.length]);
 
   const suppressSpaceKeyUpRef = useRef(false);
   const loadTrainingDeckRef = useRef<
@@ -1621,8 +1664,61 @@ export function useLabOrchestrator() {
     clearSelection,
   ]);
 
+  const keyboardStateRef = useRef({
+    activeDeckCard: null as typeof activeDeckCard,
+    advanceDeckCard: (() => undefined) as typeof advanceDeckCard,
+    cancelReviewPlayback: (() => undefined) as typeof cancelReviewPlayback,
+    clearSelection: (() => undefined) as typeof clearSelection,
+    clearVariation: (() => undefined) as typeof clearVariation,
+    deckFeedback: null as typeof deckFeedback,
+    deckPlaybackBusy: false,
+    historyIndex: 0,
+    initialFen: null as string | null,
+    jumpToIndex: ((_index: number) => undefined) as typeof jumpToIndex,
+    mode: 'review' as WorkspaceMode,
+    moveHistory: [] as StoredMove[],
+    openingDrillActive: false,
+    orientation: 'white' as 'white' | 'black',
+    pgnDialogOpen: false,
+    playSoundSequence: ((_soundKeys: ChessSoundKey[]) => undefined) as typeof playSoundSequence,
+    positionBestMove: null as string | null | undefined,
+    reviewPlayerSide: null as typeof reviewPlayerSide,
+    setDeckFeedback: ((_value: DeckFeedback | null) => undefined) as typeof setDeckFeedback,
+    setDeckFeedbackArrowsVisible: ((_value: boolean) => undefined) as typeof setDeckFeedbackArrowsVisible,
+    setGame: ((_game: Chess) => undefined) as typeof setGame,
+    setHistoryIndex: ((_value: number) => undefined) as typeof setHistoryIndex,
+    tryMove: ((_from: string, _to: string) => false) as typeof tryMove,
+  });
+
+  keyboardStateRef.current = {
+    activeDeckCard,
+    advanceDeckCard,
+    cancelReviewPlayback,
+    clearSelection,
+    clearVariation,
+    deckFeedback,
+    deckPlaybackBusy,
+    historyIndex,
+    initialFen,
+    jumpToIndex,
+    mode,
+    moveHistory,
+    openingDrillActive,
+    orientation,
+    pgnDialogOpen,
+    playSoundSequence,
+    positionBestMove: positionAnalysis?.bestMove,
+    reviewPlayerSide,
+    setDeckFeedback,
+    setDeckFeedbackArrowsVisible,
+    setGame,
+    setHistoryIndex,
+    tryMove,
+  };
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const state = keyboardStateRef.current;
       const target = event.target as HTMLElement | null;
       const isTyping =
         target?.tagName === 'INPUT' ||
@@ -1630,7 +1726,7 @@ export function useLabOrchestrator() {
         target?.tagName === 'SELECT' ||
         target?.isContentEditable;
 
-      if (isTyping || pgnDialogOpen) {
+      if (isTyping || state.pgnDialogOpen) {
         return;
       }
 
@@ -1639,22 +1735,22 @@ export function useLabOrchestrator() {
         event.stopPropagation();
         suppressSpaceKeyUpRef.current = true;
 
-        if (mode === 'train' && activeDeckCard) {
-          if (deckPlaybackBusy) {
+        if (state.mode === 'train' && state.activeDeckCard) {
+          if (state.deckPlaybackBusy) {
             return;
           }
 
-          if (activeDeckCard && deckFeedback && !deckFeedback.pending) {
-            advanceDeckCard();
+          if (state.activeDeckCard && state.deckFeedback && !state.deckFeedback.pending) {
+            state.advanceDeckCard();
           }
 
           return;
         }
 
-        const bestMove = positionAnalysis?.bestMove;
+        const bestMove = state.positionBestMove;
 
         if (bestMove && bestMove.length >= 4) {
-          tryMove(bestMove.slice(0, 2), bestMove.slice(2, 4), bestMove[4]);
+          state.tryMove(bestMove.slice(0, 2), bestMove.slice(2, 4), bestMove[4]);
         }
 
         return;
@@ -1664,89 +1760,89 @@ export function useLabOrchestrator() {
         event.preventDefault();
         event.stopPropagation();
 
-        if (mode === 'lines' && deckPlaybackBusy) {
+        if (state.mode === 'lines' && state.deckPlaybackBusy) {
           return;
         }
 
-        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
-          cancelReviewPlayback();
+        if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
+          state.cancelReviewPlayback();
         }
 
-        if (mode === 'lines' && historyIndex > 0) {
-          jumpToIndex(historyIndex - 1);
+        if (state.mode === 'lines' && state.historyIndex > 0) {
+          state.jumpToIndex(state.historyIndex - 1);
           return;
         }
 
-        if (openingDrillActive) {
-          jumpToIndex(historyIndex - 1);
+        if (state.openingDrillActive) {
+          state.jumpToIndex(state.historyIndex - 1);
           return;
         }
 
-        const boundedIndex = Math.max(0, Math.min(historyIndex - 1, moveHistory.length));
-        const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+        const boundedIndex = Math.max(0, Math.min(state.historyIndex - 1, state.moveHistory.length));
+        const nextGame = restoreGameFromHistory(state.moveHistory, state.initialFen, boundedIndex);
 
-        if (boundedIndex === historyIndex - 1) {
-          const replayedMove = moveHistory[boundedIndex];
+        if (boundedIndex === state.historyIndex - 1) {
+          const replayedMove = state.moveHistory[boundedIndex];
 
           if (replayedMove) {
-            const playerSide = activeDeckCard?.side ?? reviewPlayerSide;
+            const playerSide = state.activeDeckCard?.side ?? state.reviewPlayerSide;
             const isSelfMove =
               playerSide == null
-                ? orientation === 'white'
+                ? state.orientation === 'white'
                 : (playerSide === 'white' && replayedMove.color === 'w') ||
                   (playerSide === 'black' && replayedMove.color === 'b');
 
-            playSoundSequence([getPrimaryMoveSound(replayedMove, isSelfMove)]);
+            state.playSoundSequence([getPrimaryMoveSound(replayedMove, isSelfMove)]);
           }
         }
 
-        setHistoryIndex(boundedIndex);
-        if (activeDeckCard || openingDrillActive) {
-          setDeckFeedbackArrowsVisible(false);
-          setDeckFeedback(null);
+        state.setHistoryIndex(boundedIndex);
+        if (state.activeDeckCard || state.openingDrillActive) {
+          state.setDeckFeedbackArrowsVisible(false);
+          state.setDeckFeedback(null);
         }
-        clearVariation();
-        setGame(nextGame);
-        clearSelection();
+        state.clearVariation();
+        state.setGame(nextGame);
+        state.clearSelection();
       }
 
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         event.stopPropagation();
 
-        if (mode === 'lines' && deckPlaybackBusy) {
+        if (state.mode === 'lines' && state.deckPlaybackBusy) {
           return;
         }
 
-        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
-          cancelReviewPlayback();
+        if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
+          state.cancelReviewPlayback();
         }
 
-        if (mode === 'lines' && historyIndex < moveHistory.length) {
-          jumpToIndex(historyIndex + 1, { playForwardSound: true });
+        if (state.mode === 'lines' && state.historyIndex < state.moveHistory.length) {
+          state.jumpToIndex(state.historyIndex + 1, { playForwardSound: true });
           return;
         }
 
-        if (openingDrillActive) {
-          jumpToIndex(historyIndex + 1, { playForwardSound: true });
+        if (state.openingDrillActive) {
+          state.jumpToIndex(state.historyIndex + 1, { playForwardSound: true });
           return;
         }
 
-        const boundedIndex = Math.max(0, Math.min(historyIndex + 1, moveHistory.length));
-        const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+        const boundedIndex = Math.max(0, Math.min(state.historyIndex + 1, state.moveHistory.length));
+        const nextGame = restoreGameFromHistory(state.moveHistory, state.initialFen, boundedIndex);
 
-        if (boundedIndex === historyIndex + 1) {
-          const replayedMove = moveHistory[historyIndex];
+        if (boundedIndex === state.historyIndex + 1) {
+          const replayedMove = state.moveHistory[state.historyIndex];
 
           if (replayedMove) {
-            const playerSide = activeDeckCard?.side ?? reviewPlayerSide;
+            const playerSide = state.activeDeckCard?.side ?? state.reviewPlayerSide;
             const isSelfMove =
               playerSide == null
-                ? orientation === 'white'
+                ? state.orientation === 'white'
                 : (playerSide === 'white' && replayedMove.color === 'w') ||
                   (playerSide === 'black' && replayedMove.color === 'b');
 
-            playSoundSequence(
+            state.playSoundSequence(
               getMoveSoundSequence({
                 move: replayedMove,
                 isSelfMove,
@@ -1758,67 +1854,67 @@ export function useLabOrchestrator() {
           }
         }
 
-        setHistoryIndex(boundedIndex);
-        if (activeDeckCard) {
-          setDeckFeedbackArrowsVisible(false);
+        state.setHistoryIndex(boundedIndex);
+        if (state.activeDeckCard) {
+          state.setDeckFeedbackArrowsVisible(false);
         }
-        clearVariation();
-        setGame(nextGame);
-        clearSelection();
+        state.clearVariation();
+        state.setGame(nextGame);
+        state.clearSelection();
       }
 
       if (event.key === 'ArrowUp') {
         event.preventDefault();
         event.stopPropagation();
 
-        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
-          cancelReviewPlayback();
+        if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
+          state.cancelReviewPlayback();
         }
 
-        if (openingDrillActive) {
-          jumpToIndex(moveHistory.length);
+        if (state.openingDrillActive) {
+          state.jumpToIndex(state.moveHistory.length);
           return;
         }
 
-        const boundedIndex = moveHistory.length;
-        const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+        const boundedIndex = state.moveHistory.length;
+        const nextGame = restoreGameFromHistory(state.moveHistory, state.initialFen, boundedIndex);
 
-        setHistoryIndex(boundedIndex);
-        if (activeDeckCard) {
-          setDeckFeedbackArrowsVisible(false);
+        state.setHistoryIndex(boundedIndex);
+        if (state.activeDeckCard) {
+          state.setDeckFeedbackArrowsVisible(false);
         }
-        clearVariation();
-        setGame(nextGame);
-        clearSelection();
+        state.clearVariation();
+        state.setGame(nextGame);
+        state.clearSelection();
       }
 
       if (event.key === 'ArrowDown') {
         event.preventDefault();
         event.stopPropagation();
 
-        if (mode === 'lines' && openingDrillActive) {
+        if (state.mode === 'lines' && state.openingDrillActive) {
           return;
         }
 
-        if (mode === 'review' && !activeDeckCard && !openingDrillActive) {
-          cancelReviewPlayback();
+        if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
+          state.cancelReviewPlayback();
         }
 
-        if (openingDrillActive) {
-          jumpToIndex(moveHistory.length > 0 ? 1 : 0);
+        if (state.openingDrillActive) {
+          state.jumpToIndex(state.moveHistory.length > 0 ? 1 : 0);
           return;
         }
 
-        const boundedIndex = moveHistory.length > 0 ? 1 : 0;
-        const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedIndex);
+        const boundedIndex = state.moveHistory.length > 0 ? 1 : 0;
+        const nextGame = restoreGameFromHistory(state.moveHistory, state.initialFen, boundedIndex);
 
-        setHistoryIndex(boundedIndex);
-        if (activeDeckCard) {
-          setDeckFeedbackArrowsVisible(false);
+        state.setHistoryIndex(boundedIndex);
+        if (state.activeDeckCard) {
+          state.setDeckFeedbackArrowsVisible(false);
         }
-        clearVariation();
-        setGame(nextGame);
-        clearSelection();
+        state.clearVariation();
+        state.setGame(nextGame);
+        state.clearSelection();
       }
     };
 
@@ -1838,31 +1934,7 @@ export function useLabOrchestrator() {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
     };
-  }, [
-    activeDeckCard,
-    advanceDeckCard,
-    cancelReviewPlayback,
-    clearSelection,
-    clearVariation,
-    deckFeedback,
-    deckPlaybackBusy,
-    historyIndex,
-    initialFen,
-    jumpToIndex,
-    mode,
-    moveHistory,
-    openingDrillActive,
-    orientation,
-    pgnDialogOpen,
-    playSoundSequence,
-    positionAnalysis?.bestMove,
-    reviewPlayerSide,
-    setDeckFeedback,
-    setDeckFeedbackArrowsVisible,
-    setGame,
-    setHistoryIndex,
-    tryMove,
-  ]);
+  }, []);
 
   async function runTimelineAnalysis(
     nextMoves = moveHistory,
@@ -2064,7 +2136,7 @@ export function useLabOrchestrator() {
     lastReviewInteractionAtRef.current = Date.now();
 
     const cacheKey = getRecentGameCacheKey(gameSummary);
-    const memoryCachedAnalysis = recentGameAnalysisMemoryCache.get(cacheKey) ?? null;
+    const memoryCachedAnalysis = readRecentGameAnalysis(cacheKey) ?? null;
     const parsedGame = new Chess();
     parsedGame.loadPgn(gameSummary.pgn);
     const nextInitialFen = parsedGame.header().FEN ?? null;
@@ -2293,7 +2365,7 @@ export function useLabOrchestrator() {
     backgroundImage: 'linear-gradient(180deg, rgba(7, 12, 20, 0.34) 0%, rgba(5, 9, 15, 0.7) 100%), url("/bg.png")',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
-    backgroundAttachment: 'fixed',
+    backgroundAttachment: 'scroll',
   } satisfies CSSProperties;
 
   const clearLinesBoardPosition = useCallback(() => {

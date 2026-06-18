@@ -1,6 +1,16 @@
-import type { ChartOptions, PointStyle } from 'chart.js';
-import { Chess, type Move } from 'chess.js';
+export type TimelinePointStyle =
+  | 'circle'
+  | 'cross'
+  | 'crossRot'
+  | 'dash'
+  | 'line'
+  | 'rect'
+  | 'rectRounded'
+  | 'rectRot'
+  | 'star'
+  | 'triangle';
 
+import { Chess, type Move } from 'chess.js';
 import type { AnalysisResult, AnalyzeRequest, PerspectiveScore, PerspectiveWdl, ScoreBound } from './analysis-types.ts';
 
 type BrowserAnalysisModule = typeof import('./browser-analysis-engine.ts');
@@ -56,7 +66,7 @@ export type TimelineReview = {
   category: ReviewCategory | null;
   label: string | null;
   colorHex: string | null;
-  pointStyle: PointStyle;
+  pointStyle: TimelinePointStyle;
   moveLabel: string;
   san: string;
   playedMove: string;
@@ -117,7 +127,7 @@ export const reviewCategoryMeta: Record<
     label: string;
     color: string;
     badge?: string;
-    pointStyle: PointStyle;
+    pointStyle: TimelinePointStyle;
   }
 > = {
   brilliant: {
@@ -845,127 +855,6 @@ export function filterReviewMoments(moments: TimelineReview[], side: ReviewSide)
 
   const color = side === 'white' ? 'w' : 'b';
   return moments.filter((moment) => moment.color === color);
-}
-
-export function buildChartOptions(
-  moves: StoredMove[],
-  reviews: TimelineReview[],
-  onPointClick?: (ply: number) => void,
-): ChartOptions<'line'> {
-  return {
-    responsive: true,
-    maintainAspectRatio: false,
-    onClick(_event, elements) {
-      const index = elements[0]?.index;
-
-      if (typeof index === 'number') {
-        onPointClick?.(index + 1);
-      }
-    },
-    interaction: {
-      mode: 'index',
-      intersect: false,
-    },
-    plugins: {
-      legend: {
-        display: false,
-      },
-      tooltip: {
-        backgroundColor: 'rgba(24, 26, 32, 0.96)',
-        borderColor: '#343744',
-        borderWidth: 1,
-        titleColor: '#f2f3f5',
-        bodyColor: '#cfd3dc',
-        displayColors: false,
-        callbacks: {
-          title(items) {
-            const index = items[0]?.dataIndex ?? 0;
-            return `Ply ${index + 1}`;
-          },
-          beforeBody(items) {
-            const index = items[0]?.dataIndex ?? 0;
-            const move = moves[index];
-
-            if (!move) {
-              return '';
-            }
-
-            return formatTimelineMoveLabel(index, move);
-          },
-          label(item) {
-            const value = typeof item.raw === 'number' ? item.raw : Number(item.raw ?? 0);
-            return `Eval ${formatChartAxisValue(value)}`;
-          },
-          afterBody(items) {
-            const index = items[0]?.dataIndex ?? 0;
-            const review = reviews[index];
-
-            if (!review) {
-              return [];
-            }
-
-            const lines: string[] = [];
-
-            if (review.label) {
-              lines.push(review.label);
-            }
-
-            if (review.expectedPointsLost != null) {
-              lines.push(`EP loss ${(review.expectedPointsLost * 100).toFixed(1)}%`);
-            }
-
-            if (review.cpLossCp != null) {
-              lines.push(`CP loss ${review.cpLossCp}`);
-            }
-
-            return lines;
-          },
-        },
-      },
-    },
-    scales: {
-      x: {
-        ticks: {
-          color: '#a7abb7',
-          maxTicksLimit: 8,
-          autoSkip: true,
-        },
-        grid: {
-          color: 'rgba(167, 171, 183, 0.12)',
-        },
-        border: {
-          color: '#343744',
-        },
-        title: {
-          display: true,
-          text: 'Half-move',
-          color: '#a7abb7',
-        },
-      },
-      y: {
-        suggestedMin: -8,
-        suggestedMax: 8,
-        ticks: {
-          color: '#a7abb7',
-          maxTicksLimit: 7,
-          callback(value) {
-            return formatChartAxisValue(Number(value));
-          },
-        },
-        grid: {
-          color: 'rgba(167, 171, 183, 0.12)',
-        },
-        border: {
-          color: '#343744',
-        },
-        title: {
-          display: true,
-          text: 'White edge',
-          color: '#a7abb7',
-        },
-      },
-    },
-  };
 }
 
 async function requestJson<T>(url: string, payload: unknown, signal?: AbortSignal) {
@@ -1700,12 +1589,4 @@ function isCompletelyWinning(analysis: AnalysisResult | null | undefined, color:
 function formatTimelineMoveLabel(index: number, move: StoredMove) {
   const moveNumber = Math.floor(index / 2) + 1;
   return `${moveNumber}. ${move.san}`;
-}
-
-function formatChartAxisValue(value: number) {
-  if (Math.abs(value) >= 11.95) {
-    return value > 0 ? 'Mate' : '-Mate';
-  }
-
-  return `${value > 0 ? '+' : ''}${value.toFixed(1)}`;
 }

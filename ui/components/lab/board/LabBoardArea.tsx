@@ -1,6 +1,6 @@
 import type { Square } from 'chess.js';
 import dynamic from 'next/dynamic';
-import type { CSSProperties } from 'react';
+import { type CSSProperties, memo, useCallback, useMemo } from 'react';
 import { useLab } from '../LabContext';
 import { ArrowIcon, FlipIcon, ImportIcon, RefreshIcon, ResetIcon } from '../lab-icons';
 import { BoardPlayerBar } from './BoardPlayerBar';
@@ -14,7 +14,7 @@ const Chessboard = dynamic(() => import('@/components/chessboard-client'), {
   ),
 });
 
-export function LabBoardArea() {
+export const LabBoardArea = memo(function LabBoardArea() {
   const {
     labState,
     boardStageRef,
@@ -37,6 +37,74 @@ export function LabBoardArea() {
 
   const isBlackOrientation = labState.orientation === 'black';
   const evalRailTransitionClass = 'transition-[height,width] duration-200 ease-out will-change-[height,width]';
+  const boardWidth = labState.boardWidth;
+  const selectedSquare = labState.selectedSquare;
+  const game = labState.game;
+
+  const onPieceDrop = useCallback(
+    ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) =>
+      targetSquare ? tryMove(sourceSquare, targetSquare) : false,
+    [tryMove],
+  );
+
+  const onSquareClick = useCallback(
+    ({ square }: { square: string }) => {
+      if (selectedSquare) {
+        const movePlayed = tryMove(selectedSquare, square);
+
+        if (!movePlayed) {
+          clearSelection();
+        }
+
+        return;
+      }
+
+      const piece = game.get(square as Square);
+
+      if (!piece || piece.color !== game.turn()) {
+        return;
+      }
+
+      labState.setSelectedSquare(square);
+      highlightMoves(square);
+    },
+    [clearSelection, game, highlightMoves, labState, selectedSquare, tryMove],
+  );
+
+  const onSquareRightClick = useCallback(() => clearSelection(), [clearSelection]);
+
+  const chessboardOptions = useMemo(
+    () => ({
+      id: 'analysis-board',
+      position: currentFen,
+      boardOrientation: labState.orientation,
+      boardStyle: {
+        width: `${boardWidth}px`,
+        maxWidth: '100%',
+        height: `${boardWidth}px`,
+        borderRadius: '10px',
+      },
+      onPieceDrop,
+      onSquareClick,
+      onSquareRightClick,
+      squareStyles: boardSquareStyles,
+      arrows: boardArrows,
+      lightSquareStyle: { backgroundColor: '#728092' },
+      darkSquareStyle: { backgroundColor: '#253140' },
+      animationDurationInMs: 180,
+      showNotation: true,
+    }),
+    [
+      boardArrows,
+      boardSquareStyles,
+      boardWidth,
+      currentFen,
+      labState.orientation,
+      onPieceDrop,
+      onSquareClick,
+      onSquareRightClick,
+    ],
+  );
 
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-(--border) bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-(--glass-shadow) [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
@@ -135,54 +203,13 @@ export function LabBoardArea() {
             </div>
           </div>
 
-          <div className="flex max-w-full flex-col gap-2" style={{ width: `${labState.boardWidth}px` }}>
+          <div className="flex max-w-full flex-col gap-2" style={{ width: `${boardWidth}px` }}>
             <BoardPlayerBar player={topBoardPlayer} />
             <div
               className="relative flex max-h-full max-w-full flex-none items-center justify-center overflow-hidden rounded-[10px] border-0 bg-transparent p-0 max-[980px]:max-w-[calc(100vw-112px)] max-[720px]:max-w-[calc(100vw-56px)]"
-              style={{ width: `${labState.boardWidth}px`, height: `${labState.boardWidth}px` }}
+              style={{ width: `${boardWidth}px`, height: `${boardWidth}px` }}
             >
-              <Chessboard
-                options={{
-                  id: 'analysis-board',
-                  position: currentFen,
-                  boardOrientation: labState.orientation,
-                  boardStyle: {
-                    width: `${labState.boardWidth}px`,
-                    maxWidth: '100%',
-                    height: `${labState.boardWidth}px`,
-                    borderRadius: '10px',
-                  },
-                  onPieceDrop: ({ sourceSquare, targetSquare }) =>
-                    targetSquare ? tryMove(sourceSquare, targetSquare) : false,
-                  onSquareClick: ({ square }) => {
-                    if (labState.selectedSquare) {
-                      const movePlayed = tryMove(labState.selectedSquare, square);
-
-                      if (!movePlayed) {
-                        clearSelection();
-                      }
-
-                      return;
-                    }
-
-                    const piece = labState.game.get(square as Square);
-
-                    if (!piece || piece.color !== labState.game.turn()) {
-                      return;
-                    }
-
-                    labState.setSelectedSquare(square);
-                    highlightMoves(square);
-                  },
-                  onSquareRightClick: () => clearSelection(),
-                  squareStyles: boardSquareStyles,
-                  arrows: boardArrows,
-                  lightSquareStyle: { backgroundColor: '#728092' },
-                  darkSquareStyle: { backgroundColor: '#253140' },
-                  animationDurationInMs: 180,
-                  showNotation: true,
-                }}
-              />
+              <Chessboard options={chessboardOptions} />
               {boardReviewBadge ? (
                 <span
                   aria-hidden="true"
@@ -206,4 +233,4 @@ export function LabBoardArea() {
       </div>
     </section>
   );
-}
+});

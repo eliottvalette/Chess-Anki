@@ -9,6 +9,7 @@ import {
   type TimelineReview,
   toStoredMove,
 } from './chess-analysis-client';
+import { lruMapGet, lruMapSet } from './lru-map.ts';
 
 const LAST_MOVE_STYLE: CSSProperties = {
   backgroundColor: 'rgba(255, 255, 0, 0.4)',
@@ -387,6 +388,15 @@ export type CachedTimelineAnalysis = {
 };
 export const recentGameAnalysisMemoryCache = new Map<string, CachedTimelineAnalysis>();
 export const recentGameAnalysisInFlightCache = new Map<string, Promise<CachedTimelineAnalysis | null>>();
+const RECENT_GAME_MEMORY_CACHE_LIMIT = 6;
+
+export function rememberRecentGameAnalysis(cacheKey: string, analysis: CachedTimelineAnalysis) {
+  lruMapSet(recentGameAnalysisMemoryCache, cacheKey, analysis, RECENT_GAME_MEMORY_CACHE_LIMIT);
+}
+
+export function readRecentGameAnalysis(cacheKey: string) {
+  return lruMapGet(recentGameAnalysisMemoryCache, cacheKey);
+}
 export function formatRecentGameLogLabel(game: ChessComRecentGameSummary) {
   const player = game.playerUsername ?? 'You';
   const opponent = game.opponentUsername ?? 'opponent';
@@ -414,7 +424,7 @@ export async function loadCachedTimelineAnalysis(
   cacheKey: string,
   { includeInFlight = true }: { includeInFlight?: boolean } = {},
 ): Promise<CachedTimelineAnalysis | null> {
-  const memoryHit = recentGameAnalysisMemoryCache.get(cacheKey);
+  const memoryHit = readRecentGameAnalysis(cacheKey);
 
   if (memoryHit?.version === GAME_ANALYSIS_CACHE_VERSION && memoryHit.profileKey === TIMELINE_ANALYSIS_PROFILE_KEY) {
     return memoryHit;
@@ -445,7 +455,7 @@ export async function loadCachedTimelineAnalysis(
       Array.isArray(analysis.preMoveAnalyses) &&
       Array.isArray(analysis.timelineAnalyses)
     ) {
-      recentGameAnalysisMemoryCache.set(cacheKey, analysis);
+      rememberRecentGameAnalysis(cacheKey, analysis);
       return analysis;
     }
   } catch {
@@ -468,7 +478,7 @@ export async function saveCachedTimelineAnalysis({
   preMoveAnalyses: AnalysisResult[];
   timelineAnalyses: AnalysisResult[];
 }) {
-  recentGameAnalysisMemoryCache.set(cacheKey, {
+  rememberRecentGameAnalysis(cacheKey, {
     quality: 'refined',
     version: GAME_ANALYSIS_CACHE_VERSION,
     profileKey: TIMELINE_ANALYSIS_PROFILE_KEY,

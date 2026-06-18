@@ -14,6 +14,8 @@ import {
   logRecentGamePreload,
   RECENT_GAMES_PAGE_SIZE,
   readCookie,
+  recentGameAnalysisInFlightCache,
+  rememberRecentGameAnalysis,
   saveCachedTimelineAnalysis,
   toStoredMove,
   writeCookie,
@@ -22,9 +24,6 @@ import type { LabState } from '../useLabState';
 
 export const RECENT_GAMES_INTERACTION_IDLE_MS = 3000;
 export const RECENT_GAMES_AUTO_REFRESH_MS = 15000;
-
-export const recentGameAnalysisInFlightCache = new Map<string, Promise<CachedTimelineAnalysis | null>>();
-export const recentGameAnalysisMemoryCache = new Map<string, CachedTimelineAnalysis>();
 
 export function useRecentGames(
   state: LabState,
@@ -255,7 +254,7 @@ export function useRecentGames(
 
       const analysis = await preloadPromise;
       if (analysis) {
-        recentGameAnalysisMemoryCache.set(cacheKey, analysis);
+        rememberRecentGameAnalysis(cacheKey, analysis);
         logRecentGamePreload('done', `${formatRecentGameLogLabel(nextGame)} ${analysis.timelineAnalyses.length} plies`);
       } else {
         logRecentGamePreload('skip', `${formatRecentGameLogLabel(nextGame)} stale`);

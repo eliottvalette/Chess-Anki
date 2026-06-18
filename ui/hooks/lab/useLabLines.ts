@@ -1,5 +1,5 @@
 import { Chess } from 'chess.js';
-import { useCallback, useEffect, useRef } from 'react';
+import { startTransition, useCallback, useEffect, useRef } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import {
@@ -537,10 +537,11 @@ export function useLabLines(
       }
 
       drillPathIndexRef.current = stepIndex;
-      setLinesTrainPlyTotal(countTrainPliesInDrillPath(path));
-      setLinesTrainPlyCurrent(path.slice(0, stepIndex + 1).filter((pathStep) => pathStep.isTrainTurn).length);
-
-      setActiveOpeningNodeId(step.nodeId);
+      startTransition(() => {
+        setLinesTrainPlyTotal(countTrainPliesInDrillPath(path));
+        setLinesTrainPlyCurrent(path.slice(0, stepIndex + 1).filter((pathStep) => pathStep.isTrainTurn).length);
+        setActiveOpeningNodeId(step.nodeId);
+      });
 
       const parentStep = path[stepIndex - 1];
       const shouldPlayOpponentMove =
@@ -581,9 +582,11 @@ export function useLabLines(
 
         moveHistoryRef.current = appended.moveHistory;
         historyIndexRef.current = currentIndex + 1;
-        setMoveHistory(appended.moveHistory);
-        setHistoryIndex(currentIndex + 1);
-        setGame(new Chess(appended.nextFen));
+        startTransition(() => {
+          setMoveHistory(appended.moveHistory);
+          setHistoryIndex(currentIndex + 1);
+          setGame(new Chess(appended.nextFen));
+        });
         playSound('move-opponent');
       }
 

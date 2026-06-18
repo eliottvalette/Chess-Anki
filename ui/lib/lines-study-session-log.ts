@@ -41,16 +41,23 @@ export function appendLinesStudySessionEntry(
   kind: string,
   detail: Record<string, string | number | boolean | string[]>,
 ): LinesStudySessionLog {
+  const MAX_LINES_STUDY_SESSION_ENTRIES = 500;
+  const nextEntries = [
+    ...log.entries,
+    {
+      at: new Date().toISOString(),
+      kind,
+      detail,
+    },
+  ];
+
+  if (nextEntries.length > MAX_LINES_STUDY_SESSION_ENTRIES) {
+    nextEntries.splice(0, nextEntries.length - MAX_LINES_STUDY_SESSION_ENTRIES);
+  }
+
   return {
     ...log,
-    entries: [
-      ...log.entries,
-      {
-        at: new Date().toISOString(),
-        kind,
-        detail,
-      },
-    ],
+    entries: nextEntries,
   };
 }
 

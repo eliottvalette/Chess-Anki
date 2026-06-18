@@ -5,6 +5,7 @@ import {
   REVIEW_ANALYSIS_PROFILE,
 } from '@/lib/analysis-profile';
 import type { AnalysisResult } from '@/lib/analysis-types';
+import { BoundedAsyncQueue } from '@/lib/bounded-async-queue';
 import { shouldUseLiveTrainMoveReview } from '@/lib/card-move-reviews';
 import {
   analyzeGamePositions,
@@ -15,11 +16,14 @@ import {
   type StoredMove,
 } from '@/lib/chess-analysis-client';
 import { getPositionCacheKey, getTimelinePositionCacheKey, type PositionAnalysisProfile } from '@/lib/lab-helpers';
+import { lruMapSet } from '@/lib/lru-map';
 import { runTimelineAnalysisDedupe } from '@/lib/timeline-analysis-runner';
 import type { LabState } from '../useLabState';
 
 const TIMELINE_ANALYSIS_BATCH_SIZE = 4;
 const PRELOAD_AHEAD = 3;
+const POSITION_ANALYSIS_CACHE_LIMIT = 256;
+const TRAIN_PREFETCH_MAX_CONCURRENCY = 2;
 
 export function useLabEngine(
   state: LabState,
@@ -50,6 +54,8 @@ export function useLabEngine(
   const positionInFlightRef = useRef<Map<string, Promise<AnalysisResult>>>(new Map());
   const timelineBatchInFlightRef = useRef<Map<string, Promise<AnalysisResult[]>>>(new Map());
   const positionRequestIdRef = useRef(0);
+  const trainPrefetchQueueRef = useRef<BoundedAsyncQueue | null>(null);
+  const trainPrefetchGenerationRef = useRef(0);
 
   const clearEngineCache = useCallback(() => {
     positionCacheRef.current.clear();
@@ -84,7 +90,7 @@ export function useLabEngine(
         }),
       )
         .then((analysis) => {
-          positionCacheRef.current.set(cacheKey, analysis);
+          lruMapSet(positionCacheRef.current, cacheKey, analysis, POSITION_ANALYSIS_CACHE_LIMIT);
           return analysis;
         })
         .finally(() => {
@@ -276,30 +282,61 @@ export function useLabEngine(
     setTrainAnalysisTick,
   ]);
 
-  // 3. Pre-fetch all remaining trained moves once an answer is given
+  // 3. Pre-fetch all trained move positions once an answer is given (full coverage, bounded concurrency).
   useEffect(() => {
     if (!activeDeckCard || !deckFeedback || deckFeedback.pending) {
       return undefined;
     }
 
-    for (let index = 0; index <= moveHistory.length; index += 1) {
+    trainPrefetchQueueRef.current?.cancel();
+    const queue = new BoundedAsyncQueue(TRAIN_PREFETCH_MAX_CONCURRENCY);
+    trainPrefetchQueueRef.current = queue;
+    const generation = trainPrefetchGenerationRef.current + 1;
+    trainPrefetchGenerationRef.current = generation;
+
+    const schedulePrefetch = (index: number) => {
       const moves = buildMoveUciHistory(moveHistory.slice(0, index));
       const cacheKey = getPositionCacheKey(initialFen, moves, 'training');
 
       if (positionCacheRef.current.has(cacheKey) || positionInFlightRef.current.has(cacheKey)) {
-        continue;
+        return;
       }
 
       const game = restoreGameFromHistory(moveHistory, initialFen, index);
 
-      void fetchCachedPositionAnalysis(cacheKey, game.fen(), moves, initialFen, 'training')
-        .then(() => {
+      queue.enqueue(async () => {
+        if (trainPrefetchGenerationRef.current !== generation) {
+          return;
+        }
+
+        await fetchCachedPositionAnalysis(cacheKey, game.fen(), moves, initialFen, 'training');
+
+        if (trainPrefetchGenerationRef.current === generation) {
           setTrainAnalysisTick((tick) => tick + 1);
-        })
-        .catch(() => undefined);
+        }
+      });
+    };
+
+    const runPrefetch = () => {
+      for (let index = 0; index <= moveHistory.length; index += 1) {
+        schedulePrefetch(index);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(runPrefetch, { timeout: 2_000 });
+
+      return () => {
+        window.cancelIdleCallback(idleId);
+        queue.cancel();
+      };
     }
 
-    return undefined;
+    runPrefetch();
+
+    return () => {
+      queue.cancel();
+    };
   }, [activeDeckCard, deckFeedback, fetchCachedPositionAnalysis, initialFen, moveHistory, setTrainAnalysisTick]);
 
   // 4. Preload ahead slightly in review mode

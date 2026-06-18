@@ -112,6 +112,23 @@ async function getBrowserEnginePool() {
   return browserEnginePool;
 }
 
+export async function releaseBrowserEnginePool() {
+  if (!browserEnginePool) {
+    return;
+  }
+
+  try {
+    const pool = await browserEnginePool;
+
+    for (const session of pool) {
+      session.terminate();
+    }
+  } finally {
+    browserEnginePool = null;
+    browserRoundRobin = 0;
+  }
+}
+
 function getBrowserEnginePoolSize() {
   const concurrency =
     typeof navigator === 'undefined' ? BROWSER_ENGINE_DEFAULT_POOL_SIZE : (navigator.hardwareConcurrency ?? 0);
@@ -170,6 +187,15 @@ class BrowserStockfishSession {
       );
       return analysis;
     });
+  }
+
+  terminate() {
+    if (this.pending?.timer) {
+      clearTimeout(this.pending.timer);
+    }
+
+    this.pending = null;
+    this.worker.terminate();
   }
 
   private async initialize() {
