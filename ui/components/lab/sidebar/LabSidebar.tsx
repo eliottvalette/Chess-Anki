@@ -149,6 +149,7 @@ export function LabSidebar() {
               reviewQueueLength={lab.labState.linesReviewQueue.length}
               sessionTrainPlyCurrent={lab.labState.linesTrainPlyCurrent}
               sessionTrainPlyTotal={lab.labState.linesTrainPlyTotal}
+              studyDebugSnapshot={lab.linesStudyDebugSnapshot}
               trainSide={lab.labState.activeTrainSide}
               onChangeTrainSide={(side) => {
                 lab.labState.setActiveTrainSide(side);

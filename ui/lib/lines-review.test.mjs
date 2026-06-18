@@ -6,6 +6,12 @@ import {
   buildStoredMovesFromUciList,
   restoreGameFromHistory,
 } from './chess-analysis-client.ts';
+import { buildLinesStudyDebugSnapshot } from './lines-debug-snapshot.ts';
+import {
+  appendLinesStudySessionEntry,
+  createLinesStudySessionLog,
+  formatLinesStudySessionLog,
+} from './lines-study-session-log.ts';
 import {
   buildOpeningDrillExpected,
   buildReviewQueue,
@@ -509,4 +515,82 @@ test('pickLearnBranch excludes completed branches by uci even with a different e
     ]),
     false,
   );
+});
+
+test('buildLinesStudyDebugSnapshot summarizes learn and review context', () => {
+  const tree = buildItalianReviewTree();
+  const snapshot = buildLinesStudyDebugSnapshot({
+    linesStudyMode: 'review',
+    trainSide: 'white',
+    tree,
+    activeNodeId: 'weak-d3',
+    openingDrillActive: true,
+    openingDrillStatus: 'Correct.',
+    openingDrillExpected: {
+      nodeId: 'weak-d3',
+      uci: 'd2d3',
+      san: 'd3',
+      acceptedUcis: ['d2d3'],
+    },
+    deckFeedback: {
+      correct: true,
+      exact: true,
+      playedSan: 'd3',
+      playedUci: 'd2d3',
+      expectedSan: 'd3',
+      expectedUci: 'd2d3',
+      validationMode: 'strict_best',
+      pending: false,
+    },
+    deckPlaybackBusy: false,
+    linesLearnBranchComplete: false,
+    completedLearnBranches: [],
+    historyIndex: 6,
+    moveHistory: [],
+    initialFen: null,
+    linesReviewQueue: ['weak-d3', 'weak-castles'],
+    linesReviewIndex: 0,
+    sessionTrainPlyCurrent: 0,
+    sessionTrainPlyTotal: 0,
+    currentFen: 'test-fen',
+  });
+
+  assert.match(snapshot, /mode: review · train white/);
+  assert.match(snapshot, /session log: \(none/);
+  assert.match(snapshot, /review: card 1\/2/);
+  assert.match(snapshot, /node: weak-d3/);
+  assert.match(snapshot, /prompt: d3 \(d2d3\)/);
+  assert.match(snapshot, /fen: test-fen/);
+});
+
+test('formatLinesStudySessionLog lists chronological training events', () => {
+  let log = createLinesStudySessionLog('tree-1', 'learn', 'white');
+  log = appendLinesStudySessionEntry(log, 'branch_picked', {
+    trigger: 'initial',
+    forkNodeId: 'fork-a',
+    edgeUci: 'e2e4',
+    remainingAtFork: 2,
+    replayUcis: ['e7e5'],
+  });
+  log = appendLinesStudySessionEntry(log, 'train_move', {
+    mode: 'learn',
+    nodeId: 'node-1',
+    uci: 'g1f3',
+    san: 'Nf3',
+    correct: true,
+  });
+  log = appendLinesStudySessionEntry(log, 'next_branch_clicked', {
+    forkNodeId: 'fork-a',
+    edgeUci: 'e2e4',
+    completedCountBefore: 1,
+  });
+
+  const formatted = formatLinesStudySessionLog(log);
+
+  assert.match(formatted, /session since training start/);
+  assert.match(formatted, /mode: learn · train white/);
+  assert.match(formatted, /branch_picked/);
+  assert.match(formatted, /train_move/);
+  assert.match(formatted, /next_branch_clicked/);
+  assert.match(formatted, /replayUcis=\[e7e5\]/);
 });

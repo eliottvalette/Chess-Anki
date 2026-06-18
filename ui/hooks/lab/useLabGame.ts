@@ -12,6 +12,7 @@ import {
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
 import { DRILL_OPPONENT_DELAY_MS, isLinesBoardPlayAllowed } from '@/lib/lab-helpers';
+import { appendLinesStudySessionEntry } from '@/lib/lines-study-session-log.ts';
 import {
   buildPendingDeckFeedback,
   type DeckCard,
@@ -49,6 +50,7 @@ export function useLabGame(
     drillPathRef: React.MutableRefObject<DrillPathStep[]>;
     drillPathIndexRef: React.MutableRefObject<number>;
     linesSession: LinesSessionApi;
+    learnBranchForkConfirmedRef: React.MutableRefObject<boolean>;
     playDeckReplayToIndexRef: React.MutableRefObject<
       ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
     >;
@@ -74,7 +76,9 @@ export function useLabGame(
     linesStudyMode,
     linesLearnBranchComplete,
     activeTrainSide,
+    linesActiveLearnBranch,
     initialFen,
+    setLinesStudySessionLog,
     setVariationBaseIndex,
     setVariationMoves,
     setGame,
@@ -107,6 +111,7 @@ export function useLabGame(
     modeRef,
     drillPathRef,
     drillPathIndexRef,
+    learnBranchForkConfirmedRef,
     linesSession,
     playDeckReplayToIndexRef,
     deckPlaybackRequestIdRef,
@@ -261,6 +266,42 @@ export function useLabGame(
           }),
         );
 
+        setLinesStudySessionLog((current) => {
+          if (!current) {
+            return current;
+          }
+
+          return appendLinesStudySessionEntry(current, 'train_move', {
+            mode: linesStudyMode,
+            nodeId,
+            uci: move.uci,
+            san: move.san,
+            correct,
+            exact,
+            category: linesClassification.category,
+          });
+        });
+
+        if (
+          correct &&
+          linesStudyMode === 'learn' &&
+          linesActiveLearnBranch &&
+          nodeId === linesActiveLearnBranch.forkNodeId &&
+          move.uci === linesActiveLearnBranch.edgeUci
+        ) {
+          learnBranchForkConfirmedRef.current = true;
+          setLinesStudySessionLog((current) => {
+            if (!current) {
+              return current;
+            }
+
+            return appendLinesStudySessionEntry(current, 'branch_fork_confirmed', {
+              forkNodeId: linesActiveLearnBranch.forkNodeId,
+              edgeUci: linesActiveLearnBranch.edgeUci,
+            });
+          });
+        }
+
         void fetch('/api/opening-trees', {
           method: 'POST',
           credentials: 'same-origin',
@@ -289,17 +330,27 @@ export function useLabGame(
             if (matchingEdge) {
               const targetNodeId = matchingEdge.toNodeId;
               const nextStep = drillPathRef.current[nextStepIndex];
+              const atLearnBranchFork =
+                linesStudyMode === 'learn' &&
+                linesActiveLearnBranch != null &&
+                nodeId === linesActiveLearnBranch.forkNodeId;
 
               if (!nextStep || nextStep.nodeId !== targetNodeId) {
-                const newPath = buildDrillPath(activeOpeningTree, {
-                  trainSide: state.activeTrainSide,
-                  startNodeId: targetNodeId,
-                });
+                const forcedStepIndex = drillPathRef.current.findIndex((step) => step.nodeId === targetNodeId);
 
-                if (newPath.length > 0) {
-                  drillPathRef.current = newPath;
-                  drillPathIndexRef.current = 0;
-                  nextStepIndex = 0;
+                if (forcedStepIndex >= 0) {
+                  nextStepIndex = forcedStepIndex;
+                } else if (!atLearnBranchFork) {
+                  const newPath = buildDrillPath(activeOpeningTree, {
+                    trainSide: state.activeTrainSide,
+                    startNodeId: targetNodeId,
+                  });
+
+                  if (newPath.length > 0) {
+                    drillPathRef.current = newPath;
+                    drillPathIndexRef.current = 0;
+                    nextStepIndex = 0;
+                  }
                 }
               }
 
@@ -420,6 +471,8 @@ export function useLabGame(
       drillPathRef,
       hasLoadedGame,
       historyIndex,
+      learnBranchForkConfirmedRef,
+      linesActiveLearnBranch,
       linesLearnBranchComplete,
       linesSession,
       linesStudyMode,
@@ -435,6 +488,7 @@ export function useLabGame(
       setDeckFeedbackArrowsVisible,
       setGame,
       setHistoryIndex,
+      setLinesStudySessionLog,
       setMoveHistory,
       setOpeningDrillExpected,
       setOpeningDrillStatus,

@@ -42,6 +42,7 @@ import {
   summarizeDeckProgress,
   summarizeLineMastery,
 } from '@/lib/deck-progress';
+import { buildLinesStudyDebugSnapshot } from '@/lib/lines-debug-snapshot';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
   classifyBoardMoveAtHistoryIndex,
@@ -899,6 +900,7 @@ export function useLabOrchestrator() {
   const advanceReviewCardRef = useRef<() => void>(() => {});
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
   const linesGameTimeoutRef = useRef<number | null>(null);
+  const learnBranchForkConfirmedRef = useRef(false);
   const playDeckReplayToIndexRef = useRef<
     ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
   >(null);
@@ -918,6 +920,7 @@ export function useLabOrchestrator() {
       modeRef,
       drillPathRef,
       drillPathIndexRef,
+      learnBranchForkConfirmedRef,
       linesSession,
       playDeckReplayToIndexRef,
       deckPlaybackRequestIdRef,
@@ -934,6 +937,7 @@ export function useLabOrchestrator() {
       deckReplayMovesRef,
       drillPathRef,
       drillPathIndexRef,
+      learnBranchForkConfirmedRef,
       linesSession,
     ],
   );
@@ -1139,6 +1143,7 @@ export function useLabOrchestrator() {
       linesGameTimeoutRef,
       modeRef,
       linesSession,
+      learnBranchForkConfirmedRef,
     }),
     [
       clearSelection,
@@ -1153,6 +1158,7 @@ export function useLabOrchestrator() {
       deckPlaybackRequestIdRef,
       linesGameTimeoutRef,
       linesSession,
+      learnBranchForkConfirmedRef,
     ],
   );
 
@@ -2279,6 +2285,58 @@ export function useLabOrchestrator() {
     labState.linesLearnBranchComplete,
   ]);
 
+  const linesStudyDebugSnapshot = useMemo(
+    () =>
+      buildLinesStudyDebugSnapshot({
+        linesStudyMode: labState.linesStudyMode,
+        trainSide: labState.activeTrainSide,
+        tree: labState.activeOpeningTree,
+        activeNodeId: labState.activeOpeningNodeId,
+        openingDrillActive: labState.openingDrillActive,
+        openingDrillStatus: labState.openingDrillStatus,
+        openingDrillExpected: labState.openingDrillExpected,
+        deckFeedback: labState.deckFeedback,
+        deckPlaybackBusy: labState.deckPlaybackBusy,
+        linesLearnBranchComplete: labState.linesLearnBranchComplete,
+        completedLearnBranches: labState.linesCompletedLearnBranches,
+        historyIndex: labState.historyIndex,
+        moveHistory: labState.moveHistory,
+        initialFen: labState.initialFen,
+        linesReviewQueue: labState.linesReviewQueue,
+        linesReviewIndex: labState.linesReviewIndex,
+        sessionTrainPlyCurrent: labState.linesTrainPlyCurrent,
+        sessionTrainPlyTotal: labState.linesTrainPlyTotal,
+        forkCoverage: linesForkCoverage,
+        currentFen,
+        sessionLog: labState.linesStudySessionLog,
+        activeLearnBranch: labState.linesActiveLearnBranch,
+      }),
+    [
+      labState.activeOpeningNodeId,
+      labState.activeOpeningTree,
+      labState.activeTrainSide,
+      labState.deckFeedback,
+      labState.deckPlaybackBusy,
+      labState.historyIndex,
+      labState.initialFen,
+      labState.linesCompletedLearnBranches,
+      labState.linesLearnBranchComplete,
+      labState.linesReviewIndex,
+      labState.linesReviewQueue,
+      labState.linesStudyMode,
+      labState.linesStudySessionLog,
+      labState.linesActiveLearnBranch,
+      labState.linesTrainPlyCurrent,
+      labState.linesTrainPlyTotal,
+      labState.moveHistory,
+      labState.openingDrillActive,
+      labState.openingDrillExpected,
+      labState.openingDrillStatus,
+      linesForkCoverage,
+      currentFen,
+    ],
+  );
+
   return {
     labState: overriddenLabState,
     gameContext,
@@ -2314,6 +2372,7 @@ export function useLabOrchestrator() {
     importRecentOpeningTrees,
     linesForkCoverage,
     linesHasNextLearnBranch,
+    linesStudyDebugSnapshot,
     currentFen,
     currentMoves,
     hasLoadedGame,

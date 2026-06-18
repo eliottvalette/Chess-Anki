@@ -305,6 +305,30 @@ export function buildOpeningDrillExpected(
   };
 }
 
+export function buildLearnBranchDrillExpected(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  nodeId: string,
+  activeBranch: LearnBranchCompletion | null,
+): OpeningDrillExpectedMove | null {
+  const expected = buildOpeningDrillExpected(tree, nodeId);
+
+  if (!expected || !activeBranch || nodeId !== activeBranch.forkNodeId) {
+    return expected;
+  }
+
+  const branchEdge =
+    tree.edges.find((edge) => edge.id === activeBranch.edgeId) ??
+    tree.edges.find((edge) => edge.fromNodeId === activeBranch.forkNodeId && edge.uci === activeBranch.edgeUci) ??
+    null;
+
+  return {
+    nodeId,
+    uci: activeBranch.edgeUci,
+    san: branchEdge?.san ?? expected.san,
+    acceptedUcis: [activeBranch.edgeUci],
+  };
+}
+
 export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string, acceptedUcis: string[]) {
   return acceptedUcis.includes(playedUci);
 }

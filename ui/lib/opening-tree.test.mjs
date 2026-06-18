@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildDrillPath,
   buildForkCoverage,
+  buildLearnBranchDrillExpected,
   buildOpeningDrillExpected,
   buildOpeningTrees,
   buildReviewQueue,
@@ -171,6 +172,67 @@ test('buildOpeningDrillExpected returns null on terminal node without repertoire
   };
 
   assert.equal(buildOpeningDrillExpected(tree, 'leaf-node'), null);
+});
+
+test('buildLearnBranchDrillExpected restricts fork prompt to the picked branch move', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'fork-node',
+        fen: 'fen',
+        fenKey: 'fork',
+        ply: 4,
+        sideToMove: 'white',
+        bestUci: 'd2d4',
+        bestSan: 'd4',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 50,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-d4',
+        fromNodeId: 'fork-node',
+        toNodeId: 'after-d4',
+        uci: 'd2d4',
+        san: 'd4',
+        recentCount: 10,
+        cardCount: 0,
+        mastersGames: 0,
+        isEngineBest: true,
+        priority: 1,
+      },
+      {
+        id: 'edge-bc4',
+        fromNodeId: 'fork-node',
+        toNodeId: 'after-bc4',
+        uci: 'f1c4',
+        san: 'Bc4',
+        recentCount: 5,
+        cardCount: 0,
+        mastersGames: 0,
+        isEngineBest: false,
+        priority: 1,
+      },
+    ],
+  };
+
+  const unrestricted = buildOpeningDrillExpected(tree, 'fork-node');
+  const restricted = buildLearnBranchDrillExpected(tree, 'fork-node', {
+    forkNodeId: 'fork-node',
+    edgeId: 'edge-bc4',
+    edgeUci: 'f1c4',
+  });
+
+  assert.deepEqual(unrestricted?.acceptedUcis.sort(), ['d2d4', 'f1c4']);
+  assert.equal(restricted?.uci, 'f1c4');
+  assert.equal(restricted?.san, 'Bc4');
+  assert.deepEqual(restricted?.acceptedUcis, ['f1c4']);
 });
 
 test('classifyOpeningDrillMove marks best, book, and miss', () => {

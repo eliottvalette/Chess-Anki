@@ -221,6 +221,7 @@ export function LinesPanel({
   reviewQueueLength,
   sessionTrainPlyCurrent,
   sessionTrainPlyTotal,
+  studyDebugSnapshot,
   trainSide,
   trees,
   minForcedPlies,
@@ -255,6 +256,7 @@ export function LinesPanel({
   reviewQueueLength: number;
   sessionTrainPlyCurrent: number;
   sessionTrainPlyTotal: number;
+  studyDebugSnapshot: string;
   trainSide: 'white' | 'black';
   trees: OpeningTreeSummary[];
   minForcedPlies: number;
@@ -288,6 +290,16 @@ export function LinesPanel({
     [activeTree, trainSide],
   );
   const inSession = linesStudyMode !== 'idle';
+  const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
+
+  const handleCopyStudyDebug = async () => {
+    await navigator.clipboard.writeText(studyDebugSnapshot);
+    setCopyDebugLabel('Copied!');
+    window.setTimeout(() => {
+      setCopyDebugLabel('Copy');
+    }, 2000);
+  };
+
   const graph = useMemo(
     () => ({
       nodes: graphNodes.map((node) => ({
@@ -484,7 +496,15 @@ export function LinesPanel({
                 </div>
               </div>
             </div>
-          ) : null}
+          ) : (
+            <button
+              className="box-border flex min-h-[42px] w-full items-center justify-center rounded-[10px] border border-[rgba(152,184,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-medium text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color] duration-150 hover:border-[rgba(152,184,255,0.58)] hover:bg-[rgba(46,58,82,0.58)]"
+              onClick={() => void handleCopyStudyDebug()}
+              type="button"
+            >
+              {copyDebugLabel}
+            </button>
+          )}
           {learnBranchComplete && !inSession && hasNextLearnBranch ? (
             <button
               className="box-border flex min-h-[48px] w-full items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.52)] bg-[rgba(56,148,115,0.34)] px-4 text-sm font-medium text-[#d8f8ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.72)] hover:bg-[rgba(56,148,115,0.48)]"

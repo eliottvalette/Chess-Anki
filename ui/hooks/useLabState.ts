@@ -15,6 +15,7 @@ import type {
 } from '@/lib/opening-tree';
 import type { TrainingDeckSummary, TrainSessionStats, WorkspaceMode } from '../components/chess-lab-panels';
 import type { TrainingProfile } from '../lib/analysis-types';
+import type { LinesStudySessionLog } from '../lib/lines-study-session-log.ts';
 
 function readStoredLinesFilter(storageKey: string, fallback: number) {
   if (typeof window === 'undefined') {
@@ -113,6 +114,8 @@ export function useLabState() {
   const [linesReviewIndex, setLinesReviewIndex] = useState(0);
   const [linesLearnBranchComplete, setLinesLearnBranchComplete] = useState(false);
   const [linesCompletedLearnBranches, setLinesCompletedLearnBranches] = useState<LearnBranchCompletion[]>([]);
+  const [linesActiveLearnBranch, setLinesActiveLearnBranch] = useState<LearnBranchCompletion | null>(null);
+  const [linesStudySessionLog, setLinesStudySessionLog] = useState<LinesStudySessionLog | null>(null);
   const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
   const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
   const [linesPositionFilterTreeIds, setLinesPositionFilterTreeIds] = useState<string[] | null>(null);
@@ -281,6 +284,10 @@ export function useLabState() {
     setLinesLearnBranchComplete,
     linesCompletedLearnBranches,
     setLinesCompletedLearnBranches,
+    linesActiveLearnBranch,
+    setLinesActiveLearnBranch,
+    linesStudySessionLog,
+    setLinesStudySessionLog,
     linesTrainPlyCurrent,
     setLinesTrainPlyCurrent,
     linesTrainPlyTotal,
