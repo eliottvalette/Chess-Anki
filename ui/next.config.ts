@@ -8,6 +8,16 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: uiRoot,
   },
+  webpack: (config, { dev }) => {
+    if (dev) {
+      config.watchOptions = {
+        ...config.watchOptions,
+        ignored: ['**/.git/**', '**/.next/**', '**/node_modules/**'],
+      };
+    }
+
+    return config;
+  },
   outputFileTracingIncludes: {
     '/api/analyze-game': ['./bin/**/*'],
     '/api/analyze-position': ['./bin/**/*'],

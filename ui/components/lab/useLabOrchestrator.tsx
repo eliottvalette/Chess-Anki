@@ -1330,7 +1330,7 @@ export function useLabOrchestrator() {
   }, [selectedDeckId, selectedDeckIdRef]);
 
   useEffect(() => {
-    if (!trainingProfile?.id || trainingProfileBootstrapping || trainAllSession) {
+    if (!trainingProfile?.id || trainingProfileBootstrapping || trainAllSession || mode !== 'train') {
       if (!trainingProfile?.id) {
         lastDeckLibraryProfileIdRef.current = null;
       }
@@ -1347,14 +1347,17 @@ export function useLabOrchestrator() {
       typeof window === 'undefined' ? null : window.localStorage.getItem(LAST_TRAINING_DECK_STORAGE_KEY);
 
     void loadTrainingDeckRef.current(storedDeckId, { libraryLoading: true });
-  }, [trainingProfile?.id, trainingProfileBootstrapping, trainAllSession]);
+  }, [mode, trainingProfile?.id, trainingProfileBootstrapping, trainAllSession]);
 
   useEffect(() => {
-    if (!trainingProfile?.id || trainingProfileBootstrapping) {
-      setOpeningTrees([]);
-      setActiveOpeningTree(null);
-      setSelectedOpeningTreeId(null);
-      setActiveOpeningNodeId(null);
+    if (!trainingProfile?.id || trainingProfileBootstrapping || mode !== 'lines') {
+      if (!trainingProfile?.id) {
+        setOpeningTrees([]);
+        setActiveOpeningTree(null);
+        setSelectedOpeningTreeId(null);
+        setActiveOpeningNodeId(null);
+      }
+
       return;
     }
 
@@ -1362,6 +1365,7 @@ export function useLabOrchestrator() {
   }, [
     labState.minForcedPlies,
     loadOpeningTrees,
+    mode,
     trainingProfile?.id,
     trainingProfileBootstrapping,
     setOpeningTrees,

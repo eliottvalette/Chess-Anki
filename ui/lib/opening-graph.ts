@@ -1007,8 +1007,9 @@ export function projectCatalogSubgraph(
 
   const sliced = filterOpeningTreeForDisplay(fullTree, catalog.catalogPly);
   const trainNodes = sliced.nodes.filter((node) => node.masteryScore > 0 || node.seenCount > 0);
-  const masteryScore =
+  const rawMasteryScore =
     trainNodes.length > 0 ? trainNodes.reduce((sum, node) => sum + node.masteryScore, 0) / trainNodes.length : 0;
+  const masteryScore = Number(rawMasteryScore.toFixed(2));
   const dueCount = sliced.nodes.filter((node) => node.masteryScore < 80).length;
 
   return {

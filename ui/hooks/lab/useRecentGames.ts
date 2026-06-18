@@ -52,6 +52,7 @@ export function useRecentGames(
 
   const {
     chesscomUsername,
+    mode,
     recentGameTimeClass,
     recentChessGamesNextCursor,
     recentChessGamesNextOffset,
@@ -310,15 +311,36 @@ export function useRecentGames(
   }, [setChesscomUsername, setRecentGameTimeClass]);
 
   useEffect(() => {
+    if (mode !== 'review') {
+      return undefined;
+    }
+
     const username = chesscomUsername.trim().toLowerCase();
 
     if (!username || recentAutoFetchStartedRef.current) {
-      return;
+      return undefined;
     }
 
     recentAutoFetchStartedRef.current = true;
-    void fetchRecentChessGames(username, recentGameTimeClass, false, true);
-  }, [chesscomUsername, fetchRecentChessGames, recentGameTimeClass]);
+
+    const scheduleFetch = () => {
+      void fetchRecentChessGames(username, recentGameTimeClass, false, true);
+    };
+
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      const idleId = window.requestIdleCallback(scheduleFetch, { timeout: 3_000 });
+
+      return () => {
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timer = window.setTimeout(scheduleFetch, 1_500);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [chesscomUsername, fetchRecentChessGames, mode, recentGameTimeClass]);
 
   useEffect(() => {
     if (!chesscomUsername.trim()) {

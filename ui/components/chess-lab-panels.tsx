@@ -114,6 +114,7 @@ import {
 import {
   countReviewDueNodes,
   filterOpeningTreeSummaries,
+  formatMasteryScoreLabel,
   formatOpeningTreeDisplayName,
   type LinesStudyMode,
   type OpeningLibrary,
@@ -303,6 +304,7 @@ export const LinesPanel = memo(function LinesPanel({
     [catalogTrees, minDepth, minNodes],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
+  const catalogGroupedTrees = useMemo(() => groupOpeningTrees(catalogTrees), [catalogTrees]);
   const graphLayout = useMemo(() => layoutOpeningTreeGraph(activeTree), [activeTree]);
   const graphNodes = useMemo(
     () => buildOpeningTreeGraphNodes(activeTree, graphLayout, trainSide),
@@ -453,6 +455,7 @@ export const LinesPanel = memo(function LinesPanel({
                   </span>
                   {OPENING_LIBRARY_ORDER.map((library) => {
                     const libraryTrees = groupedTrees.get(library) ?? [];
+                    const catalogLibraryTrees = catalogGroupedTrees.get(library) ?? [];
 
                     if (libraryTrees.length === 0) {
                       return null;
@@ -461,7 +464,7 @@ export const LinesPanel = memo(function LinesPanel({
                     return (
                       <section className="flex min-w-0 flex-col gap-2" key={library}>
                         <h3 className="m-0 text-[11px] font-normal text-(--text-soft)">
-                          {formatOpeningLibrary(library)}
+                          {libraryTrees.length} / {catalogLibraryTrees.length} openings {formatOpeningLibrary(library)}
                         </h3>
                         <div className="flex min-h-0 flex-col gap-2">
                           {libraryTrees.map((tree) => (
@@ -474,7 +477,7 @@ export const LinesPanel = memo(function LinesPanel({
                               <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-(--text) wrap-anywhere">
                                 <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
                                 <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft) [&+strong]:min-w-0">
-                                  {tree.masteryScore > 0 ? `${tree.masteryScore}/100` : 'New'}
+                                  {tree.masteryScore > 0 ? formatMasteryScoreLabel(tree.masteryScore) : 'New'}
                                 </span>
                               </span>
                               <span className="block font-mono text-[11px] leading-[1.35] text-(--text-muted) wrap-anywhere">
@@ -807,7 +810,7 @@ const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data }: No
         <span>
           {isTrainTurn
             ? nodeData.seenCount > 0
-              ? `${nodeData.masteryScore}/100`
+              ? formatMasteryScoreLabel(nodeData.masteryScore)
               : nodeData.recentGames > 0
                 ? `${nodeData.recentGames} games`
                 : 'New'
@@ -2602,7 +2605,7 @@ export function DeckPanel({
               />
             </div>
             <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
-              <span>Card {cardScore}/100</span>
+              <span>Card {formatMasteryScoreLabel(cardScore)}</span>
               <span>
                 {trainAllSession
                   ? `${trainSessionCardCurrent}/${trainSessionCardTotal}`
@@ -2636,7 +2639,7 @@ export function DeckPanel({
                   <span>
                     {trainAllSession
                       ? 'Cram only · grade unchanged'
-                      : `${activeCardProgress ? `${getMasteryGrade(activeCardProgress)} · ${getEffectiveMasteryScore(activeCardProgress)}/100` : ''} · ${formatNextReview(activeCardProgress)}`}
+                      : `${activeCardProgress ? `${getMasteryGrade(activeCardProgress)} · ${formatMasteryScoreLabel(getEffectiveMasteryScore(activeCardProgress))}` : ''} · ${formatNextReview(activeCardProgress)}`}
                   </span>
                 ) : null}
                 {!deckFeedback.pending && !deckFeedback.correct && deckCounterSan ? (
@@ -2704,7 +2707,7 @@ export function DeckPanel({
             />
           </div>
           <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
-            <span>Opening {activeLineMastery.masteryScore}/100</span>
+            <span>Opening {formatMasteryScoreLabel(activeLineMastery.masteryScore)}</span>
             <span>{activeLineMastery.newCount + activeLineMastery.dueCount} due/new</span>
           </div>
         </section>

@@ -251,6 +251,17 @@ export function formatOpeningTreeDisplayName(name: string) {
   return withoutMoves || withoutEco || cleanName;
 }
 
+export function roundMasteryScore(score: number) {
+  return Math.round(score * 100) / 100;
+}
+
+export function formatMasteryScoreLabel(score: number) {
+  const rounded = roundMasteryScore(score);
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2).replace(/\.?0+$/, '');
+
+  return `${text}/100`;
+}
+
 export function resolveAcceptedTrainMoveUcis(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
   nodeId: string,
@@ -449,7 +460,7 @@ export function filterOpeningTreeForDisplay(
     sourceCount: rootNode.recentGames + rootNode.cardCount,
     nodeCount: nodes.length,
     dueCount: nodes.filter((node) => node.masteryScore < LINES_REVIEW_DUE_MASTERY_THRESHOLD).length,
-    masteryScore: Math.round(masteryScore),
+    masteryScore: roundMasteryScore(masteryScore),
     nodes,
     edges,
   };
