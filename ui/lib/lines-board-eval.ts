@@ -1,0 +1,79 @@
+import type { AnalysisResult } from './analysis-types.ts';
+import {
+  formatEvalCpLabel,
+  formatScoreLabel,
+  getAdvantageMeter,
+  getAdvantageMeterFromEvalCp,
+} from './chess-analysis-client.ts';
+import { normalizeOpeningFen, type OpeningTreeDetail, resolveOpeningNodeFromHistory } from './opening-tree.ts';
+
+export const LINES_BOARD_NEUTRAL_WHITE_ADVANTAGE = 50;
+
+export function resolveLinesBoardEvalCp(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'rootUci'>,
+  moveHistory: Array<{ uci: string }>,
+  historyIndex: number,
+  currentFen: string,
+  activeOpeningNodeId: string | null,
+): number | null {
+  const { nodeId: historyNodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, historyIndex);
+  let node = historyNodeId ? tree.nodes.find((candidate) => candidate.id === historyNodeId) : null;
+
+  if (!node && activeOpeningNodeId) {
+    const activeNode = tree.nodes.find((candidate) => candidate.id === activeOpeningNodeId);
+
+    if (activeNode && normalizeOpeningFen(activeNode.fen) === normalizeOpeningFen(currentFen)) {
+      node = activeNode;
+    }
+  }
+
+  if (!node || node.evalCp == null) {
+    return null;
+  }
+
+  return node.evalCp;
+}
+
+export function isPositionAnalysisCurrent(
+  positionAnalysis: AnalysisResult | null,
+  cachedAnalysis: AnalysisResult | undefined,
+): boolean {
+  if (!positionAnalysis || !cachedAnalysis) {
+    return false;
+  }
+
+  return positionAnalysis === cachedAnalysis;
+}
+
+export function resolveLinesBoardScoreLabel(options: {
+  linesBoardEvalCp: number | null;
+  orientation: 'white' | 'black';
+  currentEngineAnalysis: AnalysisResult | null;
+  engineAnalysisIsCurrent: boolean;
+}): string {
+  if (options.linesBoardEvalCp != null) {
+    return formatEvalCpLabel(options.linesBoardEvalCp, options.orientation);
+  }
+
+  if (options.engineAnalysisIsCurrent && options.currentEngineAnalysis) {
+    return formatScoreLabel(options.currentEngineAnalysis, options.orientation);
+  }
+
+  return formatEvalCpLabel(0, options.orientation);
+}
+
+export function resolveLinesBoardWhiteAdvantage(options: {
+  linesBoardEvalCp: number | null;
+  currentEngineAnalysis: AnalysisResult | null;
+  engineAnalysisIsCurrent: boolean;
+}): number {
+  if (options.linesBoardEvalCp != null) {
+    return getAdvantageMeterFromEvalCp(options.linesBoardEvalCp);
+  }
+
+  if (options.engineAnalysisIsCurrent && options.currentEngineAnalysis) {
+    return getAdvantageMeter(options.currentEngineAnalysis);
+  }
+
+  return LINES_BOARD_NEUTRAL_WHITE_ADVANTAGE;
+}

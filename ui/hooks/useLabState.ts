@@ -87,6 +87,7 @@ export function useLabState() {
   const [minForcedPlies, setMinForcedPlies] = useState(() => readStoredLinesFilter('chess-lab-min-plies', 4));
   const [minNodes, setMinNodes] = useState(() => readStoredLinesFilter('chess-lab-min-nodes', 0));
   const [minDepth, setMinDepth] = useState(() => readStoredLinesFilter('chess-lab-min-depth', 0));
+  const [learnMaxPly, setLearnMaxPly] = useState(() => readStoredLinesFilter('chess-lab-learn-max-ply', 0));
 
   useEffect(() => {
     localStorage.setItem('chess-lab-min-plies', minForcedPlies.toString());
@@ -99,6 +100,10 @@ export function useLabState() {
   useEffect(() => {
     localStorage.setItem('chess-lab-min-depth', minDepth.toString());
   }, [minDepth]);
+
+  useEffect(() => {
+    localStorage.setItem('chess-lab-learn-max-ply', learnMaxPly.toString());
+  }, [learnMaxPly]);
 
   const [activeOpeningTree, setActiveOpeningTree] = useState<OpeningTreeDetail | null>(null);
   const [openingTreesLoading, setOpeningTreesLoading] = useState(false);
@@ -256,6 +261,8 @@ export function useLabState() {
     setMinNodes,
     minDepth,
     setMinDepth,
+    learnMaxPly,
+    setLearnMaxPly,
     activeOpeningTree,
     setActiveOpeningTree,
     openingTreesLoading,

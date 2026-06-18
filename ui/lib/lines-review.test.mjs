@@ -600,6 +600,7 @@ test('buildLinesStudyDebugSnapshot summarizes learn and review context', () => {
     linesReviewIndex: 0,
     sessionTrainPlyCurrent: 0,
     sessionTrainPlyTotal: 0,
+    learnMaxPly: 0,
     currentFen: 'test-fen',
   });
 

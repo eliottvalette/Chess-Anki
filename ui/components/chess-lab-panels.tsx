@@ -230,6 +230,8 @@ export function LinesPanel({
   setMinNodes,
   minDepth,
   setMinDepth,
+  learnMaxPly,
+  setLearnMaxPly,
 }: {
   actionError: string;
   actionLoading: boolean;
@@ -265,6 +267,8 @@ export function LinesPanel({
   setMinNodes: (value: number) => void;
   minDepth: number;
   setMinDepth: (value: number) => void;
+  learnMaxPly: number;
+  setLearnMaxPly: (value: number) => void;
 }) {
   const filteredTrees = useMemo(
     () => trees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
@@ -290,6 +294,12 @@ export function LinesPanel({
     [activeTree, trainSide],
   );
   const inSession = linesStudyMode !== 'idle';
+  const atLearnLineEnd =
+    linesStudyMode === 'learn' &&
+    sessionTrainPlyTotal > 0 &&
+    sessionTrainPlyCurrent >= sessionTrainPlyTotal &&
+    deckFeedback?.correct === true;
+  const showNextLearnBranch = hasNextLearnBranch && (atLearnLineEnd || (learnBranchComplete && !inSession));
   const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
 
   const handleCopyStudyDebug = async () => {
@@ -495,6 +505,23 @@ export function LinesPanel({
                   </button>
                 </div>
               </div>
+              <div className="flex flex-col gap-0.5">
+                <p className="m-0 text-[10px] font-medium uppercase tracking-[0.08em] text-(--text-muted)">
+                  Learn depth cap
+                </p>
+                <label className="flex min-w-0 flex-col gap-1">
+                  <span className="text-[10px] font-normal text-(--text-soft)">Max ply (0 = full tree)</span>
+                  <input
+                    className="w-full rounded-md border border-(--border-soft) bg-transparent px-2 py-1.5 text-[13px] text-(--text) outline-none transition-[border-color] duration-150 focus:border-(--accent) disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={inSession}
+                    id="learn-max-ply"
+                    min={0}
+                    onChange={(event) => setLearnMaxPly(Math.max(0, Number(event.target.value) || 0))}
+                    type="number"
+                    value={learnMaxPly}
+                  />
+                </label>
+              </div>
             </div>
           ) : (
             <button
@@ -505,7 +532,7 @@ export function LinesPanel({
               {copyDebugLabel}
             </button>
           )}
-          {learnBranchComplete && !inSession && hasNextLearnBranch ? (
+          {showNextLearnBranch ? (
             <button
               className="box-border flex min-h-[48px] w-full shrink-0 items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.52)] bg-[rgba(56,148,115,0.34)] px-4 text-sm font-medium text-[#d8f8ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.72)] hover:bg-[rgba(56,148,115,0.48)]"
               onClick={onNextLearnBranch}
@@ -513,7 +540,7 @@ export function LinesPanel({
             >
               Next branch
             </button>
-          ) : learnBranchComplete && !inSession ? (
+          ) : (learnBranchComplete || atLearnLineEnd) && !showNextLearnBranch ? (
             <p className="m-0 shrink-0 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.12)] px-3 py-2 text-xs text-[#d8f8ec]">
               Branch complete.
             </p>
@@ -536,7 +563,7 @@ export function LinesPanel({
                     }`}
                   >
                     {linesStudyMode === 'learn'
-                      ? `Learn · move ${sessionTrainPlyCurrent}/${sessionTrainPlyTotal}`
+                      ? `Learn · move ${sessionTrainPlyCurrent}/${sessionTrainPlyTotal}${learnMaxPly > 0 ? ` · ≤${learnMaxPly}` : ''}`
                       : `Review · ${reviewIndex + 1}/${reviewQueueLength}`}
                   </span>
                 ) : null}
@@ -547,6 +574,7 @@ export function LinesPanel({
 
             <div className="flex shrink-0 items-center justify-between gap-2.5 text-xs text-(--text-soft)">
               <span>depth {activeTree.targetDepth}</span>
+              {learnMaxPly > 0 && linesStudyMode !== 'review' ? <span>cap ply {learnMaxPly}</span> : null}
               <span>{activeTree.nodes?.length ?? activeTree.nodeCount} nodes</span>
               {activeTree.dueCount > 0 ? <span>{activeTree.dueCount} weak</span> : null}
               {activeForkStats ? (

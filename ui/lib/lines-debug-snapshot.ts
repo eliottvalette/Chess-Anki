@@ -29,6 +29,7 @@ export type LinesStudyDebugInput = {
   linesReviewIndex: number;
   sessionTrainPlyCurrent: number;
   sessionTrainPlyTotal: number;
+  learnMaxPly: number;
   forkCoverage?: ForkCoverageMap;
   currentFen?: string;
   sessionLog?: LinesStudySessionLog | null;
@@ -85,6 +86,9 @@ export function buildLinesStudyDebugSnapshot(input: LinesStudyDebugInput) {
 
   if (input.linesStudyMode === 'learn') {
     lines.push(`learn: ply ${input.sessionTrainPlyCurrent}/${input.sessionTrainPlyTotal}`);
+    if (input.learnMaxPly > 0) {
+      lines.push(`learn max ply: ${input.learnMaxPly}`);
+    }
     lines.push(`branch complete: ${input.linesLearnBranchComplete ? 'yes' : 'no'}`);
 
     if (input.activeLearnBranch) {

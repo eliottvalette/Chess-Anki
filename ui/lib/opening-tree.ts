@@ -1205,6 +1205,16 @@ export function countTrainPliesInDrillPath(path: DrillPathStep[]): number {
   return path.filter((step) => step.isTrainTurn).length;
 }
 
+export function findLastTrainStepIndexInDrillPath(path: DrillPathStep[]): number {
+  for (let index = path.length - 1; index >= 0; index -= 1) {
+    if (path[index]?.isTrainTurn) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 export function isTrainableReviewNode(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>, nodeId: string): boolean {
   return resolveAcceptedTrainMoveUcis(tree, nodeId).acceptedUcis.length > 0;
 }
@@ -1901,6 +1911,40 @@ export function prepareOpeningTreeForLines(tree: OpeningTreeDetail, minForcedPli
   const rootPly = resolveOpeningTreeRootPly(tree, minForcedPlies);
 
   return filterOpeningTreeForDisplay(tree, rootPly);
+}
+
+export function applyLearnMaxPlyToOpeningTree(tree: OpeningTreeDetail, maxPly: number): OpeningTreeDetail {
+  if (maxPly <= 0) {
+    return tree;
+  }
+
+  const nodes = tree.nodes.filter((node) => node.ply <= maxPly);
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges = tree.edges.filter((edge) => nodeIds.has(edge.fromNodeId) && nodeIds.has(edge.toNodeId));
+
+  return {
+    ...tree,
+    nodes,
+    edges,
+    nodeCount: nodes.length,
+    targetDepth: Math.min(tree.targetDepth, maxPly),
+  };
+}
+
+export function resolveLinesStudyOpeningTree(
+  tree: OpeningTreeDetail | null,
+  linesStudyMode: 'idle' | 'learn' | 'review',
+  learnMaxPly: number,
+): OpeningTreeDetail | null {
+  if (!tree) {
+    return null;
+  }
+
+  if (linesStudyMode === 'review' || learnMaxPly <= 0) {
+    return tree;
+  }
+
+  return applyLearnMaxPlyToOpeningTree(tree, learnMaxPly);
 }
 
 export function filterOpeningTreeSummaries(trees: OpeningTreeSummary[], minForcedPlies: number): OpeningTreeSummary[] {

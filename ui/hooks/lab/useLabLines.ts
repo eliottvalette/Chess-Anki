@@ -36,6 +36,7 @@ import {
   prepareOpeningTreeForLines,
   replayToNodeUcis,
   resolveCanonicalRootNode,
+  resolveLinesStudyOpeningTree,
   resolveReviewAdvance,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
@@ -100,6 +101,7 @@ export function useLabLines(
     drillPathIndexRef,
     activeTrainSide,
     minForcedPlies,
+    learnMaxPly,
     linesStudyMode,
     setLinesStudyMode,
     linesReviewQueue,
@@ -403,40 +405,43 @@ export function useLabLines(
     [setLinesStudySessionLog],
   );
 
-  const markCurrentLearnBranchCompleted = useCallback(() => {
-    const branch = activeLearnBranchRef.current;
+  const markCurrentLearnBranchCompleted = useCallback(
+    (options?: { allowWithoutForkConfirm?: boolean }) => {
+      const branch = activeLearnBranchRef.current;
 
-    if (!branch) {
-      return;
-    }
+      if (!branch) {
+        return;
+      }
 
-    if (!learnBranchForkConfirmedRef.current) {
-      appendStudySessionLog('branch_complete_skipped', {
-        reason: 'opponent_branch_not_played',
+      if (!learnBranchForkConfirmedRef.current && !options?.allowWithoutForkConfirm) {
+        appendStudySessionLog('branch_complete_skipped', {
+          reason: 'opponent_branch_not_played',
+          forkNodeId: branch.forkNodeId,
+          edgeId: branch.edgeId,
+          edgeUci: branch.edgeUci,
+        });
+        return;
+      }
+
+      appendStudySessionLog('branch_complete', {
         forkNodeId: branch.forkNodeId,
         edgeId: branch.edgeId,
         edgeUci: branch.edgeUci,
       });
-      return;
-    }
 
-    appendStudySessionLog('branch_complete', {
-      forkNodeId: branch.forkNodeId,
-      edgeId: branch.edgeId,
-      edgeUci: branch.edgeUci,
-    });
+      setLinesCompletedLearnBranches((current) => {
+        if (isLearnBranchEdgeCompleted(branch.forkNodeId, { id: branch.edgeId, uci: branch.edgeUci }, current)) {
+          return current;
+        }
 
-    setLinesCompletedLearnBranches((current) => {
-      if (isLearnBranchEdgeCompleted(branch.forkNodeId, { id: branch.edgeId, uci: branch.edgeUci }, current)) {
-        return current;
-      }
-
-      return [...current, branch];
-    });
-    activeLearnBranchRef.current = null;
-    activeBranchEdgeIdRef.current = null;
-    setLinesActiveLearnBranch(null);
-  }, [appendStudySessionLog, learnBranchForkConfirmedRef, setLinesActiveLearnBranch, setLinesCompletedLearnBranches]);
+        return [...current, branch];
+      });
+      activeLearnBranchRef.current = null;
+      activeBranchEdgeIdRef.current = null;
+      setLinesActiveLearnBranch(null);
+    },
+    [appendStudySessionLog, learnBranchForkConfirmedRef, setLinesActiveLearnBranch, setLinesCompletedLearnBranches],
+  );
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -451,12 +456,14 @@ export function useLabLines(
 
       if (!step) {
         if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
-          markCurrentLearnBranchCompleted();
+          markCurrentLearnBranchCompleted({ allowWithoutForkConfirm: true });
           setLinesLearnBranchComplete(true);
           setLinesStudyMode('idle');
           setOpeningDrillExpected(null);
           setOpeningDrillStatus('Branch complete.');
           setOpeningDrillActive(false);
+          setDeckFeedback(null);
+          setDeckFeedbackArrowsVisible(false);
           return;
         }
 
@@ -519,7 +526,6 @@ export function useLabLines(
         playSound('move-opponent');
       }
 
-      setPositionAnalysis(null);
       setServerError('');
       if (step.isTrainTurn) {
         setDeckFeedback(null);
@@ -541,12 +547,14 @@ export function useLabLines(
 
         if (!drillExpected) {
           if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
-            markCurrentLearnBranchCompleted();
+            markCurrentLearnBranchCompleted({ allowWithoutForkConfirm: true });
             setLinesLearnBranchComplete(true);
             setLinesStudyMode('idle');
             setOpeningDrillExpected(null);
             setOpeningDrillStatus('Branch complete.');
             setOpeningDrillActive(false);
+            setDeckFeedback(null);
+            setDeckFeedbackArrowsVisible(false);
             return;
           }
 
@@ -575,12 +583,14 @@ export function useLabLines(
             advanceDrillToStepRef.current(nextIndex, { isOpponentMovePlayback: true });
           }, DRILL_OPPONENT_DELAY_MS);
         } else if (activeOpeningTree && linesStudyMode === 'learn') {
-          markCurrentLearnBranchCompleted();
+          markCurrentLearnBranchCompleted({ allowWithoutForkConfirm: true });
           setLinesLearnBranchComplete(true);
           setLinesStudyMode('idle');
           setOpeningDrillExpected(null);
           setOpeningDrillStatus('Branch complete.');
           setOpeningDrillActive(false);
+          setDeckFeedback(null);
+          setDeckFeedbackArrowsVisible(false);
         } else if (activeOpeningTree && linesStudyMode === 'review') {
           advanceReviewCardRef.current();
         } else {
@@ -617,7 +627,6 @@ export function useLabLines(
       setOpeningDrillExpected,
       setOpeningDrillStatus,
       setOpeningDrillActive,
-      setPositionAnalysis,
       setServerError,
       setShowArrow,
     ],
@@ -847,6 +856,7 @@ export function useLabLines(
       }
 
       const trainSide = overrideTrainSide ?? activeTrainSide;
+      const treeForLearn = resolveLinesStudyOpeningTree(tree, 'learn', learnMaxPly) ?? tree;
       setLinesCompletedLearnBranches([]);
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
@@ -859,12 +869,13 @@ export function useLabLines(
       setTimelineError('');
       setServerError('');
       setLinesStudySessionLog(createLinesStudySessionLog(tree.id, 'learn', trainSide));
-      beginLearnDrill(tree, trainSide, 'initial');
+      beginLearnDrill(treeForLearn, trainSide, 'initial');
     },
     [
       activeOpeningTree,
       activeTrainSide,
       beginLearnDrill,
+      learnMaxPly,
       setLinesCompletedLearnBranches,
       setLinesStudySessionLog,
       modeRef,
@@ -960,6 +971,8 @@ export function useLabLines(
       return;
     }
 
+    const treeForLearn = resolveLinesStudyOpeningTree(tree, 'learn', learnMaxPly) ?? tree;
+
     const previousBranch = activeLearnBranchRef.current;
 
     if (previousBranch) {
@@ -984,12 +997,13 @@ export function useLabLines(
     setDeckFeedbackArrowsVisible(false);
     setOpeningDrillStatus('');
     setLinesLearnBranchComplete(false);
-    beginLearnDrill(tree, activeTrainSide, 'next');
+    beginLearnDrill(treeForLearn, activeTrainSide, 'next');
   }, [
     activeOpeningTree,
     activeTrainSide,
     appendStudySessionLog,
     beginLearnDrill,
+    learnMaxPly,
     cancelDrillOpponentMove,
     linesCompletedLearnBranches.length,
     markCurrentLearnBranchCompleted,

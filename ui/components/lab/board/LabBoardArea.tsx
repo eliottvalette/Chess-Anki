@@ -36,6 +36,8 @@ export function LabBoardArea() {
   } = useLab();
 
   const isBlackOrientation = labState.orientation === 'black';
+  const linesEvalRailInstant = labState.mode === 'lines';
+  const evalRailTransitionClass = linesEvalRailInstant ? '' : 'transition-[height,width] duration-240 ease-linear';
 
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-(--border) bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-(--glass-shadow) [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
@@ -108,14 +110,14 @@ export function LabBoardArea() {
               style={{ ['--white-share' as string]: `${whiteAdvantage}%` }}
             >
               <div
-                className={`absolute w-full transition-[height,width] duration-240 ease-linear bg-linear-to-b from-[#04070c] to-[rgba(38,50,70,0.92)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${
+                className={`absolute w-full bg-linear-to-b from-[#04070c] to-[rgba(38,50,70,0.92)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${evalRailTransitionClass} ${
                   isBlackOrientation
                     ? 'bottom-0 h-[calc(100%-var(--white-share,50%))]'
                     : 'top-0 h-[calc(100%-var(--white-share,50%))]'
                 }`}
               />
               <div
-                className={`absolute w-full transition-[height,width] duration-240 ease-linear bg-linear-to-b from-[#f5f8ff] to-[#bcc8da] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-(--white-share,50%) ${
+                className={`absolute w-full bg-linear-to-b from-[#f5f8ff] to-[#bcc8da] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-(--white-share,50%) ${evalRailTransitionClass} ${
                   isBlackOrientation ? 'top-0 h-(--white-share,50%)' : 'bottom-0 h-(--white-share,50%)'
                 }`}
               />

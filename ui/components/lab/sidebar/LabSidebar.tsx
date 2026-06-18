@@ -171,6 +171,8 @@ export function LabSidebar() {
               setMinNodes={lab.labState.setMinNodes}
               minDepth={lab.labState.minDepth}
               setMinDepth={lab.labState.setMinDepth}
+              learnMaxPly={lab.labState.learnMaxPly}
+              setLearnMaxPly={lab.labState.setLearnMaxPly}
             />
           ) : (
             <TrainPanel

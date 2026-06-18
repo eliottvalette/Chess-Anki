@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  applyLearnMaxPlyToOpeningTree,
   buildDrillPath,
   buildForkCoverage,
   buildLearnDrillReplayUcis,
@@ -832,6 +833,144 @@ test('filterOpeningTreeForDisplay keeps only repertoire-connected nodes', () => 
   assert.equal(filtered.nodes.length, 2);
   assert.equal(filtered.edges.length, 1);
   assert.equal(filtered.edges[0]?.id, 'edge-main');
+});
+
+test('applyLearnMaxPlyToOpeningTree removes nodes deeper than the cap', () => {
+  const tree = {
+    id: 'tree-cap',
+    name: 'Cap test',
+    library: 'e4',
+    rootFenKey: 'root',
+    rootPly: 4,
+    rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
+    rootUci: ['e2e4', 'e7e5', 'g1f3', 'b8c6'],
+    sourceCount: 1,
+    targetDepth: 20,
+    nodeCount: 4,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'n4',
+        fen: 'fen4',
+        fenKey: 'k4',
+        ply: 4,
+        sideToMove: 'white',
+        bestUci: 'd2d4',
+        bestSan: 'd4',
+        evalCp: 30,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'n5',
+        fen: 'fen5',
+        fenKey: 'k5',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: 'd7d6',
+        bestSan: 'd6',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'n6',
+        fen: 'fen6',
+        fenKey: 'k6',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'f1b5',
+        bestSan: 'Bb5',
+        evalCp: 10,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'n7',
+        fen: 'fen7',
+        fenKey: 'k7',
+        ply: 7,
+        sideToMove: 'black',
+        bestUci: 'a7a6',
+        bestSan: 'a6',
+        evalCp: 0,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'e45',
+        fromNodeId: 'n4',
+        toNodeId: 'n5',
+        uci: 'd2d4',
+        san: 'd4',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: true,
+      },
+      {
+        id: 'e56',
+        fromNodeId: 'n5',
+        toNodeId: 'n6',
+        uci: 'd7d6',
+        san: 'd6',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+      {
+        id: 'e67',
+        fromNodeId: 'n6',
+        toNodeId: 'n7',
+        uci: 'f1b5',
+        san: 'Bb5',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: true,
+      },
+    ],
+  };
+
+  const capped = applyLearnMaxPlyToOpeningTree(tree, 5);
+
+  assert.equal(capped.nodes.length, 2);
+  assert.equal(capped.edges.length, 1);
+  assert.equal(capped.targetDepth, 5);
+  assert.deepEqual(
+    capped.nodes.map((node) => node.ply),
+    [4, 5],
+  );
 });
 
 test('sliceOpeningForest skips legacy catch-all trees when specific trees exist', () => {

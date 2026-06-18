@@ -1,6 +1,6 @@
 import { Chess, type Square } from 'chess.js';
 import type { CSSProperties } from 'react';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import {
@@ -24,8 +24,10 @@ import {
   buildOpeningDrillExpected,
   classifyLinesMove,
   type DrillPathStep,
+  findLastTrainStepIndexInDrillPath,
   resolveAcceptedTrainMoveUcis,
   resolveDrillPathStepIndexFromHistory,
+  resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
@@ -74,6 +76,7 @@ export function useLabGame(
     trainAllSession,
     linesStudyMode,
     linesLearnBranchComplete,
+    learnMaxPly,
     activeTrainSide,
     initialFen,
     setLinesStudySessionLog,
@@ -115,6 +118,11 @@ export function useLabGame(
     deckReplayInitialFenRef,
     deckReplayMovesRef,
   } = context;
+
+  const linesOpeningTree = useMemo(
+    () => resolveLinesStudyOpeningTree(activeOpeningTree, linesStudyMode, learnMaxPly),
+    [activeOpeningTree, learnMaxPly, linesStudyMode],
+  );
 
   const currentFen = game.fen();
   const hasLoadedGame = moveHistory.length > 0 || initialFen != null;
@@ -190,25 +198,23 @@ export function useLabGame(
         return;
       }
 
-      if (modeRef.current === 'lines' && openingDrillActive && activeOpeningNodeId && activeOpeningTree) {
+      if (modeRef.current === 'lines' && openingDrillActive && activeOpeningNodeId && linesOpeningTree) {
         const nodeId = activeOpeningNodeId;
         const drillExpected = openingDrillExpected;
         const acceptedMoves = drillExpected?.acceptedUcis ?? [];
         const primaryUci = drillExpected?.uci ?? null;
         const primarySan = drillExpected?.san ?? (primaryUci ? formatBestMove(currentFen, primaryUci) : null);
-        const linesClassification = classifyLinesMove(activeOpeningTree, nodeId, move.uci, {
+        const linesClassification = classifyLinesMove(linesOpeningTree, nodeId, move.uci, {
           primaryUci,
           acceptedUcis: acceptedMoves,
         });
         const correct = linesClassification.category !== 'miss';
         const exact = linesClassification.category === 'best';
-        const matchingEdge = activeOpeningTree.edges.find(
-          (edge) => edge.fromNodeId === nodeId && edge.uci === move.uci,
-        );
+        const matchingEdge = linesOpeningTree.edges.find((edge) => edge.fromNodeId === nodeId && edge.uci === move.uci);
         const truncatedHistory =
           historyIndex < moveHistory.length ? [...moveHistory.slice(0, historyIndex), move] : [...moveHistory, move];
         const nextHistoryIndex = truncatedHistory.length;
-        const acceptedFallback = resolveAcceptedTrainMoveUcis(activeOpeningTree, nodeId);
+        const acceptedFallback = resolveAcceptedTrainMoveUcis(linesOpeningTree, nodeId);
         const expectedUci = primaryUci ?? acceptedFallback.primaryUci ?? acceptedFallback.acceptedUcis[0] ?? null;
         const expectedSan =
           primarySan ?? acceptedFallback.primarySan ?? (expectedUci ? formatBestMove(currentFen, expectedUci) : null);
@@ -217,7 +223,6 @@ export function useLabGame(
         setHistoryIndex(nextHistoryIndex);
         clearVariation();
         setGame(nextGame);
-        setPositionAnalysis(null);
         setServerError('');
         setSelectedSquare(null);
         setSquareStyles({});
@@ -302,19 +307,22 @@ export function useLabGame(
               return;
             }
 
+            const drillPath = drillPathRef.current;
             let nextStepIndex = drillPathIndexRef.current + 1;
+            const lastTrainStepIndex = findLastTrainStepIndexInDrillPath(drillPath);
+            const onLastTrainMove = drillPathIndexRef.current === lastTrainStepIndex;
 
             if (matchingEdge) {
               const targetNodeId = matchingEdge.toNodeId;
               const nextStep = drillPathRef.current[nextStepIndex];
 
-              if (!nextStep || nextStep.nodeId !== targetNodeId) {
+              if (!onLastTrainMove && (!nextStep || nextStep.nodeId !== targetNodeId)) {
                 const forcedStepIndex = drillPathRef.current.findIndex((step) => step.nodeId === targetNodeId);
 
                 if (forcedStepIndex >= 0) {
                   nextStepIndex = forcedStepIndex;
                 } else {
-                  const newPath = buildDrillPath(activeOpeningTree, {
+                  const newPath = buildDrillPath(linesOpeningTree, {
                     trainSide: state.activeTrainSide,
                     startNodeId: targetNodeId,
                   });
@@ -330,12 +338,27 @@ export function useLabGame(
               setActiveOpeningNodeId(targetNodeId);
               setOpeningDrillStatus(linesClassification.category === 'best' ? 'Correct.' : 'Book move.');
 
-              if (matchingEdge) {
-                linesSession.markEdgeSeen(nodeId, matchingEdge.id);
-              }
+              linesSession.markEdgeSeen(nodeId, matchingEdge.id);
 
               scheduleLinesOpponentAction(() => {
+                if (onLastTrainMove) {
+                  const trailingOpponentStep = drillPathRef.current[nextStepIndex];
+
+                  if (trailingOpponentStep && !trailingOpponentStep.isTrainTurn) {
+                    advanceDrillToStepRef.current(nextStepIndex, { isOpponentMovePlayback: true });
+                    return;
+                  }
+
+                  advanceDrillToStepRef.current(drillPathRef.current.length);
+                  return;
+                }
+
                 advanceDrillToStepRef.current(nextStepIndex);
+              });
+            } else if (onLastTrainMove) {
+              setOpeningDrillStatus(linesClassification.category === 'best' ? 'Correct.' : 'Book move.');
+              scheduleLinesOpponentAction(() => {
+                advanceDrillToStepRef.current(drillPathRef.current.length);
               });
             } else {
               setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
@@ -348,7 +371,7 @@ export function useLabGame(
             );
           }
         } else if (correct && matchingEdge && linesStudyMode === 'learn') {
-          const nextNode = activeOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
+          const nextNode = linesOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
 
           if (nextNode) {
             setActiveOpeningNodeId(nextNode.id);
@@ -434,6 +457,7 @@ export function useLabGame(
       activeDeckCard,
       activeOpeningNodeId,
       activeOpeningTree,
+      linesOpeningTree,
       advanceDrillToStepRef,
       clearVariation,
       currentFen,
@@ -556,9 +580,9 @@ export function useLabGame(
       }
 
       const isLinesBrowse =
-        modeRef.current === 'lines' && activeOpeningTree && linesStudyMode === 'idle' && !openingDrillActive;
+        modeRef.current === 'lines' && linesOpeningTree && linesStudyMode === 'idle' && !openingDrillActive;
       const isLinesStudyNav =
-        modeRef.current === 'lines' && activeOpeningTree && linesStudyMode !== 'idle' && !linesLearnBranchComplete;
+        modeRef.current === 'lines' && linesOpeningTree && linesStudyMode !== 'idle' && !linesLearnBranchComplete;
       const boundedTarget = Math.max(0, Math.min(index, moveHistory.length));
 
       if (isLinesBrowse) {
@@ -599,7 +623,7 @@ export function useLabGame(
 
             if (path.length > 0) {
               const stepIndex = resolveDrillPathStepIndexFromHistory(
-                activeOpeningTree,
+                linesOpeningTree,
                 path,
                 moveHistory,
                 boundedTarget,
@@ -625,7 +649,7 @@ export function useLabGame(
           const path = drillPathRef.current;
 
           if (path.length > 0) {
-            const stepIndex = resolveDrillPathStepIndexFromHistory(activeOpeningTree, path, moveHistory, boundedTarget);
+            const stepIndex = resolveDrillPathStepIndexFromHistory(linesOpeningTree, path, moveHistory, boundedTarget);
             drillPathIndexRef.current = stepIndex;
             advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
           }
@@ -665,9 +689,9 @@ export function useLabGame(
       setGame(nextGame);
       clearSelection();
 
-      if (openingDrillActive && activeOpeningTree) {
+      if (openingDrillActive && linesOpeningTree) {
         const synced = linesSession.resyncFromHistory(
-          activeOpeningTree,
+          linesOpeningTree,
           historyForSync,
           boundedIndex,
           state.activeTrainSide,
@@ -676,7 +700,7 @@ export function useLabGame(
         setActiveOpeningNodeId(synced.nodeId);
 
         if (synced.isTrainTurn && synced.nodeId) {
-          const drillExpected = buildOpeningDrillExpected(activeOpeningTree, synced.nodeId);
+          const drillExpected = buildOpeningDrillExpected(linesOpeningTree, synced.nodeId);
           setOpeningDrillExpected(drillExpected);
         } else {
           setOpeningDrillExpected(null);
@@ -684,7 +708,7 @@ export function useLabGame(
 
         if (drillPathRef.current.length > 0 && linesStudyMode === 'learn') {
           const stepIndex = resolveDrillPathStepIndexFromHistory(
-            activeOpeningTree,
+            linesOpeningTree,
             drillPathRef.current,
             historyForSync,
             boundedIndex,
@@ -706,6 +730,7 @@ export function useLabGame(
       initialFen,
       drillPathIndexRef,
       linesLearnBranchComplete,
+      linesOpeningTree,
       linesSession,
       linesStudyMode,
       modeRef,

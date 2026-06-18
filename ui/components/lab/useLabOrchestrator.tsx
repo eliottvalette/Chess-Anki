@@ -42,6 +42,12 @@ import {
   summarizeDeckProgress,
   summarizeLineMastery,
 } from '@/lib/deck-progress';
+import {
+  isPositionAnalysisCurrent,
+  resolveLinesBoardEvalCp,
+  resolveLinesBoardScoreLabel,
+  resolveLinesBoardWhiteAdvantage,
+} from '@/lib/lines-board-eval';
 import { buildLinesStudyDebugSnapshot } from '@/lib/lines-debug-snapshot';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
@@ -52,7 +58,7 @@ import {
   isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
   normalizeOpeningFen,
-  resolveOpeningNodeFromHistory,
+  resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
@@ -530,28 +536,40 @@ export function useLabOrchestrator() {
     return preMoveAnalyses[historyIndex] ?? null;
   }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex]);
   const displayAnalysis = reviewDisplayAnalysis ?? positionAnalysis;
-  const linesBoardEvalCp = useMemo(() => {
+  const linesStudyTree = useMemo(() => {
     if (mode !== 'lines' || !activeOpeningTree) {
       return null;
     }
 
-    const resolvedNodeId = resolveOpeningNodeFromHistory(activeOpeningTree, moveHistory, historyIndex).nodeId;
-    const nodeId = resolvedNodeId ?? activeOpeningNodeId;
-    const openingNode = nodeId ? activeOpeningTree.nodes.find((node) => node.id === nodeId) : null;
-
-    return openingNode?.evalCp ?? null;
-  }, [activeOpeningNodeId, activeOpeningTree, historyIndex, mode, moveHistory]);
-  const boardScoreLabel = useMemo(() => {
-    if (displayAnalysis) {
-      return formatScoreLabel(displayAnalysis, orientation);
+    return resolveLinesStudyOpeningTree(activeOpeningTree, labState.linesStudyMode, labState.learnMaxPly);
+  }, [activeOpeningTree, labState.learnMaxPly, labState.linesStudyMode, mode]);
+  const linesPositionCacheKey = useMemo(
+    () => getPositionCacheKey(initialFen, currentMoveList, 'review'),
+    [currentMoveList, initialFen],
+  );
+  const linesEngineAnalysisIsCurrent = useMemo(
+    () => isPositionAnalysisCurrent(positionAnalysis, positionCacheRef.current.get(linesPositionCacheKey)),
+    [linesPositionCacheKey, positionAnalysis, positionCacheRef],
+  );
+  const linesBoardEvalCp = useMemo(() => {
+    if (!linesStudyTree) {
+      return null;
     }
 
+    return resolveLinesBoardEvalCp(linesStudyTree, moveHistory, historyIndex, currentFen, activeOpeningNodeId);
+  }, [activeOpeningNodeId, currentFen, historyIndex, linesStudyTree, moveHistory]);
+  const boardScoreLabel = useMemo(() => {
     if (mode === 'lines') {
-      if (linesBoardEvalCp != null) {
-        return formatEvalCpLabel(linesBoardEvalCp, orientation);
-      }
+      return resolveLinesBoardScoreLabel({
+        linesBoardEvalCp,
+        orientation,
+        currentEngineAnalysis: displayAnalysis,
+        engineAnalysisIsCurrent: linesEngineAnalysisIsCurrent,
+      });
+    }
 
-      return positionLoading ? '...' : '0.0';
+    if (displayAnalysis) {
+      return formatScoreLabel(displayAnalysis, orientation);
     }
 
     if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
@@ -573,18 +591,22 @@ export function useLabOrchestrator() {
     displayAnalysis,
     historyIndex,
     linesBoardEvalCp,
+    linesEngineAnalysisIsCurrent,
     mode,
     orientation,
-    positionLoading,
     trainUsesLivePositionEval,
   ]);
   const whiteAdvantage = useMemo(() => {
-    if (displayAnalysis) {
-      return getAdvantageMeter(displayAnalysis);
+    if (mode === 'lines') {
+      return resolveLinesBoardWhiteAdvantage({
+        linesBoardEvalCp,
+        currentEngineAnalysis: displayAnalysis,
+        engineAnalysisIsCurrent: linesEngineAnalysisIsCurrent,
+      });
     }
 
-    if (mode === 'lines' && linesBoardEvalCp != null) {
-      return getAdvantageMeterFromEvalCp(linesBoardEvalCp);
+    if (displayAnalysis) {
+      return getAdvantageMeter(displayAnalysis);
     }
 
     if (!trainUsesLivePositionEval && activeTrainMoveReview?.whiteEvalCp != null) {
@@ -606,6 +628,7 @@ export function useLabOrchestrator() {
     displayAnalysis,
     historyIndex,
     linesBoardEvalCp,
+    linesEngineAnalysisIsCurrent,
     mode,
     trainUsesLivePositionEval,
   ]);
@@ -2258,10 +2281,10 @@ export function useLabOrchestrator() {
       activeOpeningTree:
         labState.activeOpeningTree?.id === labState.selectedOpeningTreeId &&
         Array.isArray(labState.activeOpeningTree.nodes)
-          ? labState.activeOpeningTree
+          ? resolveLinesStudyOpeningTree(labState.activeOpeningTree, labState.linesStudyMode, labState.learnMaxPly)
           : null,
     }),
-    [labState, filteredOpeningTrees],
+    [filteredOpeningTrees, labState],
   );
 
   const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
@@ -2278,10 +2301,13 @@ export function useLabOrchestrator() {
       return false;
     }
 
-    return hasRemainingLearnBranches(tree, labState.activeTrainSide, labState.linesCompletedLearnBranches);
+    const learnTree = resolveLinesStudyOpeningTree(tree, 'learn', labState.learnMaxPly) ?? tree;
+
+    return hasRemainingLearnBranches(learnTree, labState.activeTrainSide, labState.linesCompletedLearnBranches);
   }, [
     labState.activeOpeningTree,
     labState.activeTrainSide,
+    labState.learnMaxPly,
     labState.linesCompletedLearnBranches,
     labState.linesLearnBranchComplete,
   ]);
@@ -2307,6 +2333,7 @@ export function useLabOrchestrator() {
         linesReviewIndex: labState.linesReviewIndex,
         sessionTrainPlyCurrent: labState.linesTrainPlyCurrent,
         sessionTrainPlyTotal: labState.linesTrainPlyTotal,
+        learnMaxPly: labState.learnMaxPly,
         forkCoverage: linesForkCoverage,
         currentFen,
         sessionLog: labState.linesStudySessionLog,
@@ -2329,6 +2356,7 @@ export function useLabOrchestrator() {
       labState.linesActiveLearnBranch,
       labState.linesTrainPlyCurrent,
       labState.linesTrainPlyTotal,
+      labState.learnMaxPly,
       labState.moveHistory,
       labState.openingDrillActive,
       labState.openingDrillExpected,

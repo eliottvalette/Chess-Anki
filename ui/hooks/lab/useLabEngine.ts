@@ -138,9 +138,12 @@ export function useLabEngine(
 
   // 1. Fetch current position analysis on history index / move change
   useEffect(() => {
+    if (mode === 'lines') {
+      return undefined;
+    }
+
     const requestId = ++positionRequestIdRef.current;
-    const positionProfile: PositionAnalysisProfile =
-      mode === 'lines' ? 'review' : activeDeckCard ? 'training' : 'review';
+    const positionProfile: PositionAnalysisProfile = activeDeckCard ? 'training' : 'review';
     const cacheKey = getPositionCacheKey(initialFen, currentMoveList, positionProfile);
     const cachedAnalysis = positionCacheRef.current.get(cacheKey);
 
@@ -185,6 +188,38 @@ export function useLabEngine(
     setPositionLoading,
     setServerError,
   ]);
+
+  // Lines study uses opening-tree eval for the rail; engine analysis is optional and debounced.
+  useEffect(() => {
+    if (mode !== 'lines') {
+      return undefined;
+    }
+
+    const cacheKey = getPositionCacheKey(initialFen, currentMoveList, 'review');
+    const cachedAnalysis = positionCacheRef.current.get(cacheKey);
+
+    if (cachedAnalysis) {
+      setPositionAnalysis(cachedAnalysis);
+      return undefined;
+    }
+
+    setPositionAnalysis(null);
+
+    const requestId = ++positionRequestIdRef.current;
+    const timer = window.setTimeout(() => {
+      void fetchCachedPositionAnalysis(cacheKey, currentFen, currentMoveList, initialFen, 'review')
+        .then((analysis) => {
+          if (positionRequestIdRef.current === requestId) {
+            setPositionAnalysis(analysis);
+          }
+        })
+        .catch(() => undefined);
+    }, 400);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [currentFen, currentMoveList, fetchCachedPositionAnalysis, initialFen, mode, setPositionAnalysis]);
 
   // 2. Pre-fetch train move review if we step forward during training
   useEffect(() => {
