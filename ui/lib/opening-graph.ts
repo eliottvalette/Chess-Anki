@@ -1030,8 +1030,8 @@ export function catalogToSummary(
   graph: Pick<OpeningGraphDraft, 'library' | 'trainSide' | 'targetDepth'>,
   catalog: OpeningCatalogDraft,
   progress: Map<string, OpeningGraphProgressEntry>,
-  graphNodes: OpeningTreeNode[],
-  graphEdges: OpeningTreeEdge[],
+  graphNodes: OpeningNodeDraft[] | OpeningTreeNode[],
+  graphEdges: OpeningEdgeDraft[] | OpeningTreeEdge[],
 ): OpeningTreeSummary {
   const subgraph = projectCatalogSubgraph(graph, graphNodes, graphEdges, catalog, progress);
 

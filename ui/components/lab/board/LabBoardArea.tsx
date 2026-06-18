@@ -36,8 +36,7 @@ export function LabBoardArea() {
   } = useLab();
 
   const isBlackOrientation = labState.orientation === 'black';
-  const linesEvalRailInstant = labState.mode === 'lines';
-  const evalRailTransitionClass = linesEvalRailInstant ? '' : 'transition-[height,width] duration-240 ease-linear';
+  const evalRailTransitionClass = 'transition-[height,width] duration-200 ease-out will-change-[height,width]';
 
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-2xl border border-(--border) bg-[rgba(8,13,21,0.5)] px-[18px] pb-4 pt-3.5 shadow-(--glass-shadow) [backdrop-filter:blur(22px)_saturate(1.2)] max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">

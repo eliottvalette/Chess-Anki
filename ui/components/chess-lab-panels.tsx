@@ -26,8 +26,16 @@ import {
 } from 'react';
 import '@xyflow/react/dist/style.css';
 
-function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: string | null; treeId: string | null }) {
-  const { fitView } = useReactFlow();
+function OpeningTreeGraphAutoFollow({
+  activeNodeId,
+  followNode,
+  treeId,
+}: {
+  activeNodeId: string | null;
+  followNode: boolean;
+  treeId: string | null;
+}) {
+  const { fitView, getNode, getZoom, setCenter } = useReactFlow();
   const previousTreeIdRef = useRef<string | null>(null);
   const previousNodeIdRef = useRef<string | null>(null);
 
@@ -39,7 +47,7 @@ function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: st
     const treeChanged = previousTreeIdRef.current !== treeId;
     previousTreeIdRef.current = treeId;
 
-    const nodeChanged = previousNodeIdRef.current !== activeNodeId;
+    const nodeChanged = followNode && previousNodeIdRef.current !== activeNodeId;
     previousNodeIdRef.current = activeNodeId;
 
     if (!treeChanged && !nodeChanged) {
@@ -47,14 +55,26 @@ function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: st
     }
 
     const runFollow = () => {
-      if (activeNodeId) {
-        void fitView({
-          nodes: [{ id: activeNodeId }],
-          maxZoom: 1.2,
-          minZoom: 0.25,
-          padding: treeChanged ? 0.5 : 0.35,
-          duration: treeChanged ? 400 : 0,
-        });
+      if (followNode && activeNodeId) {
+        if (treeChanged) {
+          void fitView({
+            nodes: [{ id: activeNodeId }],
+            maxZoom: 1.2,
+            minZoom: 0.25,
+            padding: 0.5,
+            duration: 400,
+          });
+          return;
+        }
+
+        const node = getNode(activeNodeId);
+
+        if (node) {
+          void setCenter(node.position.x + 78, node.position.y + 29, {
+            duration: 180,
+            zoom: Math.min(Math.max(getZoom(), 0.25), 1.2),
+          });
+        }
         return;
       }
 
@@ -66,7 +86,7 @@ function OpeningTreeGraphAutoFollow({ activeNodeId, treeId }: { activeNodeId: st
     requestAnimationFrame(() => {
       requestAnimationFrame(runFollow);
     });
-  }, [activeNodeId, fitView, treeId]);
+  }, [activeNodeId, fitView, followNode, getNode, getZoom, setCenter, treeId]);
 
   return null;
 }
@@ -184,7 +204,7 @@ export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedbac
 
   return (
     <div
-      className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-(--text) text-(--text-muted) px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
+      className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-(--text) text-(--text-muted) px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible transition-[border-color,background-color,color] duration-200 ease-out'} ${deckFeedback.pending ? 'border border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
     >
       <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
       <span>
@@ -304,6 +324,7 @@ export function LinesPanel({
   const inSession = linesStudyMode !== 'idle';
   const showNextLearnBranch = hasNextLearnBranch && learnBranchComplete && !inSession;
   const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
+  const graphSelectedNodeId = inSession ? null : activeNodeId;
 
   const handleCopyStudyDebug = async () => {
     await navigator.clipboard.writeText(studyDebugSnapshot());
@@ -317,11 +338,11 @@ export function LinesPanel({
     () => ({
       nodes: graphNodes.map((node) => ({
         ...node,
-        selected: node.id === activeNodeId,
+        selected: node.id === graphSelectedNodeId,
       })),
       edges: graphEdges,
     }),
-    [graphNodes, graphEdges, activeNodeId],
+    [graphNodes, graphEdges, graphSelectedNodeId],
   );
   const activeForkStats = useMemo(() => {
     if (!activeTree || !activeNodeId) {
@@ -576,7 +597,7 @@ export function LinesPanel({
           ) : null}
 
           <section
-            className={`relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
+            className={`relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] transition-[border-color,background-color,box-shadow] duration-200 ease-out ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
           >
             <div className="flex min-w-0 shrink-0 items-center justify-between gap-2.5">
               <div className="flex min-w-0 flex-col gap-1">
@@ -638,7 +659,7 @@ export function LinesPanel({
                     proOptions={{ hideAttribution: true }}
                   >
                     <Background />
-                    <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} treeId={activeTreeId} />
+                    <OpeningTreeGraphAutoFollow activeNodeId={activeNodeId} followNode treeId={activeTreeId} />
                   </ReactFlow>
                 </ReactFlowProvider>
               </OpeningTreeGraphInteractionContext.Provider>
@@ -740,7 +761,7 @@ const OpeningTreeGraphNode = memo(function OpeningTreeGraphNode({ id, data, sele
       <Handle className="opacity-0" position={Position.Top} type="target" />
       <button
         className={[
-          'flex min-h-[58px] w-[156px] cursor-pointer flex-col justify-center gap-1 rounded-[10px] border px-2.5 py-2 text-left text-(--text) shadow-[0_8px_20px_rgba(0,0,0,0.24)] [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-normal text-(--text-soft)',
+          'flex min-h-[58px] w-[156px] cursor-pointer flex-col justify-center gap-1 rounded-[10px] border px-2.5 py-2 text-left text-(--text) shadow-[0_8px_20px_rgba(0,0,0,0.24)] transition-[border-color,background-color,box-shadow] duration-200 ease-out [&_strong]:overflow-hidden [&_strong]:text-ellipsis [&_strong]:whitespace-nowrap [&_strong]:text-[13px] [&_span]:overflow-hidden [&_span]:text-ellipsis [&_span]:whitespace-nowrap [&_span]:text-[10px] font-normal text-(--text-soft)',
           selected
             ? 'border-[rgba(198,215,255,0.78)] shadow-[0_8px_22px_rgba(0,0,0,0.28),0_0_0_2px_rgba(198,215,255,0.16)]'
             : 'border-[rgba(214,226,244,0.24)]',
@@ -838,7 +859,7 @@ function buildOpeningTreeGraphEdges(
         id: edge.id,
         source: edge.fromNodeId,
         target: edge.toNodeId,
-        animated: edge.isEngineBest || isRemaining,
+        animated: drillActive ? isRemaining : edge.isEngineBest,
         label: edge.san,
         style: forkEdgeStyle,
         labelBgPadding: [6, 4],
@@ -1910,8 +1931,8 @@ function ReviewTimelineStrip({
           </div>
           <div className="relative h-[8px] overflow-hidden rounded-[999px] bg-[rgba(245,242,232,0.12)]">
             <span
-              className="absolute inset-[0_auto_0_0] min-w-[8px] rounded-[inherit] bg-gradient-linear bg-gradient-[90deg,#e65d55_0%,#f09a45_48%] shadow-[0_0_18px_rgba(240,154,69,0.34)] transition-width duration-180 ease-[ease]"
-              style={{ width: `${progressValue}%` }}
+              className="absolute inset-0 origin-left rounded-[inherit] bg-gradient-linear bg-gradient-[90deg,#e65d55_0%,#f09a45_48%] shadow-[0_0_18px_rgba(240,154,69,0.34)] transition-transform duration-200 ease-out will-change-transform"
+              style={{ transform: `scaleX(${progressValue / 100})` }}
             />
           </div>
         </div>
@@ -2552,8 +2573,8 @@ export function DeckPanel({
               aria-hidden="true"
             >
               <div
-                className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-180 ease-[ease]"
-                style={{ width: `${cardScore}%` }}
+                className="h-full w-full origin-left rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-transform duration-200 ease-out will-change-transform"
+                style={{ transform: `scaleX(${cardScore / 100})` }}
               />
             </div>
             <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
@@ -2571,14 +2592,14 @@ export function DeckPanel({
                 aria-label="Cram progress"
               >
                 <div
-                  className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-180 ease-[ease]"
-                  style={{ width: `${sessionProgressPercent}%` }}
+                  className="h-full w-full origin-left rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-transform duration-200 ease-out will-change-transform"
+                  style={{ transform: `scaleX(${sessionProgressPercent / 100})` }}
                 />
               </div>
             ) : null}
             {deckFeedback ? (
               <div
-                className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-(--text) text-(--text-muted) px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible'} ${deckFeedback.pending ? 'border border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
+                className={`${'flex flex-col gap-[5px] rounded-[8px] px-[10px] py-[9px] text-[12px] text-(--text) text-(--text-muted) px-[10px] py-[8px] text-[11px] leading-[1.35] block overflow-visible transition-[border-color,background-color,color] duration-200 ease-out'} ${deckFeedback.pending ? 'border border-solid border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]' : deckFeedback.correct ? 'border border-solid border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : 'border border-solid border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]'}`}
               >
                 <strong>{deckFeedback.pending ? 'Checking eval' : deckFeedback.correct ? 'Best move' : 'Miss'}</strong>
                 <span>
@@ -2654,8 +2675,8 @@ export function DeckPanel({
             aria-hidden="true"
           >
             <div
-              className="h-full rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-width duration-180 ease-[ease]"
-              style={{ width: `${activeLineMastery.masteryScore}%` }}
+              className="h-full w-full origin-left rounded-[inherit] bg-[rgba(138,227,193,0.72)] transition-transform duration-200 ease-out will-change-transform"
+              style={{ transform: `scaleX(${activeLineMastery.masteryScore / 100})` }}
             />
           </div>
           <div className="flex items-center justify-between gap-[10px] text-(--text-soft) text-[12px] text-[11px] leading-[1.3]">
