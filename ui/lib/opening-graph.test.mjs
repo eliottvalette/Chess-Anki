@@ -10,9 +10,16 @@ import {
   OPENING_CATALOG_PLY,
   projectCatalogSubgraph,
   projectCatalogToTreeDraft,
+  resolveOpeningCatalogTreeIdsAtFenKey,
   resolveOpeningGraphScope,
 } from './opening-graph.ts';
-import { buildOpeningTrees, mergeOpeningTreeDelta, parseSanMoves } from './opening-tree.ts';
+import {
+  buildOpeningTrees,
+  mergeOpeningTreeDelta,
+  normalizeOpeningFen,
+  parseSanMoves,
+  resolveOpeningTreeRootPly,
+} from './opening-tree.ts';
 
 const FOUR_KNIGHTS = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'Nf6'];
 
@@ -241,4 +248,107 @@ test('projectCatalogToTreeDraft keeps opening tree draft shape for legacy upsert
   assert.ok(draft.nodes.length > 0);
   assert.ok(draft.edges.length > 0);
   assert.equal(draft.rootSan.length, 4);
+});
+
+test('resolveOpeningCatalogTreeIdsAtFenKey matches catalogs on ancestor positions before catalog ply', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'g1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+      {
+        id: 'g2',
+        name: 'Sicilian',
+        trainSide: 'white',
+        moves: ['e4', 'c5', 'Nf3', 'd6'],
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+
+  const catalogs = forest.catalogs.map((catalog) => ({
+    id: catalog.id,
+    graphId: catalog.graphId,
+    entryNodeId: catalog.entryNodeId,
+    fenKey: catalog.fenKey,
+  }));
+  const nodes = graph.nodes.map((node) => ({
+    id: node.id,
+    graphId: graph.id,
+    fenKey: node.fenKey,
+  }));
+  const edges = graph.edges.map((edge) => ({
+    graphId: graph.id,
+    fromNodeId: edge.fromNodeId,
+    toNodeId: edge.toNodeId,
+  }));
+  const sicilianParsed = parseSanMoves(['e4', 'c5']);
+  const afterSicilianFenKey = normalizeOpeningFen(sicilianParsed[1].fenAfter);
+  const afterSicilianNode = graph.nodes.find((node) => node.fenKey === afterSicilianFenKey);
+
+  assert.ok(afterSicilianNode);
+
+  const treeIdsAtStart = resolveOpeningCatalogTreeIdsAtFenKey(
+    graph.nodes.find((node) => node.ply === 0).fenKey,
+    catalogs,
+    nodes,
+    edges,
+  );
+  assert.equal(treeIdsAtStart.length, catalogs.length);
+
+  const treeIdsAfterSicilian = resolveOpeningCatalogTreeIdsAtFenKey(afterSicilianNode.fenKey, catalogs, nodes, edges);
+  assert.equal(treeIdsAfterSicilian.length, 1);
+});
+
+test('resolveOpeningCatalogTreeIdsAtFenKey matches catalogs after catalog ply', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'g1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+
+  const catalogs = forest.catalogs.map((catalog) => ({
+    id: catalog.id,
+    graphId: catalog.graphId,
+    entryNodeId: catalog.entryNodeId,
+    fenKey: catalog.fenKey,
+  }));
+  const nodes = graph.nodes.map((node) => ({
+    id: node.id,
+    graphId: graph.id,
+    fenKey: node.fenKey,
+  }));
+  const edges = graph.edges.map((edge) => ({
+    graphId: graph.id,
+    fromNodeId: edge.fromNodeId,
+    toNodeId: edge.toNodeId,
+  }));
+  const afterItalianParsed = parseSanMoves(FOUR_KNIGHTS);
+  const afterBb5FenKey = normalizeOpeningFen(afterItalianParsed[4].fenAfter);
+
+  const treeIdsAfterBb5 = resolveOpeningCatalogTreeIdsAtFenKey(afterBb5FenKey, catalogs, nodes, edges);
+  assert.equal(treeIdsAfterBb5.length, 1);
+  assert.equal(treeIdsAfterBb5[0], catalogs[0].id);
+});
+
+test('resolveOpeningTreeRootPly clamps forced plies to the requested value below catalog ply', () => {
+  assert.equal(resolveOpeningTreeRootPly({ rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] }, 3), 3);
+  assert.equal(resolveOpeningTreeRootPly({ rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] }, 4), 4);
+  assert.equal(resolveOpeningTreeRootPly({ rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] }, 6), 4);
 });

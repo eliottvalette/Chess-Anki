@@ -52,8 +52,6 @@ import { buildLinesStudyDebugSnapshot } from '@/lib/lines-debug-snapshot';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
   classifyBoardMoveAtHistoryIndex,
-  filterOpeningTreeSummaries,
-  filterOpeningTreeSummariesByIds,
   hasRemainingLearnBranches,
   isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
@@ -2268,23 +2266,25 @@ export function useLabOrchestrator() {
     backgroundAttachment: 'fixed',
   } satisfies CSSProperties;
 
-  const filteredOpeningTrees = useMemo(() => {
-    const plyFiltered = filterOpeningTreeSummaries(labState.openingTrees, labState.minForcedPlies);
-
-    return filterOpeningTreeSummariesByIds(plyFiltered, labState.linesPositionFilterTreeIds);
-  }, [labState.linesPositionFilterTreeIds, labState.minForcedPlies, labState.openingTrees]);
+  const clearLinesBoardPosition = useCallback(() => {
+    setGame(new Chess());
+    setInitialFen(null);
+    setMoveHistory([]);
+    setHistoryIndex(0);
+    clearVariation();
+    labState.setLinesPositionFilterTreeIds(null);
+  }, [clearVariation, labState.setLinesPositionFilterTreeIds, setGame, setHistoryIndex, setInitialFen, setMoveHistory]);
 
   const overriddenLabState = useMemo(
     () => ({
       ...labState,
-      openingTrees: filteredOpeningTrees,
       activeOpeningTree:
         labState.activeOpeningTree?.id === labState.selectedOpeningTreeId &&
         Array.isArray(labState.activeOpeningTree.nodes)
           ? resolveLinesStudyOpeningTree(labState.activeOpeningTree, labState.linesStudyMode, labState.learnMaxPly)
           : null,
     }),
-    [filteredOpeningTrees, labState],
+    [labState],
   );
 
   const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
@@ -2399,6 +2399,7 @@ export function useLabOrchestrator() {
     quitLinesSession,
     stopOpeningDrill,
     importRecentOpeningTrees,
+    clearLinesBoardPosition,
     linesForkCoverage,
     linesHasNextLearnBranch,
     linesStudyDebugSnapshot,

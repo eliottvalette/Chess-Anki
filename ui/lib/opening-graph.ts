@@ -155,6 +155,76 @@ function deriveCatalogName(name: string, displaySan: string[]) {
   return displaySan.join(' ').slice(0, 96) || 'Opening';
 }
 
+export function collectReachableNodeIdsFromNode(
+  startNodeId: string,
+  edges: Array<{ fromNodeId: string; toNodeId: string }>,
+): Set<string> {
+  const reachable = new Set<string>([startNodeId]);
+  const queue = [startNodeId];
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!;
+
+    for (const edge of edges) {
+      if (edge.fromNodeId !== currentId || reachable.has(edge.toNodeId)) {
+        continue;
+      }
+
+      reachable.add(edge.toNodeId);
+      queue.push(edge.toNodeId);
+    }
+  }
+
+  return reachable;
+}
+
+export function resolveOpeningCatalogTreeIdsAtFenKey(
+  fenKey: string,
+  catalogs: Array<{ id: string; graphId: string; entryNodeId: string; fenKey: string }>,
+  nodes: Array<{ id: string; graphId: string; fenKey: string }>,
+  edges: Array<{ graphId: string; fromNodeId: string; toNodeId: string }>,
+): string[] {
+  const treeIds = new Set<string>();
+  const edgesByGraph = new Map<string, Array<{ fromNodeId: string; toNodeId: string }>>();
+
+  for (const edge of edges) {
+    const bucket = edgesByGraph.get(edge.graphId) ?? [];
+    bucket.push({ fromNodeId: edge.fromNodeId, toNodeId: edge.toNodeId });
+    edgesByGraph.set(edge.graphId, bucket);
+  }
+
+  for (const catalog of catalogs) {
+    if (catalog.fenKey === fenKey) {
+      treeIds.add(catalog.id);
+    }
+  }
+
+  for (const node of nodes) {
+    if (node.fenKey !== fenKey) {
+      continue;
+    }
+
+    const graphEdges = edgesByGraph.get(node.graphId) ?? [];
+    const forwardFromNode = collectReachableNodeIdsFromNode(node.id, graphEdges);
+    const graphCatalogs = catalogs.filter((catalog) => catalog.graphId === node.graphId);
+
+    for (const catalog of graphCatalogs) {
+      if (forwardFromNode.has(catalog.entryNodeId)) {
+        treeIds.add(catalog.id);
+        continue;
+      }
+
+      const forwardFromEntry = collectReachableNodeIdsFromNode(catalog.entryNodeId, graphEdges);
+
+      if (forwardFromEntry.has(node.id)) {
+        treeIds.add(catalog.id);
+      }
+    }
+  }
+
+  return [...treeIds];
+}
+
 function countReachableNodes(entryNodeId: string, nodes: OpeningNodeDraft[], edges: OpeningEdgeDraft[]): number {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const repertoireEdges = edges.filter((edge) => edge.recentCount > 0 || edge.cardCount > 0 || edge.mastersGames > 0);

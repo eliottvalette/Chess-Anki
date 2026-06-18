@@ -173,6 +173,9 @@ export function LabSidebar() {
               setMinDepth={lab.labState.setMinDepth}
               learnMaxPly={lab.labState.learnMaxPly}
               setLearnMaxPly={lab.labState.setLearnMaxPly}
+              positionFilterTreeIds={lab.labState.linesPositionFilterTreeIds}
+              positionFilterLoading={lab.labState.linesPositionFilterLoading}
+              onClearBoardPosition={lab.clearLinesBoardPosition}
             />
           ) : (
             <TrainPanel

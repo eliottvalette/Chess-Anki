@@ -371,11 +371,13 @@ export function resolveOpeningTreeRootPly(
 ): number {
   const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
 
-  if (storedRootPly > 0) {
-    return Math.max(storedRootPly, minForcedPlies);
+  if (storedRootPly === 0) {
+    return storedRootPly;
   }
 
-  return storedRootPly;
+  const requestedForcedPlies = Math.max(1, minForcedPlies);
+
+  return Math.min(storedRootPly, requestedForcedPlies);
 }
 
 export function filterOpeningTreeForDisplay(
@@ -1947,22 +1949,60 @@ export function resolveLinesStudyOpeningTree(
   return applyLearnMaxPlyToOpeningTree(tree, learnMaxPly);
 }
 
-export function filterOpeningTreeSummaries(trees: OpeningTreeSummary[], minForcedPlies: number): OpeningTreeSummary[] {
+export function filterOpeningTreeSummaries(trees: OpeningTreeSummary[]): OpeningTreeSummary[] {
   const withoutLegacy = trees.filter((tree) => !isLegacyCatchAllOpeningTree(tree));
   const sourceForest = withoutLegacy.length > 0 ? withoutLegacy : trees;
 
-  return sourceForest
-    .filter((tree) => {
-      const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  return sourceForest.filter((tree) => tree.nodeCount >= 2).sort((left, right) => right.sourceCount - left.sourceCount);
+}
 
-      if (storedRootPly === 0) {
-        return true;
-      }
+export function filterOpeningTreeSummariesByMinForcedPlies(
+  trees: OpeningTreeSummary[],
+  minForcedPlies: number,
+): OpeningTreeSummary[] {
+  const requestedForcedPlies = Math.max(1, minForcedPlies);
 
-      return storedRootPly >= minForcedPlies;
-    })
-    .filter((tree) => tree.nodeCount >= 2)
-    .sort((left, right) => right.sourceCount - left.sourceCount);
+  return trees.filter((tree) => {
+    const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+    if (storedRootPly === 0) {
+      return true;
+    }
+
+    return storedRootPly >= requestedForcedPlies;
+  });
+}
+
+export function formatBrowseForcedRootSan(
+  tree: Pick<OpeningTreeSummary, 'rootSan' | 'rootPly'>,
+  minForcedPlies: number,
+): string {
+  const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+  if (storedRootPly === 0 || tree.rootSan.length === 0) {
+    return 'Starting position';
+  }
+
+  const forcedPlies = resolveOpeningTreeRootPly(tree, minForcedPlies);
+
+  return tree.rootSan.slice(0, forcedPlies).join(' ');
+}
+
+export function formatBrowseForcedRootLine(
+  tree: Pick<OpeningTreeSummary, 'rootSan' | 'rootPly'>,
+  minForcedPlies: number,
+): { forced: string; continuation: string | null } {
+  const storedRootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+
+  if (storedRootPly === 0 || tree.rootSan.length === 0) {
+    return { forced: 'Starting position', continuation: null };
+  }
+
+  const forcedPlies = resolveOpeningTreeRootPly(tree, minForcedPlies);
+  const forced = tree.rootSan.slice(0, forcedPlies).join(' ');
+  const continuation = forcedPlies < tree.rootSan.length ? tree.rootSan.slice(forcedPlies).join(' ') : null;
+
+  return { forced, continuation };
 }
 
 export function sliceOpeningForest(forest: OpeningTreeDetail[], minForcedPlies: number): OpeningTreeDetail[] {

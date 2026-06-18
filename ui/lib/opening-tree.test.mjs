@@ -17,6 +17,9 @@ import {
   classifyRootPrefixMove,
   filterOpeningTreeForDisplay,
   filterOpeningTreeSummariesByIds,
+  filterOpeningTreeSummariesByMinForcedPlies,
+  formatBrowseForcedRootLine,
+  formatBrowseForcedRootSan,
   formatOpeningTreeDisplayName,
   LINES_MOVE_EVAL_GATE_CP,
   markForkEdgePlayed,
@@ -1452,6 +1455,43 @@ test('filterOpeningTreeSummariesByIds keeps only matching tree ids when filter i
     filterOpeningTreeSummariesByIds(trees, ['b', 'c']).map((tree) => tree.id),
     ['b', 'c'],
   );
+});
+
+test('filterOpeningTreeSummariesByMinForcedPlies hides trees below requested forced depth', () => {
+  const trees = [
+    { id: 'a', rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] },
+    { id: 'b', rootPly: 4, rootSan: ['e4', 'c5', 'Nf3', 'Nc6'] },
+  ];
+
+  assert.deepEqual(
+    filterOpeningTreeSummariesByMinForcedPlies(trees, 1).map((tree) => tree.id),
+    ['a', 'b'],
+  );
+  assert.deepEqual(
+    filterOpeningTreeSummariesByMinForcedPlies(trees, 6).map((tree) => tree.id),
+    [],
+  );
+});
+
+test('formatBrowseForcedRootSan truncates displayed prefix to forced plies', () => {
+  const tree = { rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] };
+
+  assert.equal(formatBrowseForcedRootSan(tree, 1), 'e4');
+  assert.equal(formatBrowseForcedRootSan(tree, 3), 'e4 e5 Nf3');
+  assert.equal(formatBrowseForcedRootSan(tree, 4), 'e4 e5 Nf3 Nc6');
+});
+
+test('formatBrowseForcedRootLine keeps catalog continuation visible when forced prefix is shorter', () => {
+  const tree = { rootPly: 4, rootSan: ['e4', 'e5', 'Nf3', 'Nc6'] };
+
+  assert.deepEqual(formatBrowseForcedRootLine(tree, 1), {
+    forced: 'e4',
+    continuation: 'e5 Nf3 Nc6',
+  });
+  assert.deepEqual(formatBrowseForcedRootLine(tree, 4), {
+    forced: 'e4 e5 Nf3 Nc6',
+    continuation: null,
+  });
 });
 
 test('prepareOpeningTreeAtFenWithBoard re-roots tree prefix from board history', () => {

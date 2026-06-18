@@ -9,6 +9,7 @@ import {
   graphDraftFromRows,
   type OpeningGraphDraft,
   projectCatalogSubgraph,
+  resolveOpeningCatalogTreeIdsAtFenKey,
 } from '@/lib/opening-graph';
 
 import {
@@ -614,23 +615,6 @@ async function fetchTreeIdsAtFenKey(
   profileId: string,
   fenKey: string,
 ): Promise<string[]> {
-  const treeIds = new Set<string>();
-
-  const { data: catalogRows, error: catalogError } = await supabase
-    .from('opening_catalog')
-    .select('id,fen_key')
-    .eq('owner_profile_id', profileId);
-
-  if (catalogError) {
-    throw new Error(catalogError.message);
-  }
-
-  for (const row of catalogRows ?? []) {
-    if (String(row.fen_key ?? '') === fenKey) {
-      treeIds.add(String(row.id));
-    }
-  }
-
   const { data: graphs, error: graphError } = await supabase
     .from('opening_graphs')
     .select('id')
@@ -643,39 +627,39 @@ async function fetchTreeIdsAtFenKey(
   const graphIds = (graphs ?? []).map((graph) => String(graph.id));
 
   if (graphIds.length === 0) {
-    return [...treeIds];
+    return [];
   }
 
-  const nodeRows = await fetchAllRows<{ graph_id: string }>(supabase, 'opening_nodes', 'graph_id', (query) =>
-    query.in('graph_id', graphIds).eq('fen_key', fenKey),
+  const [catalogRows, nodeRows, edgeRows] = await Promise.all([
+    fetchCatalogs(supabase, profileId),
+    fetchAllRows<{ id: string; graph_id: string; fen_key: string }>(
+      supabase,
+      'opening_nodes',
+      'id,graph_id,fen_key',
+      (query) => query.in('graph_id', graphIds).eq('fen_key', fenKey),
+    ),
+    fetchEdges(supabase, graphIds),
+  ]);
+
+  return resolveOpeningCatalogTreeIdsAtFenKey(
+    fenKey,
+    catalogRows.map((row) => ({
+      id: String(row.id),
+      graphId: String(row.graph_id),
+      entryNodeId: String(row.entry_node_id),
+      fenKey: String(row.fen_key ?? ''),
+    })),
+    nodeRows.map((row) => ({
+      id: String(row.id),
+      graphId: String(row.graph_id),
+      fenKey: String(row.fen_key ?? ''),
+    })),
+    edgeRows.map((row) => ({
+      graphId: String(row.graph_id),
+      fromNodeId: String(row.from_node_id),
+      toNodeId: String(row.to_node_id),
+    })),
   );
-
-  if (nodeRows.length === 0) {
-    return [...treeIds];
-  }
-
-  const { data: catalogsForNodes, error: lookupError } = await supabase
-    .from('opening_catalog')
-    .select('id,entry_node_id')
-    .eq('owner_profile_id', profileId)
-    .in(
-      'entry_node_id',
-      (
-        await fetchAllRows<{ id: string }>(supabase, 'opening_nodes', 'id', (query) =>
-          query.in('graph_id', graphIds).eq('fen_key', fenKey),
-        )
-      ).map((row) => String(row.id)),
-    );
-
-  if (lookupError) {
-    throw new Error(lookupError.message);
-  }
-
-  for (const row of catalogsForNodes ?? []) {
-    treeIds.add(String(row.id));
-  }
-
-  return [...treeIds];
 }
 
 async function fetchTreeSummaries(
