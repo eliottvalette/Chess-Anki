@@ -21,6 +21,8 @@ import {
   chooseWeightedOpponentEdge,
   DEFAULT_OPENING_TARGET_DEPTH,
   ensureDraftEdge,
+  listOpponentNodesForLichessEnrichment,
+  listOpponentNodesNeedingBookEnrichment,
   mapOpeningLibraryFromDb,
   normalizeOpeningFen,
   type OpeningBuildMode,
@@ -123,6 +125,10 @@ export async function POST(request: Request) {
 
     if (action === 'attempt') {
       return recordAttempt(profile, body);
+    }
+
+    if (action === 'enrich_book') {
+      return enrichOpponentBookMoves(profile);
     }
 
     if (action === 'next') {
@@ -590,11 +596,14 @@ async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
 }
 
 async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
-  const opponentNodes = draft.nodes
-    .filter((node) => node.recentGames > 0)
+  const opponentNodes = listOpponentNodesForLichessEnrichment(draft)
     .sort((left, right) => left.ply - right.ply)
     .slice(0, MAX_LICHESS_IMPORT_NODES);
 
+  await enrichLichessBookMovesForNodes(draft, opponentNodes);
+}
+
+async function enrichLichessBookMovesForNodes(draft: OpeningTreeDraft, opponentNodes: OpeningTreeDraft['nodes']) {
   for (const node of opponentNodes) {
     try {
       const explorer = await fetchLichessOpeningExplorer(node.fen);
@@ -617,6 +626,44 @@ async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
       // External explorer is opportunistic; recent games/cards remain the base tree.
     }
   }
+}
+
+async function enrichOpponentBookMoves(profile: TrainingProfileCookie) {
+  const supabase = createAdminClient();
+  const bundles = await loadExistingGraphBundles(supabase, profile.id);
+
+  if (bundles.length === 0) {
+    return NextResponse.json({ enrichedNodes: 0, newEdges: 0 });
+  }
+
+  const graphs: OpeningGraphDraft[] = [];
+  const catalogs = [];
+  let enrichedNodes = 0;
+  let newEdges = 0;
+
+  for (const bundle of bundles) {
+    const graph = graphDraftFromRows(bundle.graphRow, bundle.nodeRows, bundle.edgeRows);
+    const draft = asTreeDraft(graph);
+    const beforeEdgeCount = draft.edges.length;
+    const opponentNodes = listOpponentNodesNeedingBookEnrichment(draft)
+      .sort((left, right) => left.ply - right.ply)
+      .slice(0, MAX_LICHESS_IMPORT_NODES);
+
+    if (opponentNodes.length > 0) {
+      await enrichLichessBookMovesForNodes(draft, opponentNodes);
+      enrichedNodes += opponentNodes.length;
+    }
+
+    newEdges += draft.edges.length - beforeEdgeCount;
+    graphs.push(graph);
+    catalogs.push(...bundle.catalogRows.map((row) => catalogDraftFromRow(row)));
+  }
+
+  if (newEdges > 0) {
+    await upsertForestDraft(supabase, profile.id, { graphs, catalogs });
+  }
+
+  return NextResponse.json({ enrichedNodes, newEdges });
 }
 
 async function loadOwnerGraphForest(

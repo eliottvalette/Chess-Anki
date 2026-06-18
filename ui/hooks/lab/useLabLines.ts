@@ -18,6 +18,7 @@ import {
 import { appendLinesStudySessionEntry, createLinesStudySessionLog } from '@/lib/lines-study-session-log.ts';
 import {
   alignOpeningTreeWithBoardPosition,
+  buildLearnDrillExpectedFromStep,
   buildLearnDrillReplayUcis,
   buildLearnDrillStartupUcis,
   buildOpeningDrillExpected,
@@ -25,6 +26,7 @@ import {
   countTrainPliesInDrillPath,
   type DrillPathStep,
   ensureOpeningTreeRootPrefix,
+  extendDrillPathFromNode,
   findEarliestForkNodeId,
   findPathToNode,
   isLearnBranchEdgeCompleted,
@@ -153,6 +155,7 @@ export function useLabLines(
   const { learnBranchForkConfirmedRef } = context;
 
   const drillTimeoutRef = useRef<number | null>(null);
+  const learnSourceTreeRef = useRef<OpeningTreeDetail | null>(null);
 
   const cancelDrillOpponentMove = useCallback(() => {
     if (drillTimeoutRef.current) {
@@ -501,6 +504,23 @@ export function useLabLines(
       }
 
       if (!step) {
+        if (!syncOnly) {
+          const treeForPathExtension =
+            resolveLinesStudyOpeningTree(learnSourceTreeRef.current ?? activeOpeningTree, 'learn', learnMaxPly) ??
+            learnSourceTreeRef.current ??
+            activeOpeningTree;
+
+          if (treeForPathExtension) {
+            const extended = extendDrillPathFromNode(treeForPathExtension, path, activeTrainSide);
+
+            if (extended.length > path.length) {
+              drillPathRef.current = extended;
+              advanceDrillToStepRef.current(stepIndex);
+              return;
+            }
+          }
+        }
+
         if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
           markCurrentLearnBranchCompleted({ allowWithoutForkConfirm: true });
           setLinesLearnBranchComplete(true);
@@ -530,8 +550,11 @@ export function useLabLines(
 
       setActiveOpeningNodeId(step.nodeId);
 
-      if (!syncOnly && isOpponentMovePlayback && step.edgeUciFromParent) {
-        const parentStep = path[stepIndex - 1];
+      const parentStep = path[stepIndex - 1];
+      const shouldPlayOpponentMove =
+        !syncOnly && isOpponentMovePlayback && step.edgeUciFromParent && parentStep && !parentStep.isTrainTurn;
+
+      if (shouldPlayOpponentMove) {
         const connectingEdge =
           parentStep && activeOpeningTree
             ? activeOpeningTree.edges.find(
@@ -539,7 +562,7 @@ export function useLabLines(
               )
             : null;
 
-        if (connectingEdge && parentStep) {
+        if (connectingEdge) {
           linesSession.markEdgeSeen(parentStep.nodeId, connectingEdge.id);
         }
 
@@ -548,7 +571,7 @@ export function useLabLines(
         if (
           activeBranch &&
           step.edgeUciFromParent === activeBranch.edgeUci &&
-          path[stepIndex - 1]?.nodeId === activeBranch.forkNodeId
+          parentStep.nodeId === activeBranch.forkNodeId
         ) {
           learnBranchForkConfirmedRef.current = true;
           appendStudySessionLog('opponent_branch_played', {
@@ -558,7 +581,7 @@ export function useLabLines(
           });
         }
 
-        const opponentUci = step.edgeUciFromParent;
+        const opponentUci = step.edgeUciFromParent!;
         const currentHistory = moveHistoryRef.current;
         const currentIndex = historyIndexRef.current;
         const boardFen = restoreGameFromHistory(currentHistory, initialFenRef.current, currentIndex).fen();
@@ -580,16 +603,19 @@ export function useLabLines(
       clearSelection();
 
       if (step.isTrainTurn) {
-        const drillExpected = activeOpeningTree
-          ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
-          : step.bestUci
-            ? {
-                nodeId: step.nodeId,
-                uci: step.bestUci,
-                san: step.bestSan,
-                acceptedUcis: [step.bestUci],
-              }
-            : null;
+        const drillExpected =
+          linesStudyMode === 'learn'
+            ? buildLearnDrillExpectedFromStep(step, path[stepIndex + 1] ?? null)
+            : activeOpeningTree
+              ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
+              : step.bestUci
+                ? {
+                    nodeId: step.nodeId,
+                    uci: step.bestUci,
+                    san: step.bestSan,
+                    acceptedUcis: [step.bestUci],
+                  }
+                : null;
 
         if (!drillExpected) {
           if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
@@ -622,6 +648,27 @@ export function useLabLines(
         setOpeningDrillExpected(null);
         const nextIndex = stepIndex + 1;
         const nextStep = path[nextIndex];
+
+        if (!nextStep) {
+          const treeForPathExtension =
+            resolveLinesStudyOpeningTree(learnSourceTreeRef.current ?? activeOpeningTree, 'learn', learnMaxPly) ??
+            learnSourceTreeRef.current ??
+            activeOpeningTree;
+
+          if (treeForPathExtension) {
+            const extended = extendDrillPathFromNode(treeForPathExtension, path, activeTrainSide);
+
+            if (extended.length > path.length) {
+              drillPathRef.current = extended;
+              setLinesTrainPlyTotal(countTrainPliesInDrillPath(extended));
+              cancelDrillOpponentMove();
+              drillTimeoutRef.current = window.setTimeout(() => {
+                advanceDrillToStepRef.current(nextIndex, { isOpponentMovePlayback: true });
+              }, DRILL_OPPONENT_DELAY_MS);
+              return;
+            }
+          }
+        }
 
         if (nextStep) {
           cancelDrillOpponentMove();
@@ -658,6 +705,8 @@ export function useLabLines(
       drillPathIndexRef,
       drillPathRef,
       linesSession,
+      learnMaxPly,
+      learnSourceTreeRef,
       markCurrentLearnBranchCompleted,
       playSound,
       setActiveOpeningNodeId,
@@ -682,19 +731,26 @@ export function useLabLines(
 
   const beginLearnDrill = useCallback(
     (tree: OpeningTreeDetail, trainSide: OpeningSide, pickTrigger: 'initial' | 'next' = 'initial') => {
-      const boardHistorySnapshot = moveHistoryRef.current;
-      const boardHistoryIndexSnapshot = historyIndexRef.current;
+      const sourceTree = pickTrigger === 'next' ? (learnSourceTreeRef.current ?? tree) : tree;
       const alignedTree =
-        alignOpeningTreeWithBoardPosition(
-          tree,
-          boardHistorySnapshot,
-          boardHistoryIndexSnapshot,
-          initialFenRef.current,
-        ) ?? tree;
+        pickTrigger === 'next'
+          ? sourceTree
+          : (alignOpeningTreeWithBoardPosition(
+              tree,
+              moveHistoryRef.current,
+              historyIndexRef.current,
+              initialFenRef.current,
+            ) ?? tree);
       const treeForDrill = ensureOpeningTreeRootPrefix(alignedTree);
 
-      if (treeForDrill !== tree) {
+      if (pickTrigger === 'initial') {
+        learnSourceTreeRef.current = treeForDrill;
+      }
+
+      if (pickTrigger === 'initial' && treeForDrill !== tree) {
         setActiveOpeningTree(treeForDrill);
+      } else if (pickTrigger === 'next' && learnSourceTreeRef.current) {
+        setActiveOpeningTree(learnSourceTreeRef.current);
       }
 
       const completedBefore = linesCompletedLearnBranches;
@@ -731,7 +787,7 @@ export function useLabLines(
         replayUcis.length > 0 ? path.findIndex((step) => step.edgeUciFromParent === replayUcis.at(-1)) : -1;
 
       const remainingAtFork =
-        branchForkNodeId != null ? listSiblingBranchEdges(tree, branchForkNodeId, completedBefore) : [];
+        branchForkNodeId != null ? listSiblingBranchEdges(treeForDrill, branchForkNodeId, completedBefore) : [];
       appendStudySessionLog('branch_picked', {
         trigger: pickTrigger,
         forkNodeId: branchForkNodeId ?? 'none',
@@ -1036,7 +1092,7 @@ export function useLabLines(
   );
 
   const startNextLearnBranch = useCallback(() => {
-    const tree = activeOpeningTree;
+    const tree = learnSourceTreeRef.current ?? activeOpeningTree;
 
     if (!tree) {
       return;
@@ -1105,6 +1161,7 @@ export function useLabLines(
     activeBranchEdgeIdRef.current = null;
     drillPathRef.current = [];
     drillPathIndexRef.current = 0;
+    learnSourceTreeRef.current = null;
     linesSession.clearSession();
   }, [
     cancelDrillOpponentMove,

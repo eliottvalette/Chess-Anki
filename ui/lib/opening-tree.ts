@@ -308,6 +308,33 @@ export function buildOpeningDrillExpected(
   };
 }
 
+export function buildLearnDrillExpectedFromStep(
+  step: {
+    nodeId: string;
+    bestUci: string | null;
+    bestSan: string | null;
+  },
+  nextStep?: {
+    edgeSanFromParent: string | null;
+    edgeUciFromParent: string | null;
+  } | null,
+): OpeningDrillExpectedMove | null {
+  const uci = step.bestUci ?? nextStep?.edgeUciFromParent ?? null;
+
+  if (!uci) {
+    return null;
+  }
+
+  const san = step.bestSan ?? nextStep?.edgeSanFromParent ?? null;
+
+  return {
+    nodeId: step.nodeId,
+    uci,
+    san,
+    acceptedUcis: [uci],
+  };
+}
+
 export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string, acceptedUcis: string[]) {
   return acceptedUcis.includes(playedUci);
 }
@@ -488,6 +515,13 @@ export function classifyLinesMove(
 
   if (primaryUci != null && playedUci === primaryUci) {
     return { category: 'best', evalLossCp: 0 };
+  }
+
+  if (expected != null && expected.acceptedUcis.length > 0 && !expected.acceptedUcis.includes(playedUci)) {
+    return {
+      category: 'miss',
+      evalLossCp: computeTrainMoveEvalLossCp(tree, nodeId, playedUci, expected.acceptedUcis),
+    };
   }
 
   if (edge && isRepertoireEdge(edge)) {
@@ -1372,17 +1406,102 @@ export function chooseWeightedOpponentEdge(edges: OpeningTreeEdge[], seed = Date
 }
 
 function chooseDeterministicOpponentEdge(outgoing: OpeningTreeEdge[]): OpeningTreeEdge | null {
+  return rankOpponentEdgesForDrill(outgoing)[0] ?? null;
+}
+
+export function rankOpponentEdgesForDrill(outgoing: OpeningTreeEdge[]): OpeningTreeEdge[] {
   const repertoire = outgoing.filter((edge) => isRepertoireEdge(edge));
   const pool = repertoire.length > 0 ? repertoire : outgoing;
-  const sorted = [...pool].sort(
+
+  return [...pool].sort(
     (left, right) =>
       right.recentCount - left.recentCount ||
       right.mastersGames - left.mastersGames ||
       Number(right.isEngineBest) - Number(left.isEngineBest) ||
       right.priority - left.priority,
   );
+}
 
-  return sorted[0] ?? null;
+export function listOpponentNodesForLichessEnrichment(
+  draft: Pick<OpeningTreeDraft, 'nodes' | 'edges' | 'trainSide'>,
+): OpeningNodeDraft[] {
+  return draft.nodes.filter((node) => {
+    if (node.sideToMove === draft.trainSide) {
+      return false;
+    }
+
+    if (node.recentGames > 0) {
+      return true;
+    }
+
+    return draft.edges.some((edge) => edge.toNodeId === node.id && isRepertoireEdge(edge));
+  });
+}
+
+export function listOpponentNodesNeedingBookEnrichment(
+  draft: Pick<OpeningTreeDraft, 'nodes' | 'edges' | 'trainSide'>,
+): OpeningNodeDraft[] {
+  return listOpponentNodesForLichessEnrichment(draft).filter(
+    (node) => !draft.edges.some((edge) => edge.fromNodeId === node.id && isRepertoireEdge(edge)),
+  );
+}
+
+function rankTrainEdgesForDrill(
+  outgoing: OpeningTreeEdge[],
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  node: OpeningTreeNode,
+): OpeningTreeEdge[] {
+  const validMoves = outgoing.filter((edge) => {
+    if (edge.isEngineBest || edge.mastersGames > 0) {
+      return true;
+    }
+
+    const target = tree.nodes.find((candidate) => candidate.id === edge.toNodeId);
+
+    if (!target || node.evalCp == null || target.evalCp == null) {
+      return true;
+    }
+
+    const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
+
+    return swing > -30;
+  });
+  const pool = validMoves.length > 0 ? validMoves : outgoing;
+
+  return [...pool].sort((left, right) => right.recentCount - left.recentCount);
+}
+
+function pickDrillOutgoingEdge(
+  outgoing: OpeningTreeEdge[],
+  options: {
+    isTrainTurn: boolean;
+    forcedUci?: string;
+    visited: Set<string>;
+    tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>;
+    node: OpeningTreeNode;
+  },
+): OpeningTreeEdge | null {
+  if (options.forcedUci) {
+    const forcedEdge = outgoing.find((edge) => edge.uci === options.forcedUci) ?? null;
+
+    if (!forcedEdge || options.visited.has(forcedEdge.toNodeId)) {
+      return null;
+    }
+
+    return forcedEdge;
+  }
+
+  const ranked = options.isTrainTurn
+    ? rankTrainEdgesForDrill(outgoing, options.tree, options.node)
+    : rankOpponentEdgesForDrill(outgoing);
+
+  for (const edge of ranked) {
+    if (!options.visited.has(edge.toNodeId)) {
+      return edge;
+    }
+  }
+
+  return ranked.find((edge) => edge.isEngineBest) ?? null;
 }
 
 export function countTrainPliesInDrillPath(path: DrillPathStep[]): number {
@@ -1639,6 +1758,64 @@ function scoreBranchEdge(
   return { weakNodes, recentCount: edge.recentCount };
 }
 
+function attachDrillPathParentEdges(
+  tree: Pick<OpeningTreeDetail, 'edges'>,
+  path: DrillPathStep[],
+  startIndex = 1,
+): void {
+  for (let index = Math.max(1, startIndex); index < path.length; index += 1) {
+    const step = path[index]!;
+    const parentStep = path[index - 1]!;
+    const connectingEdge = tree.edges.find(
+      (edge) => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
+    );
+    step.edgeSanFromParent = connectingEdge?.san ?? null;
+    step.edgeUciFromParent = connectingEdge?.uci ?? null;
+  }
+}
+
+export function extendDrillPathFromNode(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+  path: DrillPathStep[],
+  trainSide: OpeningSide,
+): DrillPathStep[] {
+  const lastStep = path.at(-1);
+
+  if (!lastStep) {
+    return path;
+  }
+
+  const continuation = buildDrillPath(tree, { trainSide, startNodeId: lastStep.nodeId });
+
+  if (continuation.length <= 1) {
+    return path;
+  }
+
+  const merged = [...path];
+  const seenNodeIds = new Set(path.map((step) => step.nodeId));
+
+  for (const continuationStep of continuation.slice(1)) {
+    if (seenNodeIds.has(continuationStep.nodeId)) {
+      break;
+    }
+
+    merged.push({
+      ...continuationStep,
+      edgeSanFromParent: null,
+      edgeUciFromParent: null,
+    });
+    seenNodeIds.add(continuationStep.nodeId);
+  }
+
+  if (merged.length === path.length) {
+    return path;
+  }
+
+  attachDrillPathParentEdges(tree, merged, path.length);
+
+  return merged;
+}
+
 export function pickLearnBranch(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
   trainSide: OpeningSide,
@@ -1652,8 +1829,10 @@ export function pickLearnBranch(
   const forkNodeIds = listLearnBranchForkCandidates(tree, trainSide);
 
   if (forkNodeIds.length === 0) {
+    const path = buildDrillPath(tree, { trainSide });
+
     return {
-      path: buildDrillPath(tree, { trainSide }),
+      path: extendDrillPathFromNode(tree, path, trainSide),
       branchEdgeId: null,
       branchForkNodeId: null,
       branchEdgeUci: null,
@@ -1684,8 +1863,10 @@ export function pickLearnBranch(
     });
     const chosen = ranked[0]!;
 
+    const path = buildDrillPath(tree, { trainSide, forcedEdges: { [forkNodeId]: chosen.uci } });
+
     return {
-      path: buildDrillPath(tree, { trainSide, forcedEdges: { [forkNodeId]: chosen.uci } }),
+      path: extendDrillPathFromNode(tree, path, trainSide),
       branchEdgeId: chosen.id,
       branchForkNodeId: forkNodeId,
       branchEdgeUci: chosen.uci,
@@ -1712,8 +1893,23 @@ export function hasRemainingLearnBranches(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
   trainSide: OpeningSide,
   completedBranches: LearnBranchCompletion[],
+  activeBranch?: Pick<LearnBranchCompletion, 'forkNodeId' | 'edgeId' | 'edgeUci'> | null,
 ): boolean {
-  return pickLearnBranch(tree, trainSide, completedBranches).branchEdgeId != null;
+  const nextBranch = pickLearnBranch(tree, trainSide, completedBranches);
+
+  if (!nextBranch.branchEdgeId || !nextBranch.branchForkNodeId || !nextBranch.branchEdgeUci) {
+    return false;
+  }
+
+  if (
+    activeBranch &&
+    activeBranch.forkNodeId === nextBranch.branchForkNodeId &&
+    activeBranch.edgeUci === nextBranch.branchEdgeUci
+  ) {
+    return false;
+  }
+
+  return true;
 }
 
 export function applyOpeningAttemptScore(currentScore: number, correct: boolean) {
@@ -1787,22 +1983,13 @@ export function buildDrillPath(
     let chosenEdge: OpeningTreeEdge | null = null;
     const forcedUci = options.forcedEdges?.[currentNodeId];
 
-    if (forcedUci) {
-      chosenEdge = outgoing.find((edge) => edge.uci === forcedUci) ?? null;
-    } else if (isTrainTurn) {
-      const validMoves = outgoing.filter((edge) => {
-        if (edge.isEngineBest || edge.mastersGames > 0) return true;
-        const target = tree.nodes.find((node) => node.id === edge.toNodeId);
-        if (!target || node.evalCp == null || target.evalCp == null) return true;
-        const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
-        return swing > -30;
-      });
-      const pool = validMoves.length > 0 ? validMoves : outgoing;
-      const sorted = [...pool].sort((left, right) => right.recentCount - left.recentCount);
-      chosenEdge = sorted[0] ?? outgoing.find((edge) => edge.isEngineBest) ?? null;
-    } else {
-      chosenEdge = chooseDeterministicOpponentEdge(outgoing);
-    }
+    chosenEdge = pickDrillOutgoingEdge(outgoing, {
+      isTrainTurn,
+      forcedUci,
+      visited,
+      tree,
+      node,
+    });
 
     if (!chosenEdge) {
       break;
@@ -1817,15 +2004,7 @@ export function buildDrillPath(
     }
   }
 
-  for (let index = 1; index < path.length; index += 1) {
-    const step = path[index]!;
-    const parentStep = path[index - 1]!;
-    const connectingEdge = tree.edges.find(
-      (edge) => edge.fromNodeId === parentStep.nodeId && edge.toNodeId === step.nodeId,
-    );
-    step.edgeSanFromParent = connectingEdge?.san ?? null;
-    step.edgeUciFromParent = connectingEdge?.uci ?? null;
-  }
+  attachDrillPathParentEdges(tree, path);
 
   return path;
 }

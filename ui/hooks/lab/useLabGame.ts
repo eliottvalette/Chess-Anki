@@ -21,10 +21,10 @@ import {
 } from '@/lib/opening-training';
 import {
   buildDrillPath,
+  buildLearnDrillExpectedFromStep,
   buildOpeningDrillExpected,
   classifyLinesMove,
   type DrillPathStep,
-  findLastTrainStepIndexInDrillPath,
   resolveAcceptedTrainMoveUcis,
   resolveDrillPathStepIndexFromHistory,
   resolveLinesStudyOpeningTree,
@@ -208,8 +208,8 @@ export function useLabGame(
           primaryUci,
           acceptedUcis: acceptedMoves,
         });
-        const correct = linesClassification.category !== 'miss';
         const exact = linesClassification.category === 'best';
+        const correct = linesStudyMode === 'learn' ? exact : linesClassification.category !== 'miss';
         const matchingEdge = linesOpeningTree.edges.find((edge) => edge.fromNodeId === nodeId && edge.uci === move.uci);
         const truncatedHistory =
           historyIndex < moveHistory.length ? [...moveHistory.slice(0, historyIndex), move] : [...moveHistory, move];
@@ -307,16 +307,37 @@ export function useLabGame(
               return;
             }
 
+            if (linesStudyMode === 'learn') {
+              if (!exact) {
+                setOpeningDrillStatus(
+                  expectedSan
+                    ? `Miss. Play ${expectedSan}. Use undo (left arrow) to retry.`
+                    : 'Miss. No repertoire move from this position.',
+                );
+                return;
+              }
+
+              const nextStepIndex = drillPathIndexRef.current + 1;
+
+              if (matchingEdge) {
+                linesSession.markEdgeSeen(nodeId, matchingEdge.id);
+              }
+
+              setOpeningDrillStatus('Correct.');
+              scheduleLinesOpponentAction(() => {
+                advanceDrillToStepRef.current(nextStepIndex);
+              });
+              return;
+            }
+
             const drillPath = drillPathRef.current;
             let nextStepIndex = drillPathIndexRef.current + 1;
-            const lastTrainStepIndex = findLastTrainStepIndexInDrillPath(drillPath);
-            const onLastTrainMove = drillPathIndexRef.current === lastTrainStepIndex;
 
             if (matchingEdge) {
               const targetNodeId = matchingEdge.toNodeId;
               const nextStep = drillPathRef.current[nextStepIndex];
 
-              if (!onLastTrainMove && (!nextStep || nextStep.nodeId !== targetNodeId)) {
+              if (!nextStep || nextStep.nodeId !== targetNodeId) {
                 const forcedStepIndex = drillPathRef.current.findIndex((step) => step.nodeId === targetNodeId);
 
                 if (forcedStepIndex >= 0) {
@@ -341,24 +362,7 @@ export function useLabGame(
               linesSession.markEdgeSeen(nodeId, matchingEdge.id);
 
               scheduleLinesOpponentAction(() => {
-                if (onLastTrainMove) {
-                  const trailingOpponentStep = drillPathRef.current[nextStepIndex];
-
-                  if (trailingOpponentStep && !trailingOpponentStep.isTrainTurn) {
-                    advanceDrillToStepRef.current(nextStepIndex, { isOpponentMovePlayback: true });
-                    return;
-                  }
-
-                  advanceDrillToStepRef.current(drillPathRef.current.length);
-                  return;
-                }
-
                 advanceDrillToStepRef.current(nextStepIndex);
-              });
-            } else if (onLastTrainMove) {
-              setOpeningDrillStatus(linesClassification.category === 'best' ? 'Correct.' : 'Book move.');
-              scheduleLinesOpponentAction(() => {
-                advanceDrillToStepRef.current(drillPathRef.current.length);
               });
             } else {
               setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
@@ -369,12 +373,6 @@ export function useLabGame(
                 ? `Miss. Best was ${expectedSan}. Use undo (left arrow) to retry.`
                 : 'Miss. No repertoire move from this position.',
             );
-          }
-        } else if (correct && matchingEdge && linesStudyMode === 'learn') {
-          const nextNode = linesOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
-
-          if (nextNode) {
-            setActiveOpeningNodeId(nextNode.id);
           }
         }
 

@@ -3,6 +3,7 @@ import type { LinesStudySessionLog } from './lines-study-session-log.ts';
 import { formatLinesStudySessionLog } from './lines-study-session-log.ts';
 import type { DeckFeedback } from './opening-training.ts';
 import type {
+  DrillPathStep,
   ForkCoverageMap,
   LearnBranchCompletion,
   OpeningDrillExpectedMove,
@@ -34,7 +35,29 @@ export type LinesStudyDebugInput = {
   currentFen?: string;
   sessionLog?: LinesStudySessionLog | null;
   activeLearnBranch?: LearnBranchCompletion | null;
+  drillPath?: DrillPathStep[];
+  drillPathIndex?: number;
+  boardPlayAllowed?: boolean;
+  hasNextLearnBranch?: boolean;
 };
+
+export function formatDrillPathDebugLines(path: DrillPathStep[], pathIndex: number) {
+  if (path.length === 0) {
+    return 'drill path: empty';
+  }
+
+  const lines = [`drill path: ${path.length} steps · index ${pathIndex}`];
+
+  path.forEach((step, index) => {
+    const marker = index === pathIndex ? '>' : ' ';
+    const turn = step.isTrainTurn ? 'train' : 'opp';
+    const move = step.edgeSanFromParent ? ` via ${step.edgeSanFromParent} (${step.edgeUciFromParent})` : '';
+    const book = step.bestSan ? ` · book ${step.bestSan} (${step.bestUci ?? '?'})` : '';
+    lines.push(`${marker} ${index}: ${step.nodeId} · ${step.sideToMove} to move${move} · ${turn}${book}`);
+  });
+
+  return lines.join('\n');
+}
 
 function formatMoveLine(moveHistory: StoredMove[], historyIndex: number) {
   if (historyIndex <= 0) {
@@ -156,6 +179,20 @@ export function buildLinesStudyDebugSnapshot(input: LinesStudyDebugInput) {
 
   if (input.initialFen) {
     lines.push(`initial fen: ${input.initialFen}`);
+  }
+
+  if (input.boardPlayAllowed != null) {
+    lines.push(`board play allowed: ${input.boardPlayAllowed ? 'yes' : 'no'}`);
+  }
+
+  if (input.hasNextLearnBranch != null) {
+    lines.push(`has next learn branch: ${input.hasNextLearnBranch ? 'yes' : 'no'}`);
+  }
+
+  if (input.drillPath) {
+    lines.push('');
+    lines.push('--- drill path ---');
+    lines.push(formatDrillPathDebugLines(input.drillPath, input.drillPathIndex ?? -1));
   }
 
   return lines.join('\n');

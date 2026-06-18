@@ -6,6 +6,7 @@ import {
   applyLearnMaxPlyToOpeningTree,
   buildDrillPath,
   buildForkCoverage,
+  buildLearnDrillExpectedFromStep,
   buildLearnDrillReplayUcis,
   buildLearnDrillStartupUcis,
   buildOpeningDrillExpected,
@@ -18,13 +19,18 @@ import {
   classifyOpeningDrillMove,
   classifyRootPrefixMove,
   ensureOpeningTreeRootPrefix,
+  extendDrillPathFromNode,
   filterOpeningTreeForDisplay,
   filterOpeningTreeSummariesByIds,
   filterOpeningTreeSummariesByMinForcedPlies,
+  findLastTrainStepIndexInDrillPath,
   formatBrowseForcedRootLine,
   formatBrowseForcedRootSan,
   formatOpeningTreeDisplayName,
+  hasRemainingLearnBranches,
   LINES_MOVE_EVAL_GATE_CP,
+  listOpponentNodesForLichessEnrichment,
+  listOpponentNodesNeedingBookEnrichment,
   markForkEdgePlayed,
   mergeOpeningTreeDelta,
   normalizeOpeningFen,
@@ -154,6 +160,116 @@ test('resolveAcceptedTrainMoveUcis keeps all repertoire edges', () => {
 
   assert.deepEqual(accepted.acceptedUcis.sort(), ['b1c3', 'd2d4', 'g1f3']);
   assert.equal(accepted.primaryUci, 'g1f3');
+});
+
+test('buildLearnDrillExpectedFromStep accepts only the drill line move', () => {
+  const expected = buildLearnDrillExpectedFromStep({
+    nodeId: 'after-d5',
+    bestUci: 'e4d5',
+    bestSan: 'exd5',
+  });
+
+  assert.deepEqual(expected, {
+    nodeId: 'after-d5',
+    uci: 'e4d5',
+    san: 'exd5',
+    acceptedUcis: ['e4d5'],
+  });
+});
+
+test('buildLearnDrillExpectedFromStep falls back to the drill path continuation when bestUci is missing', () => {
+  const expected = buildLearnDrillExpectedFromStep(
+    {
+      nodeId: 'after-qe5',
+      bestUci: null,
+      bestSan: null,
+    },
+    {
+      edgeSanFromParent: 'Be2',
+      edgeUciFromParent: 'f1e2',
+    },
+  );
+
+  assert.deepEqual(expected, {
+    nodeId: 'after-qe5',
+    uci: 'f1e2',
+    san: 'Be2',
+    acceptedUcis: ['f1e2'],
+  });
+});
+
+test('learn drill classification rejects repertoire alternatives at the same node', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'after-d5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        fenKey: 'after-d5',
+        ply: 2,
+        sideToMove: 'white',
+        bestUci: 'e4d5',
+        bestSan: 'exd5',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-exd5',
+        fromNodeId: 'after-d5',
+        toNodeId: 'after-exd5',
+        uci: 'e4d5',
+        san: 'exd5',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: true,
+      },
+      {
+        id: 'edge-nc3',
+        fromNodeId: 'after-d5',
+        toNodeId: 'after-nc3',
+        uci: 'b1c3',
+        san: 'Nc3',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+  const learnExpected = buildLearnDrillExpectedFromStep({
+    nodeId: 'after-d5',
+    bestUci: 'e4d5',
+    bestSan: 'exd5',
+  });
+
+  assert.equal(
+    classifyLinesMove(tree, 'after-d5', 'e4d5', {
+      primaryUci: learnExpected.uci,
+      acceptedUcis: learnExpected.acceptedUcis,
+    }).category,
+    'best',
+  );
+  assert.equal(
+    classifyLinesMove(tree, 'after-d5', 'b1c3', {
+      primaryUci: learnExpected.uci,
+      acceptedUcis: learnExpected.acceptedUcis,
+    }).category,
+    'miss',
+  );
+  assert.equal(classifyLinesMove(tree, 'after-d5', 'b1c3').category, 'book');
 });
 
 test('buildOpeningDrillExpected returns null on terminal node without repertoire edges', () => {
@@ -337,6 +453,22 @@ test('pickLearnBranch varies opponent replies on the main line while user keeps 
   assert.equal(second.path[1]?.edgeUciFromParent, 'd2d4');
 });
 
+test('hasRemainingLearnBranches ignores the branch currently in progress', () => {
+  const tree = buildOpponentForkLearnTree();
+  const first = pickLearnBranch(tree, 'white', []);
+
+  assert.equal(
+    hasRemainingLearnBranches(tree, 'white', [], {
+      forkNodeId: first.branchForkNodeId,
+      edgeId: first.branchEdgeId,
+      edgeUci: first.branchEdgeUci,
+    }),
+    false,
+  );
+
+  assert.equal(hasRemainingLearnBranches(tree, 'white', []), true);
+});
+
 test('buildLearnDrillReplayUcis auto-plays opponent moves only, never train-side moves', () => {
   const tree = buildOpponentForkLearnTree();
   const { path } = pickLearnBranch(tree, 'white', []);
@@ -344,6 +476,221 @@ test('buildLearnDrillReplayUcis auto-plays opponent moves only, never train-side
   assert.deepEqual(buildLearnDrillReplayUcis(path), []);
   assert.equal(path[0]?.isTrainTurn, true);
   assert.equal(path[0]?.nodeId, 'root-node');
+});
+
+test('listOpponentNodesNeedingBookEnrichment includes engine leaf nodes without outgoing edges', () => {
+  const draft = {
+    trainSide: 'white',
+    nodes: [
+      {
+        id: 'after-bb5',
+        fen: 'rn1qkbnr/ppp1pppp/8/1B1P1b2/8/8/PPPP1PPP/RNBQK1NR b KQkq - 2 3',
+        fenKey: 'after-bb5',
+        ply: 5,
+        sideToMove: 'black',
+        recentGames: 0,
+        cardCount: 0,
+      },
+      {
+        id: 'after-exd5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3P4/8/8/PPPP1PPP/RNBQKBNR b KQkq d6 0 2',
+        fenKey: 'after-exd5',
+        ply: 3,
+        sideToMove: 'black',
+        recentGames: 2,
+        cardCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'engine-bb5',
+        fromNodeId: 'before-bb5',
+        toNodeId: 'after-bb5',
+        uci: 'f1b5',
+        san: 'Bb5+',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+    ],
+  };
+
+  const enrichmentTargets = listOpponentNodesForLichessEnrichment(draft);
+  const bookLeaves = listOpponentNodesNeedingBookEnrichment(draft);
+
+  assert.equal(
+    enrichmentTargets.some((node) => node.id === 'after-bb5'),
+    true,
+  );
+  assert.equal(
+    bookLeaves.some((node) => node.id === 'after-bb5'),
+    true,
+  );
+});
+
+test('buildDrillPath trailing opponent step edgeUciFromParent is the preceding train move', () => {
+  const tree = {
+    rootSan: [],
+    rootPly: 0,
+    rootFenKey: 'train-root',
+    nodes: [
+      {
+        id: 'train-root',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'train-root',
+        ply: 1,
+        sideToMove: 'white',
+        bestUci: 'g1f3',
+        bestSan: 'Nf3',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-train',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 1',
+        fenKey: 'after-train',
+        ply: 2,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 22,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'train-edge',
+        fromNodeId: 'train-root',
+        toNodeId: 'after-train',
+        uci: 'g1f3',
+        san: 'Nf3',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+    ],
+  };
+  const path = buildDrillPath(tree, { trainSide: 'white' });
+  const lastTrainIndex = findLastTrainStepIndexInDrillPath(path);
+  const trailingOpponentStep = path[lastTrainIndex + 1];
+
+  assert.equal(lastTrainIndex, 0);
+  assert.equal(trailingOpponentStep?.isTrainTurn, false);
+  assert.equal(trailingOpponentStep?.edgeUciFromParent, 'g1f3');
+});
+
+test('extendDrillPathFromNode appends continuation when the initial path stops at a leaf', () => {
+  const tree = {
+    rootSan: [],
+    rootPly: 0,
+    rootFenKey: 'root',
+    nodes: [
+      {
+        id: 'root',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: 'root',
+        ply: 0,
+        sideToMove: 'white',
+        bestUci: 'e2e4',
+        bestSan: 'e4',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-nc3',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/2N5/PPPPPPPP/RNBQKB1R b KQkq - 1 1',
+        fenKey: 'after-nc3',
+        ply: 3,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 22,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-qe5',
+        fen: 'rnbqkbnr/pppppppp/8/4q3/8/2N5/PPPPPPPP/RNBQKB1R w KQkq - 2 2',
+        fenKey: 'after-qe5',
+        ply: 4,
+        sideToMove: 'white',
+        bestUci: 'f1e2',
+        bestSan: 'Be2',
+        evalCp: 24,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'nc3-edge',
+        fromNodeId: 'root',
+        toNodeId: 'after-nc3',
+        uci: 'b1c3',
+        san: 'Nc3',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+      {
+        id: 'qe5-edge',
+        fromNodeId: 'after-nc3',
+        toNodeId: 'after-qe5',
+        uci: 'd8e7',
+        san: 'Qe5+',
+        moveBy: 'black',
+        source: 'masters',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 1,
+        priority: 50,
+        isEngineBest: false,
+      },
+    ],
+  };
+  const shortPath = buildDrillPath(tree, { trainSide: 'white', startNodeId: 'after-nc3' });
+  const truncatedPath = shortPath.slice(0, 1);
+  const extended = extendDrillPathFromNode(tree, truncatedPath, 'white');
+
+  assert.equal(extended.length, 2);
+  assert.equal(extended[1]?.nodeId, 'after-qe5');
+  assert.equal(extended[1]?.bestUci, 'f1e2');
+  assert.equal(extended[1]?.edgeUciFromParent, 'd8e7');
 });
 
 test('classifyOpeningDrillMove marks best, book, and miss', () => {
