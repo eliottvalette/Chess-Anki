@@ -22,6 +22,7 @@ import {
   normalizeOpeningFen,
   OPENING_TARGET_DEPTH_NORMAL,
   parseSanMoves,
+  pickLearnBranch,
   pickNextUnplayedOpponentEdge,
   prepareOpeningTreeAtFenWithBoard,
   resolveAcceptedTrainMoveUcis,
@@ -1234,4 +1235,106 @@ test('prepareOpeningTreeAtFenWithBoard re-roots tree prefix from board history',
   assert.equal(prepared.rootFenKey, 'after-bc4');
   assert.deepEqual(prepared.rootSan, ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4']);
   assert.equal(STANDARD_START_FEN_KEY, normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'));
+});
+
+test('pickLearnBranch skips completed branch edges', () => {
+  const tree = {
+    rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
+    rootPly: 4,
+    rootFenKey: 'root',
+    targetDepth: 12,
+    nodes: [
+      {
+        id: 'root-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3',
+        fenKey: 'root',
+        ply: 4,
+        sideToMove: 'white',
+        bestUci: 'f1b5',
+        bestSan: 'Bb5',
+        evalCp: 20,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 50,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-bb5',
+        fen: 'r1bqkbnr/pppp1ppp/2n5/1B2p3/4P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+        fenKey: 'after-bb5',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 18,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-bc4',
+        fen: 'r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+        fenKey: 'after-bc4',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 19,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'branch-bb5',
+        fromNodeId: 'root-node',
+        toNodeId: 'after-bb5',
+        uci: 'f1b5',
+        san: 'Bb5',
+        moveBy: 'white',
+        source: 'lichess_masters',
+        recentCount: 2,
+        cardCount: 0,
+        mastersGames: 40,
+        priority: 8,
+        isEngineBest: false,
+      },
+      {
+        id: 'branch-bc4',
+        fromNodeId: 'root-node',
+        toNodeId: 'after-bc4',
+        uci: 'f1c4',
+        san: 'Bc4',
+        moveBy: 'white',
+        source: 'lichess_masters',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 30,
+        priority: 8,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const first = pickLearnBranch(tree, 'white', []);
+  const second = pickLearnBranch(tree, 'white', [
+    {
+      forkNodeId: first.branchForkNodeId,
+      edgeId: first.branchEdgeId,
+      edgeUci: first.branchEdgeUci,
+    },
+  ]);
+
+  assert.equal(first.branchEdgeId, 'branch-bb5');
+  assert.equal(second.branchEdgeId, 'branch-bc4');
+  assert.notEqual(first.branchEdgeUci, second.branchEdgeUci);
 });

@@ -8,6 +8,7 @@ import type { DeckProgressMap } from '@/lib/deck-progress';
 import type { DeckCard, DeckFeedback, OpeningSeedLine } from '@/lib/opening-training';
 import type {
   DrillPathStep,
+  LearnBranchCompletion,
   OpeningDrillExpectedMove,
   OpeningTreeDetail,
   OpeningTreeSummary,
@@ -111,7 +112,7 @@ export function useLabState() {
   const [linesReviewQueue, setLinesReviewQueue] = useState<string[]>([]);
   const [linesReviewIndex, setLinesReviewIndex] = useState(0);
   const [linesLearnBranchComplete, setLinesLearnBranchComplete] = useState(false);
-  const linesCompletedBranchEdgeIdsRef = useRef<string[]>([]);
+  const [linesCompletedLearnBranches, setLinesCompletedLearnBranches] = useState<LearnBranchCompletion[]>([]);
   const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
   const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
   const [linesPositionFilterTreeIds, setLinesPositionFilterTreeIds] = useState<string[] | null>(null);
@@ -278,7 +279,8 @@ export function useLabState() {
     setLinesReviewIndex,
     linesLearnBranchComplete,
     setLinesLearnBranchComplete,
-    linesCompletedBranchEdgeIdsRef,
+    linesCompletedLearnBranches,
+    setLinesCompletedLearnBranches,
     linesTrainPlyCurrent,
     setLinesTrainPlyCurrent,
     linesTrainPlyTotal,

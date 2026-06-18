@@ -11,7 +11,7 @@ import {
 } from '@/lib/chess-analysis-client';
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
-import { DRILL_OPPONENT_DELAY_MS } from '@/lib/lab-helpers';
+import { DRILL_OPPONENT_DELAY_MS, isLinesBoardPlayAllowed } from '@/lib/lab-helpers';
 import {
   buildPendingDeckFeedback,
   type DeckCard,
@@ -24,6 +24,7 @@ import {
   classifyLinesMove,
   type DrillPathStep,
   resolveAcceptedTrainMoveUcis,
+  resolveDrillPathStepIndexFromHistory,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
@@ -71,6 +72,7 @@ export function useLabGame(
     activeOpeningTree,
     trainAllSession,
     linesStudyMode,
+    linesLearnBranchComplete,
     activeTrainSide,
     initialFen,
     setVariationBaseIndex,
@@ -171,6 +173,18 @@ export function useLabGame(
   const commitMove = useCallback(
     (nextGame: Chess, move: StoredMove) => {
       if (deckPlaybackBusy) {
+        return;
+      }
+
+      if (
+        !isLinesBoardPlayAllowed({
+          mode: modeRef.current,
+          hasOpeningTree: activeOpeningTree != null,
+          linesStudyMode,
+          linesLearnBranchComplete,
+          deckPlaybackBusy: false,
+        })
+      ) {
         return;
       }
 
@@ -406,7 +420,9 @@ export function useLabGame(
       drillPathRef,
       hasLoadedGame,
       historyIndex,
+      linesLearnBranchComplete,
       linesSession,
+      linesStudyMode,
       modeRef,
       moveHistory,
       openingDrillActive,
@@ -445,6 +461,18 @@ export function useLabGame(
         return false;
       }
 
+      if (
+        !isLinesBoardPlayAllowed({
+          mode: modeRef.current,
+          hasOpeningTree: activeOpeningTree != null,
+          linesStudyMode,
+          linesLearnBranchComplete,
+          deckPlaybackBusy,
+        })
+      ) {
+        return false;
+      }
+
       if (openingDrillActive && openingDrillExpected == null && deckFeedback == null) {
         return false;
       }
@@ -479,16 +507,17 @@ export function useLabGame(
       return true;
     },
     [
+      activeOpeningTree,
       commitMove,
       currentFen,
       deckFeedback,
       deckPlaybackBusy,
-      historyIndex,
-      moveHistory.length,
+      linesLearnBranchComplete,
+      linesStudyMode,
+      modeRef,
       openingDrillActive,
       openingDrillExpected,
       playSound,
-      scheduleLinesOpponentAction,
     ],
   );
 
@@ -503,6 +532,8 @@ export function useLabGame(
 
       const isLinesBrowse =
         modeRef.current === 'lines' && activeOpeningTree && linesStudyMode === 'idle' && !openingDrillActive;
+      const isLinesStudyNav =
+        modeRef.current === 'lines' && activeOpeningTree && linesStudyMode !== 'idle' && !linesLearnBranchComplete;
       const boundedTarget = Math.max(0, Math.min(index, moveHistory.length));
 
       if (isLinesBrowse) {
@@ -524,6 +555,55 @@ export function useLabGame(
           clearVariation();
           setGame(nextGame);
           clearSelection();
+        }
+
+        return;
+      }
+
+      if (isLinesStudyNav) {
+        if (boundedTarget > historyIndex && playDeckReplayToIndexRef.current) {
+          deckPlaybackRequestIdRef.current += 1;
+          deckReplayMovesRef.current = moveHistory;
+          deckReplayInitialFenRef.current = initialFen;
+          void playDeckReplayToIndexRef.current(boundedTarget, activeTrainSide, historyIndex).then((completed) => {
+            if (completed === false) {
+              return;
+            }
+
+            const path = drillPathRef.current;
+
+            if (path.length > 0) {
+              const stepIndex = resolveDrillPathStepIndexFromHistory(
+                activeOpeningTree,
+                path,
+                moveHistory,
+                boundedTarget,
+              );
+              drillPathIndexRef.current = stepIndex;
+              advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
+            }
+          });
+          return;
+        }
+
+        if (boundedTarget !== historyIndex) {
+          const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedTarget);
+
+          setHistoryIndex(boundedTarget);
+          setDeckFeedback(null);
+          setDeckFeedbackArrowsVisible(false);
+          setShowArrow(false);
+          clearVariation();
+          setGame(nextGame);
+          clearSelection();
+
+          const path = drillPathRef.current;
+
+          if (path.length > 0) {
+            const stepIndex = resolveDrillPathStepIndexFromHistory(activeOpeningTree, path, moveHistory, boundedTarget);
+            drillPathIndexRef.current = stepIndex;
+            advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
+          }
         }
 
         return;
@@ -578,12 +658,14 @@ export function useLabGame(
         }
 
         if (drillPathRef.current.length > 0 && linesStudyMode === 'learn') {
-          const rootLength = activeOpeningTree.rootPly ?? activeOpeningTree.rootSan.length;
-
-          if (boundedIndex >= rootLength) {
-            const stepIndex = boundedIndex - rootLength;
-            advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
-          }
+          const stepIndex = resolveDrillPathStepIndexFromHistory(
+            activeOpeningTree,
+            drillPathRef.current,
+            historyForSync,
+            boundedIndex,
+          );
+          drillPathIndexRef.current = stepIndex;
+          advanceDrillToStepRef.current(stepIndex, { syncOnly: true });
         }
       }
     },
@@ -597,6 +679,8 @@ export function useLabGame(
       deckReplayMovesRef,
       historyIndex,
       initialFen,
+      drillPathIndexRef,
+      linesLearnBranchComplete,
       linesSession,
       linesStudyMode,
       modeRef,

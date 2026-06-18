@@ -22,7 +22,9 @@ import {
   type DrillPathStep,
   findEarliestForkNodeId,
   findPathToNode,
+  isLearnBranchEdgeCompleted,
   isStandardStartFenKey,
+  type LearnBranchCompletion,
   listSiblingBranchEdges,
   normalizeOpeningFen,
   type OpeningSide,
@@ -32,6 +34,7 @@ import {
   prepareOpeningTreeForLines,
   replayToNodeUcis,
   resolveCanonicalRootNode,
+  resolveReviewAdvance,
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
@@ -101,9 +104,11 @@ export function useLabLines(
     linesReviewIndex,
     setLinesReviewIndex,
     setLinesLearnBranchComplete,
-    linesCompletedBranchEdgeIdsRef,
+    linesCompletedLearnBranches,
+    setLinesCompletedLearnBranches,
     setLinesTrainPlyCurrent,
     setLinesTrainPlyTotal,
+    selectedOpeningTreeId,
     game,
     moveHistory,
     historyIndex,
@@ -372,10 +377,29 @@ export function useLabLines(
   }, [loadOpeningTrees, setOpeningTreeActionError, setOpeningTreeActionLoading]);
 
   const activeBranchEdgeIdRef = useRef<string | null>(null);
+  const activeLearnBranchRef = useRef<LearnBranchCompletion | null>(null);
   const advanceDrillToStepRef = useRef<
     (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
   >(() => {});
   const advanceReviewCardRef = useRef<() => void>(() => {});
+
+  const markCurrentLearnBranchCompleted = useCallback(() => {
+    const branch = activeLearnBranchRef.current;
+
+    if (!branch) {
+      return;
+    }
+
+    setLinesCompletedLearnBranches((current) => {
+      if (isLearnBranchEdgeCompleted(branch.forkNodeId, { id: branch.edgeId, uci: branch.edgeUci }, current)) {
+        return current;
+      }
+
+      return [...current, branch];
+    });
+    activeLearnBranchRef.current = null;
+    activeBranchEdgeIdRef.current = null;
+  }, [setLinesCompletedLearnBranches]);
 
   const advanceDrillToStep = useCallback(
     (stepIndex: number, options: { isOpponentMovePlayback?: boolean; syncOnly?: boolean } = {}) => {
@@ -384,15 +408,13 @@ export function useLabLines(
       const path = drillPathRef.current;
       const step = path[stepIndex];
 
+      if (syncOnly && linesStudyMode !== 'idle') {
+        setOpeningDrillActive(true);
+      }
+
       if (!step) {
         if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
-          if (activeBranchEdgeIdRef.current) {
-            linesCompletedBranchEdgeIdsRef.current = [
-              ...linesCompletedBranchEdgeIdsRef.current,
-              activeBranchEdgeIdRef.current,
-            ];
-            activeBranchEdgeIdRef.current = null;
-          }
+          markCurrentLearnBranchCompleted();
           setLinesLearnBranchComplete(true);
           setLinesStudyMode('idle');
           setOpeningDrillExpected(null);
@@ -467,13 +489,7 @@ export function useLabLines(
 
         if (!drillExpected) {
           if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
-            if (activeBranchEdgeIdRef.current) {
-              linesCompletedBranchEdgeIdsRef.current = [
-                ...linesCompletedBranchEdgeIdsRef.current,
-                activeBranchEdgeIdRef.current,
-              ];
-              activeBranchEdgeIdRef.current = null;
-            }
+            markCurrentLearnBranchCompleted();
             setLinesLearnBranchComplete(true);
             setLinesStudyMode('idle');
             setOpeningDrillExpected(null);
@@ -507,13 +523,7 @@ export function useLabLines(
             advanceDrillToStepRef.current(nextIndex, { isOpponentMovePlayback: true });
           }, DRILL_OPPONENT_DELAY_MS);
         } else if (activeOpeningTree && linesStudyMode === 'learn') {
-          if (activeBranchEdgeIdRef.current) {
-            linesCompletedBranchEdgeIdsRef.current = [
-              ...linesCompletedBranchEdgeIdsRef.current,
-              activeBranchEdgeIdRef.current,
-            ];
-            activeBranchEdgeIdRef.current = null;
-          }
+          markCurrentLearnBranchCompleted();
           setLinesLearnBranchComplete(true);
           setLinesStudyMode('idle');
           setOpeningDrillExpected(null);
@@ -539,8 +549,8 @@ export function useLabLines(
       clearSelection,
       drillPathIndexRef,
       drillPathRef,
-      linesCompletedBranchEdgeIdsRef,
       linesSession,
+      markCurrentLearnBranchCompleted,
       playSound,
       setActiveOpeningNodeId,
       setDeckFeedback,
@@ -565,8 +575,16 @@ export function useLabLines(
 
   const beginLearnDrill = useCallback(
     (tree: OpeningTreeDetail, trainSide: OpeningSide) => {
-      const { path, branchEdgeId } = pickLearnBranch(tree, trainSide, linesCompletedBranchEdgeIdsRef.current);
+      const { path, branchEdgeId, branchForkNodeId, branchEdgeUci } = pickLearnBranch(
+        tree,
+        trainSide,
+        linesCompletedLearnBranches,
+      );
       activeBranchEdgeIdRef.current = branchEdgeId;
+      activeLearnBranchRef.current =
+        branchEdgeId && branchForkNodeId && branchEdgeUci
+          ? { forkNodeId: branchForkNodeId, edgeId: branchEdgeId, edgeUci: branchEdgeUci }
+          : null;
 
       if (path.length === 0) {
         setOpeningDrillStatus('No trainable branch left in this tree.');
@@ -579,6 +597,9 @@ export function useLabLines(
         setOpeningDrillStatus('No trainable nodes in this tree yet.');
         return;
       }
+
+      const forkStepIndex = branchForkNodeId ? path.findIndex((step) => step.nodeId === branchForkNodeId) : -1;
+      const replayThroughIndex = Math.max(firstTrainIndex, forkStepIndex);
 
       linesSession.resetSession(tree, trainSide);
       drillPathRef.current = path;
@@ -596,8 +617,8 @@ export function useLabLines(
 
       const fullUcis = [...tree.rootUci];
 
-      if (firstTrainIndex > 0) {
-        for (let index = 1; index <= firstTrainIndex; index += 1) {
+      if (replayThroughIndex > 0) {
+        for (let index = 1; index <= replayThroughIndex; index += 1) {
           const uci = path[index]?.edgeUciFromParent;
 
           if (uci) {
@@ -629,7 +650,7 @@ export function useLabLines(
       clearSelection,
       drillPathIndexRef,
       drillPathRef,
-      linesCompletedBranchEdgeIdsRef,
+      linesCompletedLearnBranches,
       linesSession,
       playSound,
       replayMovesToIndex,
@@ -694,9 +715,9 @@ export function useLabLines(
       return;
     }
 
-    const nextIndex = linesReviewIndex + 1;
+    const advance = resolveReviewAdvance(linesReviewQueue, linesReviewIndex);
 
-    if (nextIndex >= linesReviewQueue.length) {
+    if (advance.kind === 'complete') {
       setOpeningDrillStatus('Review complete.');
       setOpeningDrillActive(false);
       setOpeningDrillExpected(null);
@@ -706,10 +727,10 @@ export function useLabLines(
       return;
     }
 
-    setLinesReviewIndex(nextIndex);
+    setLinesReviewIndex(advance.nextIndex);
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
-    void replayReviewNode(tree, linesReviewQueue[nextIndex]!, activeTrainSide);
+    void replayReviewNode(tree, advance.nextNodeId, activeTrainSide);
   }, [
     activeOpeningTree,
     activeTrainSide,
@@ -737,6 +758,7 @@ export function useLabLines(
       }
 
       const trainSide = overrideTrainSide ?? activeTrainSide;
+      setLinesCompletedLearnBranches([]);
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
       setMode('lines');
@@ -753,6 +775,7 @@ export function useLabLines(
       activeOpeningTree,
       activeTrainSide,
       beginLearnDrill,
+      setLinesCompletedLearnBranches,
       modeRef,
       positionRequestIdRef,
       setFileName,
@@ -839,9 +862,24 @@ export function useLabLines(
       return;
     }
 
+    markCurrentLearnBranchCompleted();
+    cancelDrillOpponentMove();
+    setDeckFeedback(null);
+    setDeckFeedbackArrowsVisible(false);
+    setOpeningDrillStatus('');
     setLinesLearnBranchComplete(false);
     beginLearnDrill(tree, activeTrainSide);
-  }, [activeOpeningTree, activeTrainSide, beginLearnDrill, setLinesLearnBranchComplete]);
+  }, [
+    activeOpeningTree,
+    activeTrainSide,
+    beginLearnDrill,
+    cancelDrillOpponentMove,
+    markCurrentLearnBranchCompleted,
+    setDeckFeedback,
+    setDeckFeedbackArrowsVisible,
+    setLinesLearnBranchComplete,
+    setOpeningDrillStatus,
+  ]);
 
   const startOpeningDrill = startLinesLearn;
 
@@ -857,6 +895,9 @@ export function useLabLines(
     setLinesLearnBranchComplete(false);
     setLinesReviewQueue([]);
     setLinesReviewIndex(0);
+    setLinesCompletedLearnBranches([]);
+    activeLearnBranchRef.current = null;
+    activeBranchEdgeIdRef.current = null;
     drillPathRef.current = [];
     drillPathIndexRef.current = 0;
     linesSession.clearSession();
@@ -868,6 +909,7 @@ export function useLabLines(
     setDeckFeedback,
     setDeckFeedbackArrowsVisible,
     setLinesLearnBranchComplete,
+    setLinesCompletedLearnBranches,
     setLinesReviewIndex,
     setLinesReviewQueue,
     setLinesStudyMode,
@@ -908,8 +950,10 @@ export function useLabLines(
       setSelectedOpeningTreeId(treeId);
       setOpeningDrillStatus('');
       setOpeningDrillExpected(null);
-      linesCompletedBranchEdgeIdsRef.current = [];
-      setLinesLearnBranchComplete(false);
+      if (treeId !== selectedOpeningTreeId) {
+        setLinesCompletedLearnBranches([]);
+        setLinesLearnBranchComplete(false);
+      }
 
       const boardFenKey = normalizeOpeningFen(game.fen());
       const keepBoard = historyIndex > 0 && !isStandardStartFenKey(boardFenKey);
@@ -935,6 +979,7 @@ export function useLabLines(
       loadOpeningTreeRootOnBoard,
       moveHistory,
       quitLinesSession,
+      selectedOpeningTreeId,
       setActiveOpeningNodeId,
       setActiveOpeningTree,
       setGame,

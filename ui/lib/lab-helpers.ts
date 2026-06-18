@@ -336,6 +336,8 @@ export function delay(ms: number) {
 export const DRILL_OPPONENT_DELAY_MS = 200;
 export const LINES_LINE_PREVIEW_DELAY_MS = 300;
 
+export { isLinesBoardPlayAllowed } from './lines-board-guards';
+
 export function parseJsonResponse<T>(response: Response, bodyText: string): T {
   if (!bodyText.trim()) {
     throw new Error(`Empty response from ${response.url || 'API'} (HTTP ${response.status}).`);

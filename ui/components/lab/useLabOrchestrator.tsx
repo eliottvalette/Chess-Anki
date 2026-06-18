@@ -47,6 +47,7 @@ import {
   classifyBoardMoveAtHistoryIndex,
   filterOpeningTreeSummaries,
   filterOpeningTreeSummariesByIds,
+  hasRemainingLearnBranches,
   isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
   normalizeOpeningFen,
@@ -1169,8 +1170,6 @@ export function useLabOrchestrator() {
     cancelDrillOpponentMove,
     selectOpeningTree,
     selectOpeningNode,
-    findEarliestForkNodeId,
-    listSiblingBranchEdges,
   } = useLabLines(labState, linesContext);
 
   useEffect(() => {
@@ -2272,14 +2271,13 @@ export function useLabOrchestrator() {
       return false;
     }
 
-    const forkNodeId = findEarliestForkNodeId(tree);
-
-    if (!forkNodeId) {
-      return false;
-    }
-
-    return listSiblingBranchEdges(tree, forkNodeId, labState.linesCompletedBranchEdgeIdsRef.current).length > 0;
-  }, [labState.activeOpeningTree, labState.linesLearnBranchComplete, labState.linesStudyMode]);
+    return hasRemainingLearnBranches(tree, labState.activeTrainSide, labState.linesCompletedLearnBranches);
+  }, [
+    labState.activeOpeningTree,
+    labState.activeTrainSide,
+    labState.linesCompletedLearnBranches,
+    labState.linesLearnBranchComplete,
+  ]);
 
   return {
     labState: overriddenLabState,

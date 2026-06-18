@@ -325,7 +325,7 @@ export function LinesPanel({
     <>
       {!activeTree ? (
         <section
-          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex flex-[0_0_auto] flex-col gap-[18px] overflow-visible`}
+          className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex flex-col gap-[18px] overflow-visible`}
         >
           <div className="flex min-w-0 items-center justify-between gap-3.5">
             <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-normal leading-[1.15] tracking-normal text-(--text)">
@@ -342,7 +342,7 @@ export function LinesPanel({
           ) : filteredTrees.length === 0 ? (
             <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">No openings match the current filters.</p>
           ) : (
-            <div className="flex max-h-[300px] min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <div className="flex min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <div className="flex flex-row gap-3 rounded-[10px] border border-(--border-soft) bg-(--surface-strong) px-3 py-2.5">
                 <label className="flex min-w-0 flex-1 flex-col gap-1">
                   <span className="text-[10px] font-normal text-(--text-soft)">Min forced plies (X)</span>
@@ -421,14 +421,6 @@ export function LinesPanel({
               })}
             </div>
           )}
-          <button
-            className={`box-border flex min-h-[42px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3.5 text-xs font-normal text-[#f8fbff] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none w-full min-w-0 self-stretch`}
-            disabled={actionLoading}
-            onClick={onImportRecent}
-            type="button"
-          >
-            {actionLoading ? 'Loading...' : 'Refresh opening trees'}
-          </button>
           {actionError ? <p className="m-0 text-sm leading-[1.45] text-[#ffb4b2]">{actionError}</p> : null}
         </section>
       ) : null}
@@ -494,20 +486,21 @@ export function LinesPanel({
             </div>
           ) : null}
           {learnBranchComplete && !inSession && hasNextLearnBranch ? (
-            <div className="flex flex-col gap-2 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.1)] px-3 py-2 text-xs text-(--text)">
-              <span>Branch complete.</span>
-              <button
-                className="box-border flex min-h-[38px] items-center justify-center rounded-[10px] border border-[rgba(198,215,255,0.38)] bg-[rgba(39,51,75,0.72)] px-3 text-xs text-[#f8fbff]"
-                onClick={onNextLearnBranch}
-                type="button"
-              >
-                Next branch
-              </button>
-            </div>
+            <button
+              className="box-border flex min-h-[48px] w-full items-center justify-center rounded-[10px] border border-[rgba(138,227,193,0.52)] bg-[rgba(56,148,115,0.34)] px-4 text-sm font-medium text-[#d8f8ec] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-[border-color,background-color] duration-150 hover:border-[rgba(138,227,193,0.72)] hover:bg-[rgba(56,148,115,0.48)]"
+              onClick={onNextLearnBranch}
+              type="button"
+            >
+              Next branch
+            </button>
+          ) : learnBranchComplete && !inSession ? (
+            <p className="m-0 rounded-[10px] border border-[rgba(138,227,193,0.28)] bg-[rgba(56,148,115,0.12)] px-3 py-2 text-xs text-[#d8f8ec]">
+              Branch complete.
+            </p>
           ) : null}
 
           <section
-            className={`relative min-h-0 rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
+            className={`relative min-h-0 h-full rounded-xl border border-(--border-soft) bg-(--surface) p-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] backdrop-blur-lg backdrop-saturate-[1.16] flex min-h-0 max-h-[min(690px,calc(100svh-174px))] flex-[0_0_auto] flex-col gap-3 overflow-hidden ${drillActive ? (deckFeedback?.correct ? 'border border-[rgba(138,227,193,0.38)] bg-[rgba(56,148,115,0.14)]' : deckFeedback?.pending === false ? 'border border-[rgba(255,141,145,0.42)] bg-[rgba(180,58,66,0.16)]' : 'border border-[rgba(152,184,255,0.3)] bg-[rgba(9,14,23,0.42)]') : ''}`}
           >
             <div className="flex min-w-0 items-center justify-between gap-2.5">
               <div className="flex min-w-0 flex-col gap-1">

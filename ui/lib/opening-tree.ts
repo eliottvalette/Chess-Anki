@@ -1223,6 +1223,25 @@ export function buildReviewQueue(tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'
     .map((node) => node.id);
 }
 
+export function resolveReviewAdvance(
+  queue: string[],
+  currentIndex: number,
+): { kind: 'complete' } | { kind: 'next'; nextIndex: number; nextNodeId: string } {
+  const nextIndex = currentIndex + 1;
+
+  if (nextIndex >= queue.length) {
+    return { kind: 'complete' };
+  }
+
+  const nextNodeId = queue[nextIndex];
+
+  if (!nextNodeId) {
+    return { kind: 'complete' };
+  }
+
+  return { kind: 'next', nextIndex, nextNodeId };
+}
+
 export function replayToNodeUcis(tree: OpeningTreeDetail, nodeId: string): string[] {
   const path = findPathToNode(tree, nodeId);
   const fullUcis = [...tree.rootUci];
@@ -1251,6 +1270,58 @@ export function replayToNode(tree: OpeningTreeDetail, nodeId: string): string[] 
   }
 
   return fullSans;
+}
+
+export function listRepertoireForkNodeIds(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+): string[] {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode) {
+    return [];
+  }
+
+  const forkNodeIds: string[] = [];
+  const queue = [rootNode.id];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const nodeId = queue.shift()!;
+
+    if (visited.has(nodeId)) {
+      continue;
+    }
+
+    visited.add(nodeId);
+    const repertoireOutgoing = tree.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
+
+    if (repertoireOutgoing.length >= 2) {
+      forkNodeIds.push(nodeId);
+    }
+
+    for (const edge of repertoireOutgoing) {
+      queue.push(edge.toNodeId);
+    }
+  }
+
+  return forkNodeIds;
+}
+
+export type LearnBranchCompletion = {
+  forkNodeId: string;
+  edgeId: string;
+  edgeUci: string;
+};
+
+export function isLearnBranchEdgeCompleted(
+  forkNodeId: string,
+  edge: Pick<OpeningTreeEdge, 'id' | 'uci'>,
+  completedBranches: LearnBranchCompletion[],
+): boolean {
+  return completedBranches.some(
+    (entry) => entry.edgeId === edge.id || (entry.forkNodeId === forkNodeId && entry.edgeUci === edge.uci),
+  );
 }
 
 export function findEarliestForkNodeId(
@@ -1308,48 +1379,78 @@ function scoreBranchEdge(
 export function pickLearnBranch(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
   trainSide: OpeningSide,
-  completedBranchEdgeIds: string[],
-): { path: DrillPathStep[]; branchEdgeId: string | null } {
-  const forkNodeId = findEarliestForkNodeId(tree);
+  completedBranches: LearnBranchCompletion[],
+): {
+  path: DrillPathStep[];
+  branchEdgeId: string | null;
+  branchForkNodeId: string | null;
+  branchEdgeUci: string | null;
+} {
+  const forkNodeIds = listRepertoireForkNodeIds(tree);
 
-  if (!forkNodeId) {
-    return { path: buildDrillPath(tree, { trainSide }), branchEdgeId: null };
+  if (forkNodeIds.length === 0) {
+    return {
+      path: buildDrillPath(tree, { trainSide }),
+      branchEdgeId: null,
+      branchForkNodeId: null,
+      branchEdgeUci: null,
+    };
   }
 
-  const candidates = tree.edges.filter(
-    (edge) => edge.fromNodeId === forkNodeId && isRepertoireEdge(edge) && !completedBranchEdgeIds.includes(edge.id),
-  );
+  for (const forkNodeId of forkNodeIds) {
+    const candidates = tree.edges.filter(
+      (edge) =>
+        edge.fromNodeId === forkNodeId &&
+        isRepertoireEdge(edge) &&
+        !isLearnBranchEdgeCompleted(forkNodeId, edge, completedBranches),
+    );
 
-  if (candidates.length === 0) {
-    return { path: [], branchEdgeId: null };
-  }
-
-  const ranked = [...candidates].sort((left, right) => {
-    const leftScore = scoreBranchEdge(tree, trainSide, forkNodeId, left);
-    const rightScore = scoreBranchEdge(tree, trainSide, forkNodeId, right);
-
-    if (rightScore.weakNodes !== leftScore.weakNodes) {
-      return rightScore.weakNodes - leftScore.weakNodes;
+    if (candidates.length === 0) {
+      continue;
     }
 
-    return rightScore.recentCount - leftScore.recentCount;
-  });
-  const chosen = ranked[0]!;
+    const ranked = [...candidates].sort((left, right) => {
+      const leftScore = scoreBranchEdge(tree, trainSide, forkNodeId, left);
+      const rightScore = scoreBranchEdge(tree, trainSide, forkNodeId, right);
 
-  return {
-    path: buildDrillPath(tree, { trainSide, forcedEdges: { [forkNodeId]: chosen.uci } }),
-    branchEdgeId: chosen.id,
-  };
+      if (rightScore.weakNodes !== leftScore.weakNodes) {
+        return rightScore.weakNodes - leftScore.weakNodes;
+      }
+
+      return rightScore.recentCount - leftScore.recentCount;
+    });
+    const chosen = ranked[0]!;
+
+    return {
+      path: buildDrillPath(tree, { trainSide, forcedEdges: { [forkNodeId]: chosen.uci } }),
+      branchEdgeId: chosen.id,
+      branchForkNodeId: forkNodeId,
+      branchEdgeUci: chosen.uci,
+    };
+  }
+
+  return { path: [], branchEdgeId: null, branchForkNodeId: null, branchEdgeUci: null };
 }
 
 export function listSiblingBranchEdges(
   tree: Pick<OpeningTreeDetail, 'edges'>,
   forkNodeId: string,
-  completedBranchEdgeIds: string[],
+  completedBranches: LearnBranchCompletion[],
 ): OpeningTreeEdge[] {
   return tree.edges.filter(
-    (edge) => edge.fromNodeId === forkNodeId && isRepertoireEdge(edge) && !completedBranchEdgeIds.includes(edge.id),
+    (edge) =>
+      edge.fromNodeId === forkNodeId &&
+      isRepertoireEdge(edge) &&
+      !isLearnBranchEdgeCompleted(forkNodeId, edge, completedBranches),
   );
+}
+
+export function hasRemainingLearnBranches(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'targetDepth'>,
+  trainSide: OpeningSide,
+  completedBranches: LearnBranchCompletion[],
+): boolean {
+  return pickLearnBranch(tree, trainSide, completedBranches).branchEdgeId != null;
 }
 
 export function applyOpeningAttemptScore(currentScore: number, correct: boolean) {
@@ -1464,6 +1565,27 @@ export function buildDrillPath(
   }
 
   return path;
+}
+
+export function resolveDrillPathStepIndexFromHistory(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey'>,
+  path: DrillPathStep[],
+  moveHistory: Array<{ uci: string }>,
+  historyIndex: number,
+): number {
+  if (path.length === 0) {
+    return 0;
+  }
+
+  const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, historyIndex);
+
+  if (!nodeId) {
+    return 0;
+  }
+
+  const stepIndex = path.findIndex((step) => step.nodeId === nodeId);
+
+  return stepIndex >= 0 ? stepIndex : 0;
 }
 
 export function findPathToNode(tree: OpeningTreeDetail, targetNodeId: string): DrillPathStep[] {
