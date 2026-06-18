@@ -17,18 +17,20 @@ import {
 } from '@/lib/lab-helpers';
 import { appendLinesStudySessionEntry, createLinesStudySessionLog } from '@/lib/lines-study-session-log.ts';
 import {
+  alignOpeningTreeWithBoardPosition,
   buildLearnDrillReplayUcis,
+  buildLearnDrillStartupUcis,
   buildOpeningDrillExpected,
   buildReviewQueue,
   countTrainPliesInDrillPath,
   type DrillPathStep,
+  ensureOpeningTreeRootPrefix,
   findEarliestForkNodeId,
   findPathToNode,
   isLearnBranchEdgeCompleted,
   isStandardStartFenKey,
   type LearnBranchCompletion,
   listSiblingBranchEdges,
-  normalizeOpeningFen,
   type OpeningSide,
   type OpeningTreeDetail,
   pickLearnBranch,
@@ -36,6 +38,7 @@ import {
   prepareOpeningTreeForLines,
   replayToNodeUcis,
   resolveCanonicalRootNode,
+  resolveLinesBoardContext,
   resolveLinesStudyOpeningTree,
   resolveReviewAdvance,
 } from '@/lib/opening-tree';
@@ -275,36 +278,79 @@ export function useLabLines(
         syncBoard?: boolean;
         atFenKey?: string;
         boardHistory?: StoredMove[];
+        boardHistoryIndex?: number;
+        browsePly?: number;
+        initialFen?: string | null;
       } = {},
     ) => {
       setOpeningTreeActionError('');
 
       try {
-        const response = await fetch(`/api/opening-trees?treeId=${encodeURIComponent(treeId)}`, {
-          credentials: 'same-origin',
-        });
-        const payload = await readJsonResponse<OpeningTreesPayload>(response);
+        let displayTree: OpeningTreeDetail | null = null;
 
-        if (!response.ok) {
-          throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
+        if (options.atFenKey && options.boardHistory && options.boardHistory.length > 0) {
+          const projectedResponse = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(options.atFenKey)}`, {
+            credentials: 'same-origin',
+          });
+          const projectedPayload = await readJsonResponse<OpeningTreesPayload>(projectedResponse);
+
+          if (projectedResponse.ok && projectedPayload.tree) {
+            displayTree = prepareOpeningTreeForLines(projectedPayload.tree);
+            const boardHistoryIndex = options.boardHistoryIndex ?? options.boardHistory.length;
+            const aligned = alignOpeningTreeWithBoardPosition(
+              displayTree,
+              options.boardHistory,
+              boardHistoryIndex,
+              options.initialFen ?? null,
+            );
+
+            if (aligned) {
+              displayTree = aligned;
+            }
+          }
         }
 
-        const tree = payload.tree ?? null;
-        let displayTree = tree ? prepareOpeningTreeForLines(tree, minForcedPlies) : null;
-
-        if (displayTree && options.atFenKey && options.boardHistory && options.boardHistory.length > 0) {
-          const prepared = prepareOpeningTreeAtFenWithBoard(
-            displayTree,
-            options.atFenKey,
-            options.boardHistory,
-            options.boardHistory.length,
+        if (!displayTree) {
+          const effectiveBrowsePly = options.browsePly ?? minForcedPlies;
+          const response = await fetch(
+            `/api/opening-trees?treeId=${encodeURIComponent(treeId)}&browsePly=${effectiveBrowsePly}`,
+            { credentials: 'same-origin' },
           );
+          const payload = await readJsonResponse<OpeningTreesPayload>(response);
 
-          if (!prepared) {
-            throw new Error(`No repertoire node for board position ${options.atFenKey}`);
+          if (!response.ok) {
+            throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
           }
 
-          displayTree = prepared;
+          const tree = payload.tree ?? null;
+          displayTree = tree ? prepareOpeningTreeForLines(tree) : null;
+
+          if (displayTree && options.atFenKey && options.boardHistory && options.boardHistory.length > 0) {
+            const boardHistoryIndex = options.boardHistoryIndex ?? options.boardHistory.length;
+            const prepared =
+              prepareOpeningTreeAtFenWithBoard(
+                displayTree,
+                options.atFenKey,
+                options.boardHistory,
+                boardHistoryIndex,
+              ) ??
+              alignOpeningTreeWithBoardPosition(
+                displayTree,
+                options.boardHistory,
+                boardHistoryIndex,
+                options.initialFen ?? null,
+              );
+
+            if (!prepared) {
+              throw new Error(`No repertoire node for board position ${options.atFenKey}`);
+            }
+
+            displayTree = prepared;
+          }
+        }
+
+        if (displayTree) {
+          displayTree = ensureOpeningTreeRootPrefix(displayTree);
         }
 
         setActiveOpeningTree(displayTree);
@@ -343,7 +389,7 @@ export function useLabLines(
     setOpeningTreeActionError('');
 
     try {
-      const response = await fetch('/api/opening-trees', { credentials: 'same-origin' });
+      const response = await fetch(`/api/opening-trees?browsePly=${minForcedPlies}`, { credentials: 'same-origin' });
       const payload = await readJsonResponse<OpeningTreesPayload>(response);
 
       if (!response.ok) {
@@ -358,7 +404,7 @@ export function useLabLines(
     } finally {
       setOpeningTreesLoading(false);
     }
-  }, [setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
+  }, [minForcedPlies, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
 
   const importRecentOpeningTrees = useCallback(async () => {
     setOpeningTreeActionLoading(true);
@@ -636,8 +682,27 @@ export function useLabLines(
 
   const beginLearnDrill = useCallback(
     (tree: OpeningTreeDetail, trainSide: OpeningSide, pickTrigger: 'initial' | 'next' = 'initial') => {
+      const boardHistorySnapshot = moveHistoryRef.current;
+      const boardHistoryIndexSnapshot = historyIndexRef.current;
+      const alignedTree =
+        alignOpeningTreeWithBoardPosition(
+          tree,
+          boardHistorySnapshot,
+          boardHistoryIndexSnapshot,
+          initialFenRef.current,
+        ) ?? tree;
+      const treeForDrill = ensureOpeningTreeRootPrefix(alignedTree);
+
+      if (treeForDrill !== tree) {
+        setActiveOpeningTree(treeForDrill);
+      }
+
       const completedBefore = linesCompletedLearnBranches;
-      const { path, branchEdgeId, branchForkNodeId, branchEdgeUci } = pickLearnBranch(tree, trainSide, completedBefore);
+      const { path, branchEdgeId, branchForkNodeId, branchEdgeUci } = pickLearnBranch(
+        treeForDrill,
+        trainSide,
+        completedBefore,
+      );
       activeBranchEdgeIdRef.current = branchEdgeId;
       activeLearnBranchRef.current =
         branchEdgeId && branchForkNodeId && branchEdgeUci
@@ -684,7 +749,7 @@ export function useLabLines(
         pathNodeIds: path.map((step) => step.nodeId),
       });
 
-      linesSession.resetSession(tree, trainSide);
+      linesSession.resetSession(treeForDrill, trainSide);
       drillPathRef.current = path;
       drillPathIndexRef.current = 0;
       setLinesTrainPlyTotal(countTrainPliesInDrillPath(path));
@@ -698,11 +763,7 @@ export function useLabLines(
       setOrientation(trainSide);
       playSound('game-start');
 
-      const fullUcis = [...tree.rootUci];
-
-      if (replayUcis.length > 0) {
-        fullUcis.push(...replayUcis);
-      }
+      const fullUcis = buildLearnDrillStartupUcis(treeForDrill, path, firstTrainIndex);
 
       const targetStep = path[firstTrainIndex] ?? path[0]!;
       setActiveOpeningNodeId(targetStep.nodeId);
@@ -734,6 +795,7 @@ export function useLabLines(
       playSound,
       replayMovesToIndex,
       setActiveOpeningNodeId,
+      setActiveOpeningTree,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
       setLinesActiveLearnBranch,
@@ -856,7 +918,12 @@ export function useLabLines(
       }
 
       const trainSide = overrideTrainSide ?? activeTrainSide;
-      const treeForLearn = resolveLinesStudyOpeningTree(tree, 'learn', learnMaxPly) ?? tree;
+      const alignedTree = alignOpeningTreeWithBoardPosition(tree, moveHistory, historyIndex, initialFen) ?? tree;
+      const treeForLearn = resolveLinesStudyOpeningTree(alignedTree, 'learn', learnMaxPly) ?? alignedTree;
+
+      if (treeForLearn !== tree) {
+        setActiveOpeningTree(treeForLearn);
+      }
       setLinesCompletedLearnBranches([]);
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
@@ -868,15 +935,19 @@ export function useLabLines(
       setTimelineAnalyses([]);
       setTimelineError('');
       setServerError('');
-      setLinesStudySessionLog(createLinesStudySessionLog(tree.id, 'learn', trainSide));
+      setLinesStudySessionLog(createLinesStudySessionLog(treeForLearn.id, 'learn', trainSide));
       beginLearnDrill(treeForLearn, trainSide, 'initial');
     },
     [
       activeOpeningTree,
       activeTrainSide,
       beginLearnDrill,
+      historyIndex,
+      initialFen,
       learnMaxPly,
+      moveHistory,
       setLinesCompletedLearnBranches,
+      setActiveOpeningTree,
       setLinesStudySessionLog,
       modeRef,
       positionRequestIdRef,
@@ -1091,15 +1162,29 @@ export function useLabLines(
         setLinesLearnBranchComplete(false);
       }
 
-      const boardFenKey = normalizeOpeningFen(game.fen());
-      const keepBoard = historyIndex > 0 && !isStandardStartFenKey(boardFenKey);
+      const boardContext = resolveLinesBoardContext(game.fen(), moveHistory, historyIndex, initialFen);
+      const keepBoard = boardContext.historyIndex > 0 && !isStandardStartFenKey(boardContext.fenKey);
+      const effectiveBrowsePly = keepBoard ? Math.max(minForcedPlies, boardContext.historyIndex) : minForcedPlies;
       const tree = await loadOpeningTreeDetail(treeId, {
         syncBoard: !keepBoard,
-        atFenKey: keepBoard ? boardFenKey : undefined,
-        boardHistory: keepBoard ? moveHistory.slice(0, historyIndex) : undefined,
+        atFenKey: keepBoard ? boardContext.fenKey : undefined,
+        boardHistory: keepBoard ? boardContext.boardHistory : undefined,
+        boardHistoryIndex: keepBoard ? boardContext.historyIndex : undefined,
+        browsePly: effectiveBrowsePly,
+        initialFen,
       });
 
-      if (tree && !keepBoard) {
+      if (!tree) {
+        setSelectedOpeningTreeId(null);
+        setActiveOpeningNodeId(null);
+        return;
+      }
+
+      if (keepBoard && boardContext.historyIndex !== historyIndex) {
+        setHistoryIndex(boardContext.historyIndex);
+      }
+
+      if (!keepBoard) {
         loadOpeningTreeRootOnBoard(tree);
       }
     },
@@ -1111,6 +1196,8 @@ export function useLabLines(
       deckPlaybackRequestIdRef,
       game,
       historyIndex,
+      initialFen,
+      minForcedPlies,
       loadOpeningTreeDetail,
       loadOpeningTreeRootOnBoard,
       moveHistory,

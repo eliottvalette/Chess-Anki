@@ -225,6 +225,248 @@ export function resolveOpeningCatalogTreeIdsAtFenKey(
   return [...treeIds];
 }
 
+export function reconstructOpeningPathToNode(
+  nodeId: string,
+  nodes: Array<{ id: string; ply: number }>,
+  edges: Array<{ fromNodeId: string; toNodeId: string; san: string; uci: string }>,
+): { san: string[]; uci: string[] } | null {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const targetNode = nodeById.get(nodeId);
+
+  if (!targetNode) {
+    return null;
+  }
+
+  if (targetNode.ply === 0) {
+    return { san: [], uci: [] };
+  }
+
+  const rootNodes = nodes.filter((node) => node.ply === 0);
+
+  if (rootNodes.length === 0) {
+    return null;
+  }
+
+  const outgoing = new Map<string, Array<{ fromNodeId: string; toNodeId: string; san: string; uci: string }>>();
+
+  for (const edge of edges) {
+    const bucket = outgoing.get(edge.fromNodeId) ?? [];
+    bucket.push(edge);
+    outgoing.set(edge.fromNodeId, bucket);
+  }
+
+  type PathState = { nodeId: string; san: string[]; uci: string[] };
+  const queue: PathState[] = rootNodes.map((node) => ({ nodeId: node.id, san: [], uci: [] }));
+  const bestPathByNodeId = new Map<string, { san: string[]; uci: string[] }>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const currentNode = nodeById.get(current.nodeId);
+
+    if (!currentNode) {
+      continue;
+    }
+
+    const previous = bestPathByNodeId.get(current.nodeId);
+
+    if (previous && previous.san.length <= current.san.length) {
+      continue;
+    }
+
+    bestPathByNodeId.set(current.nodeId, { san: current.san, uci: current.uci });
+
+    if (current.nodeId === nodeId && current.san.length === targetNode.ply) {
+      return { san: current.san, uci: current.uci };
+    }
+
+    if (current.san.length >= targetNode.ply) {
+      continue;
+    }
+
+    for (const edge of outgoing.get(current.nodeId) ?? []) {
+      const childNode = nodeById.get(edge.toNodeId);
+
+      if (!childNode || childNode.ply !== currentNode.ply + 1) {
+        continue;
+      }
+
+      queue.push({
+        nodeId: edge.toNodeId,
+        san: [...current.san, edge.san],
+        uci: [...current.uci, edge.uci],
+      });
+    }
+  }
+
+  const fallbackPath = bestPathByNodeId.get(nodeId);
+
+  if (!fallbackPath || fallbackPath.san.length !== targetNode.ply) {
+    return null;
+  }
+
+  return fallbackPath;
+}
+
+export function deriveDynamicCatalogName(pathSan: string[]): string {
+  if (pathSan.length === 0) {
+    return 'Starting position';
+  }
+
+  return pathSan.join(' ');
+}
+
+export function buildDynamicCatalogEntryForNode(
+  graph: OpeningGraphDraft,
+  node: OpeningNodeDraft,
+  path: { san: string[]; uci: string[] },
+): OpeningCatalogDraft {
+  const sourceCount = node.recentGames + node.cardCount;
+  const reachableNodeCount = collectReachableNodeIdsFromNode(
+    node.id,
+    graph.edges.map((edge) => ({ fromNodeId: edge.fromNodeId, toNodeId: edge.toNodeId })),
+  ).size;
+
+  return {
+    id: buildOpeningCatalogId(graph.id, node.fenKey, node.ply),
+    graphId: graph.id,
+    entryNodeId: node.id,
+    catalogPly: node.ply,
+    library: graph.library,
+    fenKey: node.fenKey,
+    name: deriveDynamicCatalogName(path.san),
+    displaySan: path.san,
+    displayUci: path.uci,
+    sourceCount,
+    subgraphNodeCount: reachableNodeCount,
+  };
+}
+
+export function buildDynamicCatalogEntries(
+  graph: OpeningGraphDraft,
+  browsePly: number,
+  options: { catalogMinSources?: number } = {},
+): OpeningCatalogDraft[] {
+  const minSources = options.catalogMinSources ?? OPENING_CATALOG_MIN_SOURCES;
+  const catalogs: OpeningCatalogDraft[] = [];
+
+  for (const node of graph.nodes) {
+    if (node.ply !== browsePly) {
+      continue;
+    }
+
+    const sourceCount = node.recentGames + node.cardCount;
+
+    if (sourceCount < minSources) {
+      continue;
+    }
+
+    const path = reconstructOpeningPathToNode(node.id, graph.nodes, graph.edges);
+
+    if (!path || path.san.length !== browsePly) {
+      continue;
+    }
+
+    catalogs.push(buildDynamicCatalogEntryForNode(graph, node, path));
+  }
+
+  return catalogs.sort((left, right) => right.sourceCount - left.sourceCount);
+}
+
+export function buildDynamicBrowseSummaries(
+  graphs: OpeningGraphDraft[],
+  browsePly: number,
+  progress: Map<string, OpeningGraphProgressEntry>,
+): OpeningTreeSummary[] {
+  const summaries: OpeningTreeSummary[] = [];
+
+  for (const graph of graphs) {
+    for (const catalog of buildDynamicCatalogEntries(graph, browsePly)) {
+      summaries.push(catalogToSummary(graph, catalog, progress, graph.nodes, graph.edges));
+    }
+  }
+
+  return summaries.sort((left, right) => right.sourceCount - left.sourceCount);
+}
+
+export function findDynamicCatalogEntry(
+  graphs: OpeningGraphDraft[],
+  treeId: string,
+  browsePly: number,
+): { graph: OpeningGraphDraft; catalog: OpeningCatalogDraft } | null {
+  for (const graph of graphs) {
+    for (const catalog of buildDynamicCatalogEntries(graph, browsePly)) {
+      if (catalog.id === treeId) {
+        return { graph, catalog };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function findDynamicCatalogEntryById(
+  graphs: OpeningGraphDraft[],
+  treeId: string,
+): { graph: OpeningGraphDraft; catalog: OpeningCatalogDraft } | null {
+  for (const graph of graphs) {
+    for (const node of graph.nodes) {
+      const sourceCount = node.recentGames + node.cardCount;
+
+      if (sourceCount < OPENING_CATALOG_MIN_SOURCES) {
+        continue;
+      }
+
+      const path = reconstructOpeningPathToNode(node.id, graph.nodes, graph.edges);
+
+      if (!path) {
+        continue;
+      }
+
+      const catalog = buildDynamicCatalogEntryForNode(graph, node, path);
+
+      if (catalog.id === treeId) {
+        return { graph, catalog };
+      }
+    }
+  }
+
+  return null;
+}
+
+export function projectTreeFromFenKey(
+  graphs: OpeningGraphDraft[],
+  fenKey: string,
+  progress: Map<string, OpeningGraphProgressEntry>,
+): OpeningTreeDetail | null {
+  let best: { graph: OpeningGraphDraft; catalog: OpeningCatalogDraft } | null = null;
+
+  for (const graph of graphs) {
+    const node = graph.nodes.find((candidate) => candidate.fenKey === fenKey);
+
+    if (!node) {
+      continue;
+    }
+
+    const path = reconstructOpeningPathToNode(node.id, graph.nodes, graph.edges);
+
+    if (!path) {
+      continue;
+    }
+
+    const catalog = buildDynamicCatalogEntryForNode(graph, node, path);
+
+    if (!best || catalog.sourceCount > best.catalog.sourceCount) {
+      best = { graph, catalog };
+    }
+  }
+
+  if (!best) {
+    return null;
+  }
+
+  return projectCatalogSubgraph(best.graph, best.graph.nodes, best.graph.edges, best.catalog, progress);
+}
+
 function countReachableNodes(entryNodeId: string, nodes: OpeningNodeDraft[], edges: OpeningEdgeDraft[]): number {
   const nodeIds = new Set(nodes.map((node) => node.id));
   const repertoireEdges = edges.filter((edge) => edge.recentCount > 0 || edge.cardCount > 0 || edge.mastersGames > 0);

@@ -2,10 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  alignOpeningTreeWithBoardPosition,
   applyLearnMaxPlyToOpeningTree,
   buildDrillPath,
   buildForkCoverage,
   buildLearnDrillReplayUcis,
+  buildLearnDrillStartupUcis,
   buildOpeningDrillExpected,
   buildOpeningTrees,
   buildReviewQueue,
@@ -15,6 +17,7 @@ import {
   classifyLinesMoveAtHistoryIndex,
   classifyOpeningDrillMove,
   classifyRootPrefixMove,
+  ensureOpeningTreeRootPrefix,
   filterOpeningTreeForDisplay,
   filterOpeningTreeSummariesByIds,
   filterOpeningTreeSummariesByMinForcedPlies,
@@ -31,6 +34,7 @@ import {
   pickNextUnplayedOpponentEdge,
   prepareOpeningTreeAtFenWithBoard,
   resolveAcceptedTrainMoveUcis,
+  resolveLinesBoardContext,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
   STANDARD_START_FEN_KEY,
@@ -1595,4 +1599,315 @@ test('pickLearnBranch skips completed opponent branch edges', () => {
 
   assert.notEqual(first.branchEdgeUci, second.branchEdgeUci);
   assert.equal(second.branchForkNodeId, 'after-d4');
+});
+
+test('resolveLinesBoardContext matches board fen when history index lags behind played moves', () => {
+  const afterD5Fen = 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2';
+  const moveHistory = [
+    { san: 'e4', uci: 'e2e4', from: 'e2', to: 'e4' },
+    { san: 'd5', uci: 'd7d5', from: 'd7', to: 'd5' },
+  ];
+  const resolved = resolveLinesBoardContext(afterD5Fen, moveHistory, 1, null);
+
+  assert.equal(resolved.historyIndex, 2);
+  assert.deepEqual(
+    resolved.boardHistory.map((move) => move.uci),
+    ['e2e4', 'd7d5'],
+  );
+  assert.equal(resolved.fenKey, normalizeOpeningFen(afterD5Fen));
+});
+
+test('ensureOpeningTreeRootPrefix rebuilds a truncated rootUci from the graph', () => {
+  const afterD5FenKey = normalizeOpeningFen('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2');
+  const tree = {
+    id: 'tree-scandi',
+    name: 'e4 d5',
+    library: 'e4',
+    rootFenKey: afterD5FenKey,
+    rootPly: 2,
+    rootSan: ['e4'],
+    rootUci: ['e2e4'],
+    sourceCount: 2,
+    targetDepth: 12,
+    nodeCount: 4,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'start',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: STANDARD_START_FEN_KEY,
+        ply: 0,
+        sideToMove: 'white',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-e4',
+        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        fenKey: normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'),
+        ply: 1,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-d5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        fenKey: afterD5FenKey,
+        ply: 2,
+        sideToMove: 'white',
+        bestUci: 'e4d5',
+        bestSan: 'exd5',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-e4',
+        fromNodeId: 'start',
+        toNodeId: 'after-e4',
+        uci: 'e2e4',
+        san: 'e4',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+      {
+        id: 'edge-d5',
+        fromNodeId: 'after-e4',
+        toNodeId: 'after-d5',
+        uci: 'd7d5',
+        san: 'd5',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const repaired = ensureOpeningTreeRootPrefix(tree);
+
+  assert.deepEqual(repaired.rootSan, ['e4', 'd5']);
+  assert.deepEqual(repaired.rootUci, ['e2e4', 'd7d5']);
+});
+
+test('buildLearnDrillStartupUcis replays through d5 before the first white train move', () => {
+  const afterD5FenKey = normalizeOpeningFen('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2');
+  const tree = {
+    id: 'tree-scandi',
+    name: 'e4 d5',
+    library: 'e4',
+    rootFenKey: afterD5FenKey,
+    rootPly: 2,
+    rootSan: ['e4'],
+    rootUci: ['e2e4'],
+    sourceCount: 2,
+    targetDepth: 12,
+    nodeCount: 4,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'start',
+        fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+        fenKey: STANDARD_START_FEN_KEY,
+        ply: 0,
+        sideToMove: 'white',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-e4',
+        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        fenKey: normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1'),
+        ply: 1,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-d5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        fenKey: afterD5FenKey,
+        ply: 2,
+        sideToMove: 'white',
+        bestUci: 'e4d5',
+        bestSan: 'exd5',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-e4',
+        fromNodeId: 'start',
+        toNodeId: 'after-e4',
+        uci: 'e2e4',
+        san: 'e4',
+        moveBy: 'white',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+      {
+        id: 'edge-d5',
+        fromNodeId: 'after-e4',
+        toNodeId: 'after-d5',
+        uci: 'd7d5',
+        san: 'd5',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+  const { path } = pickLearnBranch(tree, 'white', []);
+  const firstTrainIndex = path.findIndex((step) => step.isTrainTurn);
+  const startupUcis = buildLearnDrillStartupUcis(tree, path, firstTrainIndex);
+
+  assert.equal(firstTrainIndex, 0);
+  assert.deepEqual(startupUcis, ['e2e4', 'd7d5']);
+});
+
+test('alignOpeningTreeWithBoardPosition re-roots learn drill after free play e4 d5', () => {
+  const afterD5FenKey = normalizeOpeningFen('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2');
+  const tree = {
+    id: 'tree-scandi',
+    name: 'e4 d5',
+    library: 'e4',
+    rootFenKey: 'after-e4',
+    rootPly: 1,
+    rootSan: ['e4'],
+    rootUci: ['e2e4'],
+    sourceCount: 2,
+    targetDepth: 12,
+    nodeCount: 3,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'after-e4',
+        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        fenKey: 'after-e4',
+        ply: 1,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-d5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        fenKey: afterD5FenKey,
+        ply: 2,
+        sideToMove: 'white',
+        bestUci: 'e4d5',
+        bestSan: 'exd5',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-d5',
+        fromNodeId: 'after-e4',
+        toNodeId: 'after-d5',
+        uci: 'd7d5',
+        san: 'd5',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+  const boardHistory = [
+    { san: 'e4', uci: 'e2e4' },
+    { san: 'd5', uci: 'd7d5' },
+  ];
+  const aligned = alignOpeningTreeWithBoardPosition(tree, boardHistory, 2);
+
+  assert.ok(aligned);
+  assert.deepEqual(aligned.rootSan, ['e4', 'd5']);
+  assert.deepEqual(aligned.rootUci, ['e2e4', 'd7d5']);
+  assert.equal(aligned.rootPly, 2);
+
+  const { path } = pickLearnBranch(aligned, 'white', []);
+  const firstTrainIndex = path.findIndex((step) => step.isTrainTurn);
+
+  assert.equal(firstTrainIndex, 0);
+  assert.equal(path[0]?.bestUci, 'e4d5');
+  assert.deepEqual(buildLearnDrillReplayUcis(path), []);
 });

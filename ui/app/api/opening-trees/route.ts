@@ -5,11 +5,15 @@ import { NextResponse } from 'next/server';
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
+  buildDynamicBrowseSummaries,
   catalogDraftFromRow,
+  catalogToSummary,
+  findDynamicCatalogEntry,
+  findDynamicCatalogEntryById,
   graphDraftFromRows,
   type OpeningGraphDraft,
   projectCatalogSubgraph,
-  resolveOpeningCatalogTreeIdsAtFenKey,
+  projectTreeFromFenKey,
 } from '@/lib/opening-graph';
 
 import {
@@ -64,17 +68,19 @@ export async function GET(request: Request) {
   const treeId = url.searchParams.get('treeId');
   const full = url.searchParams.get('full') === 'true';
   const atFenKey = url.searchParams.get('atFenKey');
+  const browsePlyParam = url.searchParams.get('browsePly');
+  const browsePly = browsePlyParam == null ? null : Math.max(1, Number(browsePlyParam) || 1);
 
   try {
     const supabase = createAdminClient();
 
     if (atFenKey) {
-      const treeIds = await fetchTreeIdsAtFenKey(supabase, profile.id, atFenKey);
-      return NextResponse.json({ treeIds });
+      const tree = await fetchProjectedTreeAtFenKey(supabase, profile.id, atFenKey);
+      return NextResponse.json({ tree });
     }
 
     if (treeId) {
-      const detail = await fetchTreeDetail(supabase, profile.id, treeId);
+      const detail = await fetchTreeDetail(supabase, profile.id, treeId, browsePly);
       return detail
         ? NextResponse.json({ tree: detail })
         : NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
@@ -85,7 +91,10 @@ export async function GET(request: Request) {
       return NextResponse.json({ trees: fullTrees });
     }
 
-    const summaries = await fetchTreeSummaries(supabase, profile.id);
+    const summaries =
+      browsePly != null
+        ? await fetchDynamicTreeSummaries(supabase, profile.id, browsePly)
+        : await fetchTreeSummaries(supabase, profile.id);
     return NextResponse.json({ trees: summaries });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to load opening trees.';
@@ -610,56 +619,82 @@ async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
   }
 }
 
-async function fetchTreeIdsAtFenKey(
+async function loadOwnerGraphForest(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
-  fenKey: string,
-): Promise<string[]> {
-  const { data: graphs, error: graphError } = await supabase
+): Promise<{ graphs: OpeningGraphDraft[]; progress: Map<string, ProgressEntry> }> {
+  const { data: graphRows, error: graphError } = await supabase
     .from('opening_graphs')
-    .select('id')
+    .select('id,library,train_side,root_fen_key,target_depth')
     .eq('owner_profile_id', profileId);
 
   if (graphError) {
     throw new Error(graphError.message);
   }
 
-  const graphIds = (graphs ?? []).map((graph) => String(graph.id));
+  const graphIds = (graphRows ?? []).map((graph) => String(graph.id));
 
   if (graphIds.length === 0) {
-    return [];
+    return { graphs: [], progress: await fetchProgress(supabase, profileId) };
   }
 
-  const [catalogRows, nodeRows, edgeRows] = await Promise.all([
-    fetchCatalogs(supabase, profileId),
-    fetchAllRows<{ id: string; graph_id: string; fen_key: string }>(
-      supabase,
-      'opening_nodes',
-      'id,graph_id,fen_key',
-      (query) => query.in('graph_id', graphIds).eq('fen_key', fenKey),
-    ),
+  const [nodeRows, edgeRows, progress] = await Promise.all([
+    fetchNodes(supabase, graphIds),
     fetchEdges(supabase, graphIds),
+    fetchProgress(supabase, profileId),
   ]);
 
-  return resolveOpeningCatalogTreeIdsAtFenKey(
-    fenKey,
-    catalogRows.map((row) => ({
-      id: String(row.id),
-      graphId: String(row.graph_id),
-      entryNodeId: String(row.entry_node_id),
-      fenKey: String(row.fen_key ?? ''),
-    })),
-    nodeRows.map((row) => ({
-      id: String(row.id),
-      graphId: String(row.graph_id),
-      fenKey: String(row.fen_key ?? ''),
-    })),
-    edgeRows.map((row) => ({
-      graphId: String(row.graph_id),
-      fromNodeId: String(row.from_node_id),
-      toNodeId: String(row.to_node_id),
-    })),
+  const graphs = (graphRows ?? []).map((row) =>
+    graphDraftFromRows(
+      row,
+      nodeRows.filter((node) => String(node.graph_id) === String(row.id)),
+      edgeRows.filter((edge) => String(edge.graph_id) === String(row.id)),
+    ),
   );
+
+  return { graphs, progress };
+}
+
+async function fetchDynamicTreeSummaries(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  browsePly: number,
+): Promise<OpeningTreeSummary[]> {
+  const { graphs, progress } = await loadOwnerGraphForest(supabase, profileId);
+  const progressMap = new Map(
+    [...progress.entries()].map(([nodeId, entry]) => [
+      nodeId,
+      {
+        seenCount: entry.seenCount,
+        correctCount: entry.correctCount,
+        missCount: entry.missCount,
+        masteryScore: entry.masteryScore,
+      },
+    ]),
+  );
+
+  return buildDynamicBrowseSummaries(graphs, browsePly, progressMap);
+}
+
+async function fetchProjectedTreeAtFenKey(
+  supabase: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  fenKey: string,
+): Promise<OpeningTreeDetail | null> {
+  const { graphs, progress } = await loadOwnerGraphForest(supabase, profileId);
+  const progressMap = new Map(
+    [...progress.entries()].map(([nodeId, entry]) => [
+      nodeId,
+      {
+        seenCount: entry.seenCount,
+        correctCount: entry.correctCount,
+        missCount: entry.missCount,
+        masteryScore: entry.masteryScore,
+      },
+    ]),
+  );
+
+  return projectTreeFromFenKey(graphs, fenKey, progressMap);
 }
 
 async function fetchTreeSummaries(
@@ -685,7 +720,35 @@ async function fetchTreeDetail(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
   treeId: string,
+  browsePly: number | null = null,
 ): Promise<OpeningTreeDetail | null> {
+  if (browsePly != null) {
+    const { graphs, progress } = await loadOwnerGraphForest(supabase, profileId);
+    const progressMap = new Map(
+      [...progress.entries()].map(([nodeId, entry]) => [
+        nodeId,
+        {
+          seenCount: entry.seenCount,
+          correctCount: entry.correctCount,
+          missCount: entry.missCount,
+          masteryScore: entry.masteryScore,
+        },
+      ]),
+    );
+    const dynamicMatch =
+      findDynamicCatalogEntry(graphs, treeId, browsePly) ?? findDynamicCatalogEntryById(graphs, treeId);
+
+    if (dynamicMatch) {
+      return projectCatalogSubgraph(
+        dynamicMatch.graph,
+        dynamicMatch.graph.nodes,
+        dynamicMatch.graph.edges,
+        dynamicMatch.catalog,
+        progressMap,
+      );
+    }
+  }
+
   const { data: catalogRow, error } = await supabase
     .from('opening_catalog')
     .select(CATALOG_SELECT)

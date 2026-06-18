@@ -164,7 +164,7 @@ export function LabSidebar() {
                   lab.startLinesReview(lab.labState.activeOpeningTree ?? undefined, side);
                 }
               }}
-              trees={lab.labState.openingTrees}
+              trees={lab.labState.linesBrowseOverrideTrees ?? lab.labState.openingTrees}
               minForcedPlies={lab.labState.minForcedPlies}
               setMinForcedPlies={lab.labState.setMinForcedPlies}
               minNodes={lab.labState.minNodes}
@@ -173,7 +173,7 @@ export function LabSidebar() {
               setMinDepth={lab.labState.setMinDepth}
               learnMaxPly={lab.labState.learnMaxPly}
               setLearnMaxPly={lab.labState.setLearnMaxPly}
-              positionFilterTreeIds={lab.labState.linesPositionFilterTreeIds}
+              positionFilterActive={lab.labState.linesBrowseOverrideTrees != null}
               positionFilterLoading={lab.labState.linesPositionFilterLoading}
               onClearBoardPosition={lab.clearLinesBoardPosition}
             />

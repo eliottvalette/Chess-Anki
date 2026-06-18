@@ -94,9 +94,6 @@ import {
 import {
   countReviewDueNodes,
   filterOpeningTreeSummaries,
-  filterOpeningTreeSummariesByIds,
-  filterOpeningTreeSummariesByMinForcedPlies,
-  formatBrowseForcedRootLine,
   formatOpeningTreeDisplayName,
   type LinesStudyMode,
   type OpeningLibrary,
@@ -236,7 +233,7 @@ export function LinesPanel({
   setMinDepth,
   learnMaxPly,
   setLearnMaxPly,
-  positionFilterTreeIds,
+  positionFilterActive,
   positionFilterLoading,
   onClearBoardPosition,
 }: {
@@ -276,24 +273,14 @@ export function LinesPanel({
   setMinDepth: (value: number) => void;
   learnMaxPly: number;
   setLearnMaxPly: (value: number) => void;
-  positionFilterTreeIds: string[] | null;
+  positionFilterActive: boolean;
   positionFilterLoading: boolean;
   onClearBoardPosition: () => void;
 }) {
-  const positionFilterActive = positionFilterTreeIds != null;
   const catalogTrees = useMemo(() => filterOpeningTreeSummaries(trees), [trees]);
-  const browseBaseTrees = useMemo(
-    () =>
-      positionFilterActive ? catalogTrees : filterOpeningTreeSummariesByMinForcedPlies(catalogTrees, minForcedPlies),
-    [catalogTrees, minForcedPlies, positionFilterActive],
-  );
-  const positionFilteredTrees = useMemo(
-    () => filterOpeningTreeSummariesByIds(browseBaseTrees, positionFilterTreeIds),
-    [browseBaseTrees, positionFilterTreeIds],
-  );
   const filteredTrees = useMemo(
-    () => positionFilteredTrees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
-    [minDepth, minNodes, positionFilteredTrees],
+    () => catalogTrees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
+    [catalogTrees, minDepth, minNodes],
   );
   const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
   const graphLayout = useMemo(() => layoutOpeningTreeGraph(activeTree), [activeTree]);
@@ -367,7 +354,9 @@ export function LinesPanel({
   const browseFilters = (
     <div className="flex flex-row gap-3 rounded-[10px] border border-(--border-soft) bg-(--surface-strong) px-3 py-2.5">
       <label className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[10px] font-normal text-(--text-soft)">Min forced plies</span>
+        <span className="text-[10px] font-normal text-(--text-soft)">
+          Browse ply{positionFilterActive ? ' (board)' : ''}
+        </span>
         <input
           className={`w-full rounded-md border border-(--border-soft) bg-transparent px-2 py-1 text-[13px] text-(--text) outline-none transition-[border-color] duration-150 focus:border-(--accent) ${positionFilterActive ? 'cursor-not-allowed opacity-50' : ''}`}
           disabled={positionFilterActive}
@@ -421,7 +410,7 @@ export function LinesPanel({
           </div>
           {catalogTrees.length === 0 ? (
             <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
-              Import your recent games to build opening trees grouped by the position after 4 plies.
+              Import your recent games to build opening graphs, then browse them at any ply depth.
             </p>
           ) : (
             <div className="flex min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -458,44 +447,29 @@ export function LinesPanel({
                           {formatOpeningLibrary(library)}
                         </h3>
                         <div className="flex min-h-0 flex-col gap-2">
-                          {libraryTrees.map((tree) => {
-                            const rootLine = positionFilterActive
-                              ? {
-                                  forced: tree.rootSan.join(' ') || 'Starting position',
-                                  continuation: null,
-                                }
-                              : formatBrowseForcedRootLine(tree, minForcedPlies);
-
-                            return (
-                              <button
-                                className={`flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-[10px] border px-3 py-[11px] text-left transition-[border-color,background-color] duration-150 ${tree.id === activeTreeId ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-(--text) shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]' : 'border-[rgba(214,226,244,0.18)] bg-[rgba(9,14,23,0.4)] text-(--text-muted) hover:border-[rgba(214,226,244,0.28)]'}`}
-                                key={tree.id}
-                                onClick={() => onSelectTree(tree.id)}
-                                type="button"
-                              >
-                                <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-(--text) wrap-anywhere">
-                                  <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
-                                  <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft) [&+strong]:min-w-0">
-                                    {tree.masteryScore > 0 ? `${tree.masteryScore}/100` : 'New'}
-                                  </span>
+                          {libraryTrees.map((tree) => (
+                            <button
+                              className={`flex w-full min-w-0 cursor-pointer flex-col gap-2 rounded-[10px] border px-3 py-[11px] text-left transition-[border-color,background-color] duration-150 ${tree.id === activeTreeId ? 'border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] text-(--text) shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)]' : 'border-[rgba(214,226,244,0.18)] bg-[rgba(9,14,23,0.4)] text-(--text-muted) hover:border-[rgba(214,226,244,0.28)]'}`}
+                              key={tree.id}
+                              onClick={() => onSelectTree(tree.id)}
+                              type="button"
+                            >
+                              <span className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2.5 [&_strong]:min-w-0 [&_strong]:text-[13px] [&_strong]:leading-tight [&_strong]:text-(--text) wrap-anywhere">
+                                <strong>{formatOpeningTreeDisplayName(tree.name)}</strong>
+                                <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft) [&+strong]:min-w-0">
+                                  {tree.masteryScore > 0 ? `${tree.masteryScore}/100` : 'New'}
                                 </span>
-                                <span className="block font-mono text-[11px] leading-[1.35] text-(--text-muted) wrap-anywhere">
-                                  {rootLine.forced}
-                                  {rootLine.continuation ? (
-                                    <>
-                                      <span className="text-(--text-soft)"> · </span>
-                                      <span className="text-(--text-soft)">{rootLine.continuation}</span>
-                                    </>
-                                  ) : null}
-                                </span>
-                                <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
-                                  <span>{tree.sourceCount} sources</span>
-                                  <span>{tree.nodeCount} nodes</span>
-                                  {tree.dueCount > 0 ? <span>{tree.dueCount} weak</span> : null}
-                                </span>
-                              </button>
-                            );
-                          })}
+                              </span>
+                              <span className="block font-mono text-[11px] leading-[1.35] text-(--text-muted) wrap-anywhere">
+                                {tree.rootSan.join(' ') || 'Starting position'}
+                              </span>
+                              <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
+                                <span>{tree.sourceCount} sources</span>
+                                <span>{tree.nodeCount} nodes</span>
+                                {tree.dueCount > 0 ? <span>{tree.dueCount} weak</span> : null}
+                              </span>
+                            </button>
+                          ))}
                         </div>
                       </section>
                     );

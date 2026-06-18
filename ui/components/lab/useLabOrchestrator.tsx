@@ -56,6 +56,8 @@ import {
   isStandardStartFenKey,
   linesMoveCategoryToReviewCategory,
   normalizeOpeningFen,
+  type OpeningTreeDetail,
+  openingTreeDetailToSummary,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
@@ -362,10 +364,15 @@ export function useLabOrchestrator() {
 
   useEffect(() => {
     const shouldFilter =
-      mode === 'lines' && labState.linesStudyMode === 'idle' && !openingDrillActive && !labState.selectedOpeningTreeId;
+      mode === 'lines' &&
+      labState.linesStudyMode === 'idle' &&
+      !openingDrillActive &&
+      labState.activeOpeningTree == null;
 
     if (!shouldFilter) {
-      labState.setLinesPositionFilterTreeIds(null);
+      if (labState.activeOpeningTree != null) {
+        labState.setLinesBrowseOverrideTrees(null);
+      }
       labState.setLinesPositionFilterLoading(false);
       return;
     }
@@ -373,7 +380,7 @@ export function useLabOrchestrator() {
     const fenKey = normalizeOpeningFen(currentFen);
 
     if (isStandardStartFenKey(fenKey) && historyIndex === 0) {
-      labState.setLinesPositionFilterTreeIds(null);
+      labState.setLinesBrowseOverrideTrees(null);
       labState.setLinesPositionFilterLoading(false);
       return;
     }
@@ -386,7 +393,7 @@ export function useLabOrchestrator() {
         const response = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`, {
           credentials: 'same-origin',
         });
-        const payload = (await response.json()) as { treeIds?: string[]; error?: string };
+        const payload = (await response.json()) as { tree?: OpeningTreeDetail | null; error?: string };
 
         if (cancelled) {
           return;
@@ -396,10 +403,14 @@ export function useLabOrchestrator() {
           throw new Error(payload.error ?? `Position filter failed: HTTP ${response.status}`);
         }
 
-        labState.setLinesPositionFilterTreeIds((payload.treeIds ?? []).map((treeId) => String(treeId)));
+        if (payload.tree) {
+          labState.setLinesBrowseOverrideTrees([openingTreeDetailToSummary(payload.tree)]);
+        } else {
+          labState.setLinesBrowseOverrideTrees([]);
+        }
       } catch {
         if (!cancelled) {
-          labState.setLinesPositionFilterTreeIds([]);
+          labState.setLinesBrowseOverrideTrees([]);
         }
       } finally {
         if (!cancelled) {
@@ -417,9 +428,9 @@ export function useLabOrchestrator() {
     mode,
     openingDrillActive,
     labState.linesStudyMode,
-    labState.selectedOpeningTreeId,
+    labState.activeOpeningTree,
+    labState.setLinesBrowseOverrideTrees,
     labState.setLinesPositionFilterLoading,
-    labState.setLinesPositionFilterTreeIds,
   ]);
 
   const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
@@ -1288,6 +1299,7 @@ export function useLabOrchestrator() {
 
     void loadOpeningTrees();
   }, [
+    labState.minForcedPlies,
     loadOpeningTrees,
     trainingProfile?.id,
     trainingProfileBootstrapping,
@@ -2272,8 +2284,8 @@ export function useLabOrchestrator() {
     setMoveHistory([]);
     setHistoryIndex(0);
     clearVariation();
-    labState.setLinesPositionFilterTreeIds(null);
-  }, [clearVariation, labState.setLinesPositionFilterTreeIds, setGame, setHistoryIndex, setInitialFen, setMoveHistory]);
+    labState.setLinesBrowseOverrideTrees(null);
+  }, [clearVariation, labState.setLinesBrowseOverrideTrees, setGame, setHistoryIndex, setInitialFen, setMoveHistory]);
 
   const overriddenLabState = useMemo(
     () => ({

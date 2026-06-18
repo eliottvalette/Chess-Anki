@@ -123,7 +123,7 @@ export function useLabState() {
   const [linesStudySessionLog, setLinesStudySessionLog] = useState<LinesStudySessionLog | null>(null);
   const [linesTrainPlyCurrent, setLinesTrainPlyCurrent] = useState(0);
   const [linesTrainPlyTotal, setLinesTrainPlyTotal] = useState(0);
-  const [linesPositionFilterTreeIds, setLinesPositionFilterTreeIds] = useState<string[] | null>(null);
+  const [linesBrowseOverrideTrees, setLinesBrowseOverrideTrees] = useState<OpeningTreeSummary[] | null>(null);
   const [linesPositionFilterLoading, setLinesPositionFilterLoading] = useState(false);
   const [activeTrainSide, setActiveTrainSide] = useState<'white' | 'black'>('white');
   const drillPathRef = useRef<DrillPathStep[]>([]);
@@ -299,8 +299,8 @@ export function useLabState() {
     setLinesTrainPlyCurrent,
     linesTrainPlyTotal,
     setLinesTrainPlyTotal,
-    linesPositionFilterTreeIds,
-    setLinesPositionFilterTreeIds,
+    linesBrowseOverrideTrees,
+    setLinesBrowseOverrideTrees,
     linesPositionFilterLoading,
     setLinesPositionFilterLoading,
     drillPathRef,

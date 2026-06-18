@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   buildCatalogEntries,
+  buildDynamicCatalogEntries,
   buildOpeningGraphForest,
   buildOpeningGraphId,
   buildOpeningNodeId,
@@ -10,6 +11,7 @@ import {
   OPENING_CATALOG_PLY,
   projectCatalogSubgraph,
   projectCatalogToTreeDraft,
+  projectTreeFromFenKey,
   resolveOpeningCatalogTreeIdsAtFenKey,
   resolveOpeningGraphScope,
 } from './opening-graph.ts';
@@ -345,6 +347,97 @@ test('resolveOpeningCatalogTreeIdsAtFenKey matches catalogs after catalog ply', 
   const treeIdsAfterBb5 = resolveOpeningCatalogTreeIdsAtFenKey(afterBb5FenKey, catalogs, nodes, edges);
   assert.equal(treeIdsAfterBb5.length, 1);
   assert.equal(treeIdsAfterBb5[0], catalogs[0].id);
+});
+
+test('buildDynamicCatalogEntries groups unique prefixes at the requested browse ply', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'g1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+      {
+        id: 'g2',
+        name: 'Sicilian',
+        trainSide: 'white',
+        moves: ['e4', 'c5', 'Nf3', 'd6'],
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+
+  const plyOneEntries = buildDynamicCatalogEntries(graph, 1);
+  assert.equal(plyOneEntries.length, 1);
+  assert.equal(plyOneEntries[0].name, 'e4');
+  assert.deepEqual(plyOneEntries[0].displaySan, ['e4']);
+
+  const plyTwoEntries = buildDynamicCatalogEntries(graph, 2);
+  assert.equal(plyTwoEntries.length, 2);
+  assert.deepEqual(plyTwoEntries.map((entry) => entry.displaySan.join(' ')).sort(), ['e4 c5', 'e4 e5']);
+});
+
+test('projectTreeFromFenKey projects the continuation tree from a played position', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'g1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+  const afterItalianParsed = parseSanMoves(FOUR_KNIGHTS);
+  const afterBb5FenKey = normalizeOpeningFen(afterItalianParsed[4].fenAfter);
+  const projected = projectTreeFromFenKey([graph], afterBb5FenKey, new Map());
+
+  assert.ok(projected);
+  assert.equal(projected.rootSan.join(' '), 'e4 e5 Nf3 Nc6 Bb5');
+  assert.ok(projected.nodes.some((node) => node.ply > projected.rootPly));
+});
+
+test('buildDynamicCatalogEntries skips nodes that are not reachable from the graph root', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'g1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+
+  const orphanNode = {
+    ...graph.nodes[graph.nodes.length - 1],
+    id: 'opening-node-orphan',
+    ply: 2,
+    fenKey: 'orphan-fen-key',
+    recentGames: 9,
+    cardCount: 0,
+  };
+  const graphWithOrphan = {
+    ...graph,
+    nodes: [...graph.nodes, orphanNode],
+  };
+
+  const entries = buildDynamicCatalogEntries(graphWithOrphan, 2);
+  assert.ok(entries.every((entry) => entry.entryNodeId !== orphanNode.id));
+  assert.ok(entries.length > 0);
 });
 
 test('resolveOpeningTreeRootPly clamps forced plies to the requested value below catalog ply', () => {

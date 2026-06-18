@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 
-import { buildOpeningTrees, mergeOpeningTreeDelta } from './opening-graph.ts';
+import { restoreGameFromHistory, type StoredMove } from './chess-analysis-client.ts';
+import { buildOpeningTrees, mergeOpeningTreeDelta, reconstructOpeningPathToNode } from './opening-graph.ts';
 
 export type OpeningLibrary = 'e4' | 'd4' | 'c4' | 'nf3' | 'other';
 export type OpeningSide = 'white' | 'black';
@@ -1041,6 +1042,42 @@ export function isStandardStartFenKey(fenKey: string) {
   return fenKey === STANDARD_START_FEN_KEY;
 }
 
+export function resolveLinesBoardContext(
+  boardFen: string,
+  moveHistory: StoredMove[],
+  historyIndex: number,
+  initialFen: string | null = null,
+): { fenKey: string; boardHistory: StoredMove[]; historyIndex: number } {
+  const boardFenKey = normalizeOpeningFen(boardFen);
+  const historyFenKey = normalizeOpeningFen(restoreGameFromHistory(moveHistory, initialFen, historyIndex).fen());
+
+  if (historyFenKey === boardFenKey) {
+    return {
+      fenKey: boardFenKey,
+      boardHistory: moveHistory.slice(0, historyIndex),
+      historyIndex,
+    };
+  }
+
+  for (let candidate = moveHistory.length; candidate >= 0; candidate -= 1) {
+    const candidateFenKey = normalizeOpeningFen(restoreGameFromHistory(moveHistory, initialFen, candidate).fen());
+
+    if (candidateFenKey === boardFenKey) {
+      return {
+        fenKey: boardFenKey,
+        boardHistory: moveHistory.slice(0, candidate),
+        historyIndex: candidate,
+      };
+    }
+  }
+
+  return {
+    fenKey: boardFenKey,
+    boardHistory: moveHistory.slice(0, historyIndex),
+    historyIndex,
+  };
+}
+
 export function filterOpeningTreeSummariesByIds(
   trees: OpeningTreeSummary[],
   treeIds: string[] | null,
@@ -1094,11 +1131,156 @@ export function prepareOpeningTreeAtFenWithBoard(
 
   return {
     ...filtered,
+    name: boardSans.length > 0 ? boardSans.join(' ') : tree.name,
     rootPly: node.ply,
     rootFenKey: fenKey,
     rootSan: boardSans,
     rootUci: boardUcis,
   };
+}
+
+export function alignOpeningTreeWithBoardPosition(
+  tree: OpeningTreeDetail,
+  moveHistory: Array<{ san: string; uci: string }>,
+  historyIndex: number,
+  initialFen: string | null = null,
+): OpeningTreeDetail | null {
+  if (historyIndex <= 0) {
+    return tree;
+  }
+
+  const chess = initialFen ? new Chess(initialFen) : new Chess();
+
+  for (let index = 0; index < historyIndex; index += 1) {
+    const uci = moveHistory[index]?.uci;
+
+    if (!uci) {
+      return tree;
+    }
+
+    chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      ...(uci[4] ? { promotion: uci[4] } : {}),
+    });
+  }
+
+  const fenKey = normalizeOpeningFen(chess.fen());
+  const prepared = prepareOpeningTreeAtFenWithBoard(tree, fenKey, moveHistory, historyIndex);
+
+  if (!prepared) {
+    return null;
+  }
+
+  return ensureOpeningTreeRootPrefix(prepared);
+}
+
+export function ensureOpeningTreeRootPrefix(tree: OpeningTreeDetail): OpeningTreeDetail {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode) {
+    return tree;
+  }
+
+  const chess = new Chess();
+
+  for (const uci of tree.rootUci) {
+    const move = chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      ...(uci[4] ? { promotion: uci[4] } : {}),
+    });
+
+    if (!move) {
+      break;
+    }
+  }
+
+  const rootNodeFenKey = normalizeOpeningFen(rootNode.fen);
+
+  if (normalizeOpeningFen(chess.fen()) === rootNodeFenKey) {
+    return tree;
+  }
+
+  const reconstructed = reconstructOpeningPathToNode(
+    rootNode.id,
+    tree.nodes,
+    tree.edges.filter((edge) => isRepertoireEdge(edge)),
+  );
+
+  if (!reconstructed || reconstructed.uci.length !== rootNode.ply) {
+    return tree;
+  }
+
+  return {
+    ...tree,
+    name: reconstructed.san.length > 0 ? reconstructed.san.join(' ') : tree.name,
+    rootSan: reconstructed.san,
+    rootUci: reconstructed.uci,
+    rootFenKey: rootNode.fenKey,
+    rootPly: rootNode.ply,
+  };
+}
+
+export function buildLearnDrillStartupUcis(
+  tree: OpeningTreeDetail,
+  path: DrillPathStep[],
+  firstTrainIndex: number,
+): string[] {
+  const treeReady = ensureOpeningTreeRootPrefix(tree);
+  const targetStep = path[firstTrainIndex];
+
+  if (!targetStep) {
+    return [...treeReady.rootUci];
+  }
+
+  const targetFenKey = normalizeOpeningFen(targetStep.fen);
+  const startupUcis = [...treeReady.rootUci];
+  const chess = new Chess();
+
+  for (const uci of startupUcis) {
+    chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      ...(uci[4] ? { promotion: uci[4] } : {}),
+    });
+  }
+
+  if (normalizeOpeningFen(chess.fen()) === targetFenKey) {
+    return startupUcis;
+  }
+
+  const reconstructed = reconstructOpeningPathToNode(
+    targetStep.nodeId,
+    treeReady.nodes,
+    treeReady.edges.filter((edge) => isRepertoireEdge(edge)),
+  );
+
+  if (reconstructed && reconstructed.uci.length > 0) {
+    return reconstructed.uci;
+  }
+
+  for (let index = 1; index <= firstTrainIndex; index += 1) {
+    const uci = path[index]?.edgeUciFromParent;
+
+    if (!uci || startupUcis.includes(uci)) {
+      continue;
+    }
+
+    startupUcis.push(uci);
+    chess.move({
+      from: uci.slice(0, 2),
+      to: uci.slice(2, 4),
+      ...(uci[4] ? { promotion: uci[4] } : {}),
+    });
+
+    if (normalizeOpeningFen(chess.fen()) === targetFenKey) {
+      return startupUcis;
+    }
+  }
+
+  return startupUcis;
 }
 
 export function parseSanMoves(moves: string[], initialFen: string | null = null): OpeningMove[] {
@@ -1909,10 +2091,28 @@ export function shortHash(value: string) {
   return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
-export function prepareOpeningTreeForLines(tree: OpeningTreeDetail, minForcedPlies: number): OpeningTreeDetail {
-  const rootPly = resolveOpeningTreeRootPly(tree, minForcedPlies);
+export function prepareOpeningTreeForLines(tree: OpeningTreeDetail): OpeningTreeDetail {
+  const rootPly = tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
 
   return filterOpeningTreeForDisplay(tree, rootPly);
+}
+
+export function openingTreeDetailToSummary(tree: OpeningTreeDetail): OpeningTreeSummary {
+  return {
+    id: tree.id,
+    name: tree.name,
+    library: tree.library,
+    rootFenKey: tree.rootFenKey,
+    rootPly: tree.rootPly,
+    rootSan: tree.rootSan,
+    rootUci: tree.rootUci,
+    sourceCount: tree.sourceCount,
+    targetDepth: tree.targetDepth,
+    nodeCount: tree.nodeCount,
+    dueCount: tree.dueCount,
+    masteryScore: tree.masteryScore,
+    updatedAt: tree.updatedAt,
+  };
 }
 
 export function applyLearnMaxPlyToOpeningTree(tree: OpeningTreeDetail, maxPly: number): OpeningTreeDetail {
