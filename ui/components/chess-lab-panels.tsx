@@ -700,9 +700,19 @@ function formatOpeningLibrary(library: OpeningLibrary) {
   }
 }
 
+const openingTreeLayoutCache = new Map<string, Map<string, { x: number; y: number }>>();
+const OPENING_TREE_LAYOUT_CACHE_LIMIT = 8;
+
 function layoutOpeningTreeGraph(tree: OpeningTreeDetail | null) {
   if (!tree?.nodes?.length) {
     return new Map<string, { x: number; y: number }>();
+  }
+
+  const cacheKey = `${tree.id}:${tree.nodes.length}:${tree.edges?.length ?? 0}`;
+  const cachedLayout = openingTreeLayoutCache.get(cacheKey);
+
+  if (cachedLayout) {
+    return cachedLayout;
   }
 
   const graph = new dagre.graphlib.Graph();
@@ -724,6 +734,16 @@ function layoutOpeningTreeGraph(tree: OpeningTreeDetail | null) {
   for (const node of tree.nodes) {
     const point = graph.node(node.id) ?? { x: 0, y: 0 };
     positions.set(node.id, { x: point.x - 78, y: point.y - 29 });
+  }
+
+  openingTreeLayoutCache.set(cacheKey, positions);
+
+  if (openingTreeLayoutCache.size > OPENING_TREE_LAYOUT_CACHE_LIMIT) {
+    const oldestKey = openingTreeLayoutCache.keys().next().value;
+
+    if (oldestKey !== undefined) {
+      openingTreeLayoutCache.delete(oldestKey);
+    }
   }
 
   return positions;

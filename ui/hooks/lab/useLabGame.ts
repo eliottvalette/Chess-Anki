@@ -29,7 +29,6 @@ import {
   resolveDrillPathStepIndexFromHistory,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
-import { invalidateOpeningTreesClientCache } from '@/lib/opening-trees-client';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
 
@@ -297,13 +296,7 @@ export function useLabGame(
             expectedUci: primaryUci,
             correct,
           }),
-        })
-          .then((response) => {
-            if (response.ok) {
-              invalidateOpeningTreesClientCache();
-            }
-          })
-          .catch(() => undefined);
+        }).catch(() => undefined);
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
           if (correct) {
@@ -592,14 +585,6 @@ export function useLabGame(
       const boundedTarget = Math.max(0, Math.min(index, moveHistory.length));
 
       if (isLinesBrowse) {
-        if (boundedTarget > historyIndex && playDeckReplayToIndexRef.current) {
-          deckPlaybackRequestIdRef.current += 1;
-          deckReplayMovesRef.current = moveHistory;
-          deckReplayInitialFenRef.current = initialFen;
-          void playDeckReplayToIndexRef.current(boundedTarget, activeTrainSide, historyIndex);
-          return;
-        }
-
         if (boundedTarget !== historyIndex) {
           const nextGame = restoreGameFromHistory(moveHistory, initialFen, boundedTarget);
 

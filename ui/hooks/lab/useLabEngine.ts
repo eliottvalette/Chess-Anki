@@ -27,6 +27,7 @@ export function useLabEngine(
     currentFen: string;
     currentMoveList: string[];
     currentLineKey: string;
+    skipLinesEngineAnalysis?: boolean;
   },
 ) {
   const {
@@ -43,7 +44,7 @@ export function useLabEngine(
     setTrainAnalysisTick,
   } = state;
 
-  const { currentFen, currentMoveList } = context;
+  const { currentFen, currentMoveList, skipLinesEngineAnalysis = false } = context;
 
   const positionCacheRef = useRef<Map<string, AnalysisResult>>(new Map());
   const positionInFlightRef = useRef<Map<string, Promise<AnalysisResult>>>(new Map());
@@ -191,7 +192,7 @@ export function useLabEngine(
 
   // Lines study uses opening-tree eval for the rail; engine analysis is optional and debounced.
   useEffect(() => {
-    if (mode !== 'lines') {
+    if (mode !== 'lines' || skipLinesEngineAnalysis) {
       return undefined;
     }
 
@@ -219,7 +220,15 @@ export function useLabEngine(
     return () => {
       window.clearTimeout(timer);
     };
-  }, [currentFen, currentMoveList, fetchCachedPositionAnalysis, initialFen, mode, setPositionAnalysis]);
+  }, [
+    currentFen,
+    currentMoveList,
+    fetchCachedPositionAnalysis,
+    initialFen,
+    mode,
+    setPositionAnalysis,
+    skipLinesEngineAnalysis,
+  ]);
 
   // 2. Pre-fetch train move review if we step forward during training
   useEffect(() => {

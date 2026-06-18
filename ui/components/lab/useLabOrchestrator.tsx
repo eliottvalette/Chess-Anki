@@ -391,34 +391,37 @@ export function useLabOrchestrator() {
     let cancelled = false;
     labState.setLinesPositionFilterLoading(true);
 
-    void (async () => {
-      try {
-        const payload = await requestOpeningTreesJson<{ tree?: OpeningTreeDetail | null }>(
-          `/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`,
-        );
+    const debounceTimer = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const payload = await requestOpeningTreesJson<{ tree?: OpeningTreeDetail | null }>(
+            `/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`,
+          );
 
-        if (cancelled) {
-          return;
-        }
+          if (cancelled) {
+            return;
+          }
 
-        if (payload.tree) {
-          labState.setLinesBrowseOverrideTrees([openingTreeDetailToSummary(payload.tree)]);
-        } else {
-          labState.setLinesBrowseOverrideTrees([]);
+          if (payload.tree) {
+            labState.setLinesBrowseOverrideTrees([openingTreeDetailToSummary(payload.tree)]);
+          } else {
+            labState.setLinesBrowseOverrideTrees([]);
+          }
+        } catch {
+          if (!cancelled) {
+            labState.setLinesBrowseOverrideTrees([]);
+          }
+        } finally {
+          if (!cancelled) {
+            labState.setLinesPositionFilterLoading(false);
+          }
         }
-      } catch {
-        if (!cancelled) {
-          labState.setLinesBrowseOverrideTrees([]);
-        }
-      } finally {
-        if (!cancelled) {
-          labState.setLinesPositionFilterLoading(false);
-        }
-      }
-    })();
+      })();
+    }, 400);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(debounceTimer);
     };
   }, [
     currentFen,
@@ -451,8 +454,9 @@ export function useLabOrchestrator() {
       currentFen,
       currentMoveList,
       currentLineKey,
+      skipLinesEngineAnalysis: mode === 'lines' && activeOpeningTree != null,
     }),
-    [currentFen, currentLineKey, currentMoveList],
+    [activeOpeningTree, currentFen, currentLineKey, currentMoveList, mode],
   );
 
   const { analyzeTimelineDeep, clearEngineCache, positionCacheRef, positionInFlightRef, timelineBatchInFlightRef } =
@@ -2301,23 +2305,30 @@ export function useLabOrchestrator() {
     labState.setLinesBrowseOverrideTrees(null);
   }, [clearVariation, labState.setLinesBrowseOverrideTrees, setGame, setHistoryIndex, setInitialFen, setMoveHistory]);
 
+  const resolvedActiveOpeningTree = useMemo(() => {
+    if (
+      labState.activeOpeningTree?.id !== labState.selectedOpeningTreeId ||
+      !Array.isArray(labState.activeOpeningTree.nodes)
+    ) {
+      return null;
+    }
+
+    return resolveLinesStudyOpeningTree(labState.activeOpeningTree, labState.linesStudyMode, labState.learnMaxPly);
+  }, [labState.activeOpeningTree, labState.learnMaxPly, labState.linesStudyMode, labState.selectedOpeningTreeId]);
+
   const overriddenLabState = useMemo(
     () => ({
       ...labState,
-      activeOpeningTree:
-        labState.activeOpeningTree?.id === labState.selectedOpeningTreeId &&
-        Array.isArray(labState.activeOpeningTree.nodes)
-          ? resolveLinesStudyOpeningTree(labState.activeOpeningTree, labState.linesStudyMode, labState.learnMaxPly)
-          : null,
+      activeOpeningTree: resolvedActiveOpeningTree,
     }),
-    [labState],
+    [labState, resolvedActiveOpeningTree],
   );
 
   const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
 
   const linesForkCoverage = useMemo(
     () => linesSession.getForkCoverage(),
-    [labState.activeOpeningNodeId, labState.historyIndex, labState.openingDrillActive, linesSession],
+    [linesSession, linesSession.forkCoverageRevision],
   );
 
   const linesHasNextLearnBranch = useMemo(() => {

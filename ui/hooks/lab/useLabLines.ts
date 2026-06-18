@@ -1284,23 +1284,39 @@ export function useLabLines(
       deckPlaybackRequestIdRef.current += 1;
       setActiveOpeningNodeId(nodeId);
       const fullUcis = replayToNodeUcis(tree, nodeId);
+      const moves = buildStoredMovesFromUciList(null, fullUcis);
+      setInitialFen(null);
+      setMoveHistory(moves);
+      deckReplayInitialFenRef.current = null;
+      deckReplayMovesRef.current = moves;
+      setHistoryIndex(moves.length);
+      clearVariation();
+      setGame(restoreGameFromHistory(moves, null, moves.length));
       setOpeningDrillExpected(null);
+      setOpeningDrillStatus('');
+      setDeckPlaybackBusy(false);
       clearSelection();
       setOrientation(activeTrainSide);
-      void replayMovesToIndex(fullUcis, activeTrainSide, fullUcis.length);
     },
     [
       activeOpeningTree,
       activeTrainSide,
-      appendStudySessionLog,
       cancelDrillOpponentMove,
       clearSelection,
+      clearVariation,
       deckPlaybackBusy,
       deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
       linesStudyMode,
-      replayMovesToIndex,
       setActiveOpeningNodeId,
+      setDeckPlaybackBusy,
+      setGame,
+      setHistoryIndex,
+      setInitialFen,
+      setMoveHistory,
       setOpeningDrillExpected,
+      setOpeningDrillStatus,
       setOrientation,
     ],
   );

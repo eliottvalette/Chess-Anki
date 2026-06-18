@@ -2,7 +2,7 @@
 
 import { AsyncTtlCache } from './async-ttl-cache.ts';
 
-const openingTreesRequestCache = new AsyncTtlCache<string, unknown>({ maxEntries: 32, ttlMs: 3_000 });
+const openingTreesRequestCache = new AsyncTtlCache<string, unknown>({ maxEntries: 32, ttlMs: 15_000 });
 
 export async function requestOpeningTreesJson<Payload>(url: string): Promise<Payload> {
   const result = await openingTreesRequestCache.get(url, async () => {

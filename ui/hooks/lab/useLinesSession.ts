@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import {
   createLinesSession,
@@ -15,14 +15,17 @@ import {
 
 export function useLinesSession() {
   const sessionRef = useRef<LinesSessionState | null>(null);
+  const [forkCoverageRevision, setForkCoverageRevision] = useState(0);
 
   const resetSession = useCallback((tree: OpeningTreeDetail, trainSide: OpeningSide, startNodeId?: string | null) => {
     sessionRef.current = createLinesSession(tree, trainSide, startNodeId);
+    setForkCoverageRevision((revision) => revision + 1);
     return sessionRef.current;
   }, []);
 
   const clearSession = useCallback(() => {
     sessionRef.current = null;
+    setForkCoverageRevision((revision) => revision + 1);
   }, []);
 
   const resyncFromHistory = useCallback(
@@ -61,6 +64,7 @@ export function useLinesSession() {
       ...sessionRef.current,
       forkCoverage: markForkEdgePlayed(sessionRef.current.forkCoverage, fromNodeId, edgeId),
     };
+    setForkCoverageRevision((revision) => revision + 1);
   }, []);
 
   const setActiveNode = useCallback((nodeId: string, phase: LinesSessionState['phase'] = 'awaiting_train') => {
@@ -147,6 +151,7 @@ export function useLinesSession() {
 
   return {
     sessionRef,
+    forkCoverageRevision,
     resetSession,
     clearSession,
     resyncFromHistory,

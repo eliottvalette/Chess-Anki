@@ -2397,7 +2397,7 @@ export function resolveLinesStudyOpeningTree(
     return null;
   }
 
-  if (linesStudyMode === 'review' || learnMaxPly <= 0) {
+  if (linesStudyMode !== 'learn' || learnMaxPly <= 0) {
     return tree;
   }
 
