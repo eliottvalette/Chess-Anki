@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   buildDrillPath,
   buildForkCoverage,
+  buildOpeningDrillExpected,
   buildOpeningTrees,
   buildReviewQueue,
   chooseWeightedOpponentEdge,
@@ -143,6 +144,32 @@ test('resolveAcceptedTrainMoveUcis keeps all repertoire edges', () => {
 
   assert.deepEqual(accepted.acceptedUcis.sort(), ['b1c3', 'd2d4', 'g1f3']);
   assert.equal(accepted.primaryUci, 'g1f3');
+});
+
+test('buildOpeningDrillExpected returns null on terminal node without repertoire edges', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'leaf-node',
+        fen: 'rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 1',
+        fenKey: 'leaf',
+        ply: 2,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 22,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [],
+  };
+
+  assert.equal(buildOpeningDrillExpected(tree, 'leaf-node'), null);
 });
 
 test('classifyOpeningDrillMove marks best, book, and miss', () => {

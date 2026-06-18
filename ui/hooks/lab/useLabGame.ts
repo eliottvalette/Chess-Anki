@@ -11,6 +11,7 @@ import {
 } from '@/lib/chess-analysis-client';
 import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
+import { DRILL_OPPONENT_DELAY_MS } from '@/lib/lab-helpers';
 import {
   buildPendingDeckFeedback,
   type DeckCard,
@@ -26,8 +27,6 @@ import {
 } from '@/lib/opening-tree';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
-
-const DRILL_OPPONENT_DELAY_MS = 600;
 
 type LinesSessionApi = ReturnType<typeof useLinesSession>;
 
@@ -223,17 +222,13 @@ export function useLabGame(
           setDeckFeedbackArrowsVisible(false);
           setShowArrow(false);
         } else {
-          if (!expectedUci || !expectedSan) {
-            throw new Error(`Lines miss feedback missing expected move for node ${nodeId}`);
-          }
-
           setDeckFeedback({
             correct: false,
             exact: false,
             playedSan: move.san,
             playedUci: move.uci,
-            expectedSan,
-            expectedUci,
+            expectedSan: expectedSan ?? 'No book move',
+            expectedUci: expectedUci ?? '',
             validationMode: 'strict_best',
             pending: false,
             evalLossCp: linesClassification.evalLossCp ?? undefined,
@@ -308,7 +303,11 @@ export function useLabGame(
               setOpeningDrillStatus('Book move accepted. No continuation in this tree.');
             }
           } else {
-            setOpeningDrillStatus(`Miss. Best was ${expectedSan}. Use undo (left arrow) to retry.`);
+            setOpeningDrillStatus(
+              expectedSan
+                ? `Miss. Best was ${expectedSan}. Use undo (left arrow) to retry.`
+                : 'Miss. No repertoire move from this position.',
+            );
           }
         } else if (correct && matchingEdge && linesStudyMode === 'learn') {
           const nextNode = activeOpeningTree.nodes.find((node) => node.id === matchingEdge.toNodeId) ?? null;
@@ -447,6 +446,14 @@ export function useLabGame(
       }
 
       if (openingDrillActive && openingDrillExpected == null && deckFeedback == null) {
+        return false;
+      }
+
+      const hasTrainPrompt =
+        openingDrillExpected != null &&
+        (openingDrillExpected.uci != null || openingDrillExpected.acceptedUcis.length > 0);
+
+      if (openingDrillActive && !hasTrainPrompt && deckFeedback == null) {
         return false;
       }
 

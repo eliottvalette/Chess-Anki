@@ -293,6 +293,10 @@ export function buildOpeningDrillExpected(
 
   const accepted = resolveAcceptedTrainMoveUcis(tree, nodeId);
 
+  if (accepted.acceptedUcis.length === 0 && !accepted.primaryUci) {
+    return null;
+  }
+
   return {
     nodeId,
     uci: accepted.primaryUci,

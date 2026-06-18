@@ -456,12 +456,43 @@ export function useLabLines(
       if (step.isTrainTurn) {
         const drillExpected = activeOpeningTree
           ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
-          : {
-              nodeId: step.nodeId,
-              uci: step.bestUci,
-              san: step.bestSan,
-              acceptedUcis: step.bestUci ? [step.bestUci] : [],
-            };
+          : step.bestUci
+            ? {
+                nodeId: step.nodeId,
+                uci: step.bestUci,
+                san: step.bestSan,
+                acceptedUcis: [step.bestUci],
+              }
+            : null;
+
+        if (!drillExpected) {
+          if (!syncOnly && activeOpeningTree && linesStudyMode === 'learn') {
+            if (activeBranchEdgeIdRef.current) {
+              linesCompletedBranchEdgeIdsRef.current = [
+                ...linesCompletedBranchEdgeIdsRef.current,
+                activeBranchEdgeIdRef.current,
+              ];
+              activeBranchEdgeIdRef.current = null;
+            }
+            setLinesLearnBranchComplete(true);
+            setLinesStudyMode('idle');
+            setOpeningDrillExpected(null);
+            setOpeningDrillStatus('Branch complete.');
+            setOpeningDrillActive(false);
+            return;
+          }
+
+          if (!syncOnly && activeOpeningTree && linesStudyMode === 'review') {
+            advanceReviewCardRef.current();
+            return;
+          }
+
+          setOpeningDrillExpected(null);
+          setOpeningDrillStatus('Line complete.');
+          setOpeningDrillActive(false);
+          return;
+        }
+
         setOpeningDrillExpected(drillExpected);
         setOpeningDrillStatus('');
         setShowArrow(false);
