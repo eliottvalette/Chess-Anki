@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
+import { AsyncTtlCache } from '@/lib/async-ttl-cache';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
   buildDynamicBrowseSummaries,
@@ -17,7 +18,6 @@ import {
 } from '@/lib/opening-graph';
 
 import {
-  applyOpeningAttemptScore,
   chooseWeightedOpponentEdge,
   DEFAULT_OPENING_TARGET_DEPTH,
   ensureDraftEdge,
@@ -56,6 +56,12 @@ const EDGE_SELECT =
 const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
 const MAX_ENGINE_IMPORT_NODES = 120;
 const MAX_LICHESS_IMPORT_NODES = 80;
+const openingGraphCache = new AsyncTtlCache<string, OpeningGraphDraft[]>({ maxEntries: 4, ttlMs: 60_000 });
+const openingProgressCache = new AsyncTtlCache<string, Map<string, ProgressEntry>>({ maxEntries: 4, ttlMs: 1_000 });
+const openingProfileCache = new AsyncTtlCache<string, TrainingProfileCookie | null>({
+  maxEntries: 8,
+  ttlMs: 30_000,
+});
 
 export const runtime = 'nodejs';
 
@@ -389,38 +395,28 @@ function parseTimeClasses(value: unknown) {
 async function recordAttempt(profile: TrainingProfileCookie, body: Record<string, unknown>) {
   const nodeId = String(body.nodeId ?? '');
   const correct = Boolean(body.correct);
+  const attemptId = String(body.attemptId ?? crypto.randomUUID());
 
   if (!nodeId) {
     return NextResponse.json({ error: 'Node is required.' }, { status: 400 });
   }
 
   const supabase = createAdminClient();
-  const { data: current } = await supabase
-    .from('opening_drill_progress')
-    .select('seen_count,correct_count,miss_count,mastery_score')
-    .eq('profile_id', profile.id)
-    .eq('node_id', nodeId)
-    .maybeSingle();
-  const masteryScore = applyOpeningAttemptScore(Number(current?.mastery_score ?? 0), correct);
-  const { error } = await supabase.from('opening_drill_progress').upsert(
-    {
-      profile_id: profile.id,
-      node_id: nodeId,
-      seen_count: Number(current?.seen_count ?? 0) + 1,
-      correct_count: Number(current?.correct_count ?? 0) + (correct ? 1 : 0),
-      miss_count: Number(current?.miss_count ?? 0) + (correct ? 0 : 1),
-      mastery_score: masteryScore,
-      last_seen_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'profile_id,node_id' },
-  );
+  const { data, error } = await supabase.rpc('record_opening_drill_attempt_atomic', {
+    p_attempt_id: attemptId,
+    p_correct: correct,
+    p_node_id: nodeId,
+    p_profile_id: profile.id,
+  });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ nodeId, masteryScore });
+  const result = Array.isArray(data) ? data[0] : data;
+  const masteryScore = Number(result?.mastery_score ?? 0);
+  openingProgressCache.invalidate(profile.id);
+  return NextResponse.json({ nodeId, masteryScore, applied: Boolean(result?.applied) });
 }
 
 async function chooseNextStep(profile: TrainingProfileCookie, body: Record<string, unknown>) {
@@ -505,6 +501,8 @@ async function upsertForestDraft(
       throw new Error(error.message);
     }
   }
+
+  openingGraphCache.invalidate(profileId);
 }
 
 function asTreeDraft(graph: OpeningGraphDraft): OpeningTreeDraft {
@@ -670,36 +668,37 @@ async function loadOwnerGraphForest(
   supabase: ReturnType<typeof createAdminClient>,
   profileId: string,
 ): Promise<{ graphs: OpeningGraphDraft[]; progress: Map<string, ProgressEntry> }> {
-  const { data: graphRows, error: graphError } = await supabase
-    .from('opening_graphs')
-    .select('id,library,train_side,root_fen_key,target_depth')
-    .eq('owner_profile_id', profileId);
+  const [graphsResult, progressResult] = await Promise.all([
+    openingGraphCache.get(profileId, async () => {
+      const { data: graphRows, error: graphError } = await supabase
+        .from('opening_graphs')
+        .select('id,library,train_side,root_fen_key,target_depth')
+        .eq('owner_profile_id', profileId);
 
-  if (graphError) {
-    throw new Error(graphError.message);
-  }
+      if (graphError) {
+        throw new Error(graphError.message);
+      }
 
-  const graphIds = (graphRows ?? []).map((graph) => String(graph.id));
+      const graphIds = (graphRows ?? []).map((graph) => String(graph.id));
 
-  if (graphIds.length === 0) {
-    return { graphs: [], progress: await fetchProgress(supabase, profileId) };
-  }
+      if (graphIds.length === 0) {
+        return [];
+      }
 
-  const [nodeRows, edgeRows, progress] = await Promise.all([
-    fetchNodes(supabase, graphIds),
-    fetchEdges(supabase, graphIds),
-    fetchProgress(supabase, profileId),
+      const [nodeRows, edgeRows] = await Promise.all([fetchNodes(supabase, graphIds), fetchEdges(supabase, graphIds)]);
+
+      return (graphRows ?? []).map((row) =>
+        graphDraftFromRows(
+          row,
+          nodeRows.filter((node) => String(node.graph_id) === String(row.id)),
+          edgeRows.filter((edge) => String(edge.graph_id) === String(row.id)),
+        ),
+      );
+    }),
+    fetchProgressCached(supabase, profileId),
   ]);
 
-  const graphs = (graphRows ?? []).map((row) =>
-    graphDraftFromRows(
-      row,
-      nodeRows.filter((node) => String(node.graph_id) === String(row.id)),
-      edgeRows.filter((edge) => String(edge.graph_id) === String(row.id)),
-    ),
-  );
-
-  return { graphs, progress };
+  return { graphs: graphsResult.value, progress: progressResult };
 }
 
 async function fetchDynamicTreeSummaries(
@@ -758,7 +757,7 @@ async function fetchTreeSummaries(
     throw new Error(error.message);
   }
 
-  const progress = await fetchProgress(supabase, profileId);
+  const progress = await fetchProgressCached(supabase, profileId);
 
   return (catalogs ?? []).map((row) => summarizeCatalog(row, progress));
 }
@@ -820,7 +819,7 @@ async function fetchTreeDetail(
       .maybeSingle(),
     fetchNodes(supabase, [graphId]),
     fetchEdges(supabase, [graphId]),
-    fetchProgress(supabase, profileId),
+    fetchProgressCached(supabase, profileId),
   ]);
 
   if (graphRow.error) {
@@ -871,7 +870,7 @@ async function fetchFullTrees(
     supabase.from('opening_graphs').select('id,library,train_side,root_fen_key,target_depth').in('id', graphIds),
     fetchNodes(supabase, graphIds),
     fetchEdges(supabase, graphIds),
-    fetchProgress(supabase, profileId),
+    fetchProgressCached(supabase, profileId),
   ]);
 
   if (graphRows.error) {
@@ -1072,6 +1071,11 @@ async function fetchProgress(supabase: ReturnType<typeof createAdminClient>, pro
   );
 }
 
+async function fetchProgressCached(supabase: ReturnType<typeof createAdminClient>, profileId: string) {
+  const result = await openingProgressCache.get(profileId, () => fetchProgress(supabase, profileId));
+  return result.value;
+}
+
 async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | null> {
   const cookieStore = await cookies();
   const parsed = parseTrainingSessionCookie(cookieStore.get(TRAINING_SESSION_COOKIE)?.value);
@@ -1080,20 +1084,28 @@ async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | n
     return null;
   }
 
-  const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('training_profiles')
-    .select('id,username,session_token_hash')
-    .eq('id', parsed.profileId)
-    .maybeSingle();
+  const tokenHash = hashTrainingSessionToken(parsed.token);
+  const cacheKey = `${parsed.profileId}:${tokenHash}`;
+  const result = await openingProfileCache.get(cacheKey, async () => {
+    const supabase = createAdminClient();
+    const { data, error } = await supabase
+      .from('training_profiles')
+      .select('id,username,session_token_hash')
+      .eq('id', parsed.profileId)
+      .maybeSingle();
 
-  if (error || !data?.session_token_hash) {
-    return null;
-  }
+    if (error || !data?.session_token_hash || tokenHash !== data.session_token_hash) {
+      return null;
+    }
 
-  return hashTrainingSessionToken(parsed.token) === data.session_token_hash
-    ? { id: String(data.id), username: String(data.username), session_token_hash: String(data.session_token_hash) }
-    : null;
+    return {
+      id: String(data.id),
+      username: String(data.username),
+      session_token_hash: String(data.session_token_hash),
+    };
+  });
+
+  return result.value;
 }
 
 function normalizeLibrary(value: unknown): OpeningLibrary {

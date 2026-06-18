@@ -62,6 +62,7 @@ import {
   openingTreeDetailToSummary,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
+import { requestOpeningTreesJson } from '@/lib/opening-trees-client';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
 import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
@@ -392,17 +393,12 @@ export function useLabOrchestrator() {
 
     void (async () => {
       try {
-        const response = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`, {
-          credentials: 'same-origin',
-        });
-        const payload = (await response.json()) as { tree?: OpeningTreeDetail | null; error?: string };
+        const payload = await requestOpeningTreesJson<{ tree?: OpeningTreeDetail | null }>(
+          `/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`,
+        );
 
         if (cancelled) {
           return;
-        }
-
-        if (!response.ok) {
-          throw new Error(payload.error ?? `Position filter failed: HTTP ${response.status}`);
         }
 
         if (payload.tree) {

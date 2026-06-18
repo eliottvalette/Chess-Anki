@@ -44,6 +44,7 @@ import {
   resolveLinesStudyOpeningTree,
   resolveReviewAdvance,
 } from '@/lib/opening-tree';
+import { invalidateOpeningTreesClientCache, requestOpeningTreesJson } from '@/lib/opening-trees-client';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
 
@@ -292,12 +293,11 @@ export function useLabLines(
         let displayTree: OpeningTreeDetail | null = null;
 
         if (options.atFenKey && options.boardHistory && options.boardHistory.length > 0) {
-          const projectedResponse = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(options.atFenKey)}`, {
-            credentials: 'same-origin',
-          });
-          const projectedPayload = await readJsonResponse<OpeningTreesPayload>(projectedResponse);
+          const projectedPayload = await requestOpeningTreesJson<OpeningTreesPayload>(
+            `/api/opening-trees?atFenKey=${encodeURIComponent(options.atFenKey)}`,
+          ).catch(() => null);
 
-          if (projectedResponse.ok && projectedPayload.tree) {
+          if (projectedPayload?.tree) {
             displayTree = prepareOpeningTreeForLines(projectedPayload.tree);
             const boardHistoryIndex = options.boardHistoryIndex ?? options.boardHistory.length;
             const aligned = alignOpeningTreeWithBoardPosition(
@@ -315,15 +315,9 @@ export function useLabLines(
 
         if (!displayTree) {
           const effectiveBrowsePly = options.browsePly ?? minForcedPlies;
-          const response = await fetch(
+          const payload = await requestOpeningTreesJson<OpeningTreesPayload>(
             `/api/opening-trees?treeId=${encodeURIComponent(treeId)}&browsePly=${effectiveBrowsePly}`,
-            { credentials: 'same-origin' },
           );
-          const payload = await readJsonResponse<OpeningTreesPayload>(response);
-
-          if (!response.ok) {
-            throw new Error(payload.error ?? `Opening tree fetch failed: HTTP ${response.status}`);
-          }
 
           const tree = payload.tree ?? null;
           displayTree = tree ? prepareOpeningTreeForLines(tree) : null;
@@ -392,12 +386,9 @@ export function useLabLines(
     setOpeningTreeActionError('');
 
     try {
-      const response = await fetch(`/api/opening-trees?browsePly=${minForcedPlies}`, { credentials: 'same-origin' });
-      const payload = await readJsonResponse<OpeningTreesPayload>(response);
-
-      if (!response.ok) {
-        throw new Error(payload.error ?? `Opening trees fetch failed: HTTP ${response.status}`);
-      }
+      const payload = await requestOpeningTreesJson<OpeningTreesPayload>(
+        `/api/opening-trees?browsePly=${minForcedPlies}`,
+      );
 
       const nextTrees = payload.trees ?? [];
       setOpeningTrees(nextTrees);
@@ -426,6 +417,7 @@ export function useLabLines(
         throw new Error(payload.error ?? 'Unable to import opening trees.');
       }
 
+      invalidateOpeningTreesClientCache();
       await loadOpeningTrees();
     } catch (error) {
       setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to import opening trees.');

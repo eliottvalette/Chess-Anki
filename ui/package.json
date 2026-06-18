@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "next dev",
+    "dev:webpack": "next dev --webpack",
     "prebuild": "node scripts/prepare-stockfish.mjs",
     "build": "next build",
     "start": "next start",
@@ -24,6 +25,8 @@
     "chesscom:build:opening-trees": "node scripts/chesscom/build-opening-trees.mjs",
     "opening:purge": "node scripts/purge-opening-data.mjs",
     "opening:smoke-rebuild": "node scripts/smoke/opening-graph-rebuild.mjs",
+    "opening:smoke-attempt-idempotency": "node scripts/smoke/opening-attempt-idempotency.mjs",
+    "profile:next": "node scripts/smoke/profile-next-trace.mjs",
     "opening:full-rebuild": "node scripts/purge-opening-data.mjs && node scripts/chesscom/build-opening-trees.mjs",
     "supabase:migrate": "node scripts/supabase/migrate.mjs",
     "supabase:apply-migration": "node scripts/supabase/apply-migration.mjs",

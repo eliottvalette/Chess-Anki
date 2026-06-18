@@ -29,6 +29,7 @@ import {
   resolveDrillPathStepIndexFromHistory,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
+import { invalidateOpeningTreesClientCache } from '@/lib/opening-trees-client';
 import type { LabState } from '../useLabState';
 import type { useLinesSession } from './useLinesSession';
 
@@ -290,12 +291,19 @@ export function useLabGame(
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             action: 'attempt',
+            attemptId: crypto.randomUUID(),
             nodeId,
             playedUci: move.uci,
             expectedUci: primaryUci,
             correct,
           }),
-        });
+        })
+          .then((response) => {
+            if (response.ok) {
+              invalidateOpeningTreesClientCache();
+            }
+          })
+          .catch(() => undefined);
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
           if (correct) {
