@@ -335,10 +335,10 @@ export function useRecentGames(
       };
     }
 
-    const timer = window.setTimeout(scheduleFetch, 1_500);
+    const timer = setTimeout(scheduleFetch, 1_500);
 
     return () => {
-      window.clearTimeout(timer);
+      clearTimeout(timer);
     };
   }, [chesscomUsername, fetchRecentChessGames, mode, recentGameTimeClass]);
 

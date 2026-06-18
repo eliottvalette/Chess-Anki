@@ -101,6 +101,7 @@ export type WorkspaceSnapshot = {
   historyIndex: number;
   variationBaseIndex: number | null;
   variationMoves: StoredMove[];
+  variationIndex: number;
   metadata: GameMetadata | null;
   whiteAvatarUrl: string | null;
   blackAvatarUrl: string | null;
@@ -137,6 +138,7 @@ export function createEmptyWorkspaceSnapshot(): WorkspaceSnapshot {
     historyIndex: 0,
     variationBaseIndex: null,
     variationMoves: [],
+    variationIndex: 0,
     metadata: null,
     whiteAvatarUrl: null,
     blackAvatarUrl: null,
@@ -164,6 +166,7 @@ export function normalizeWorkspaceSnapshot(snapshot: WorkspaceSnapshot): Workspa
     ...snapshot,
     moveHistory: [...snapshot.moveHistory],
     variationMoves: [...snapshot.variationMoves],
+    variationIndex: snapshot.variationIndex ?? snapshot.variationMoves.length,
     preMoveAnalyses: [...snapshot.preMoveAnalyses],
     timelineAnalyses: [...snapshot.timelineAnalyses],
     trainAllQueue: [...snapshot.trainAllQueue],

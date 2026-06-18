@@ -388,6 +388,18 @@ export function buildMoveUciHistory(moves: StoredMove[]) {
   return moves.map((move) => move.uci ?? `${move.from}${move.to}${move.promotion ?? ''}`);
 }
 
+export function restoreGameFromVariationBranch(
+  moveHistory: StoredMove[],
+  initialFen: string | null,
+  variationBaseIndex: number,
+  variationMoves: StoredMove[],
+  appliedVariationCount: number,
+) {
+  const combined = [...moveHistory.slice(0, variationBaseIndex), ...variationMoves.slice(0, appliedVariationCount)];
+
+  return restoreGameFromHistory(combined, initialFen, combined.length);
+}
+
 export function restoreGameFromHistory(moves: StoredMove[], initialFen: string | null, upto = moves.length) {
   const chess = initialFen ? new Chess(initialFen) : new Chess();
   const boundedUpto = Math.max(0, Math.min(upto, moves.length));

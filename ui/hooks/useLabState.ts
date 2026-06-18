@@ -44,6 +44,7 @@ export function useLabState() {
   const [historyIndex, setHistoryIndex] = useState(0);
   const [variationBaseIndex, setVariationBaseIndex] = useState<number | null>(null);
   const [variationMoves, setVariationMoves] = useState<StoredMove[]>([]);
+  const [variationIndex, setVariationIndex] = useState(0);
   const [selectedSquare, setSelectedSquare] = useState<string | null>(null);
   const [squareStyles, setSquareStyles] = useState<Record<string, CSSProperties>>({});
   const [orientation, setOrientation] = useState<'white' | 'black'>('white');
@@ -175,6 +176,8 @@ export function useLabState() {
     setVariationBaseIndex,
     variationMoves,
     setVariationMoves,
+    variationIndex,
+    setVariationIndex,
     selectedSquare,
     setSelectedSquare,
     squareStyles,

@@ -7,11 +7,17 @@ import {
   formatBestMove,
   linesJumpToHistoryIndex,
   restoreGameFromHistory,
+  restoreGameFromVariationBranch,
   toStoredMove,
 } from '@/lib/chess-analysis-client';
-import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
+import { type ChessSoundKey, getMoveSoundSequence, getPrimaryMoveSound } from '@/lib/chess-sounds';
 import { applyDeckAttempt } from '@/lib/deck-progress';
 import { DRILL_OPPONENT_DELAY_MS, isLinesBoardPlayAllowed } from '@/lib/lab-helpers';
+import {
+  planReviewHistoryBack,
+  planReviewHistoryForward,
+  resolveReviewGameAtHistoryIndex,
+} from '@/lib/lab-review-navigation';
 import { appendLinesStudySessionEntry } from '@/lib/lines-study-session-log.ts';
 import {
   buildPendingDeckFeedback,
@@ -66,6 +72,7 @@ export function useLabGame(
     moveHistory,
     variationBaseIndex,
     variationMoves,
+    variationIndex,
     activeDeckCard,
     deckFeedback,
     deckPlaybackBusy,
@@ -79,9 +86,11 @@ export function useLabGame(
     learnMaxPly,
     activeTrainSide,
     initialFen,
+    orientation,
     setLinesStudySessionLog,
     setVariationBaseIndex,
     setVariationMoves,
+    setVariationIndex,
     setGame,
     setPositionAnalysis,
     setServerError,
@@ -149,7 +158,8 @@ export function useLabGame(
   const clearVariation = useCallback(() => {
     setVariationBaseIndex(null);
     setVariationMoves([]);
-  }, [setVariationBaseIndex, setVariationMoves]);
+    setVariationIndex(0);
+  }, [setVariationBaseIndex, setVariationMoves, setVariationIndex]);
 
   const highlightMoves = useCallback(
     (square: string) => {
@@ -382,10 +392,11 @@ export function useLabGame(
 
       if (hasLoadedGame && !activeDeckCard) {
         const baseIndex = variationBaseIndex ?? historyIndex;
-        const nextVariationMoves = [...variationMoves, move];
+        const nextVariationMoves = [...variationMoves.slice(0, variationIndex), move];
 
         setVariationBaseIndex(baseIndex);
         setVariationMoves(nextVariationMoves);
+        setVariationIndex(nextVariationMoves.length);
         setGame(nextGame);
         setPositionAnalysis(null);
         setServerError('');
@@ -495,10 +506,12 @@ export function useLabGame(
       setTimelineError,
       setVariationBaseIndex,
       setVariationMoves,
+      setVariationIndex,
       state,
       timelineRefineRequestIdRef,
       trainAllSession,
       variationBaseIndex,
+      variationIndex,
       variationMoves,
     ],
   );
@@ -567,6 +580,15 @@ export function useLabGame(
       openingDrillExpected,
       playSound,
     ],
+  );
+
+  const reviewVariationState = useMemo(
+    () => ({
+      variationBaseIndex,
+      variationMoves,
+      variationIndex,
+    }),
+    [variationBaseIndex, variationIndex, variationMoves],
   );
 
   const jumpToIndex = useCallback(
@@ -649,6 +671,41 @@ export function useLabGame(
         return;
       }
 
+      const isReviewNavigation = modeRef.current === 'review' && !activeDeckCard && !openingDrillActive;
+
+      if (isReviewNavigation) {
+        const boundedIndex = Math.max(0, Math.min(index, moveHistory.length));
+
+        if (boundedIndex === historyIndex) {
+          return;
+        }
+
+        const nextGame = resolveReviewGameAtHistoryIndex(moveHistory, initialFen, boundedIndex, reviewVariationState);
+
+        if (options.playForwardSound && boundedIndex > historyIndex && boundedIndex <= moveHistory.length) {
+          const replayedMove = moveHistory[boundedIndex - 1];
+
+          if (replayedMove) {
+            playSoundSequence(
+              getMoveSoundSequence({
+                move: replayedMove,
+                isSelfMove: replayedMove.color === (state.activeTrainSide === 'white' ? 'w' : 'b'),
+                isCheck: nextGame.isCheck(),
+                isCheckmate: nextGame.isCheckmate(),
+                isGameOver: nextGame.isGameOver(),
+              }),
+            );
+          }
+        }
+
+        setHistoryIndex(boundedIndex);
+        setDeckFeedback(null);
+        setDeckFeedbackArrowsVisible(false);
+        setGame(nextGame);
+        clearSelection();
+        return;
+      }
+
       const jumped = linesJumpToHistoryIndex(moveHistory, initialFen, historyIndex, index);
       const { historyIndex: boundedIndex, game: nextGame, moveHistory: historyForSync } = jumped;
 
@@ -675,7 +732,9 @@ export function useLabGame(
       setHistoryIndex(boundedIndex);
       setDeckFeedback(null);
       setDeckFeedbackArrowsVisible(false);
-      setShowArrow(false);
+      if (modeRef.current !== 'review') {
+        setShowArrow(false);
+      }
       clearVariation();
       setGame(nextGame);
       clearSelection();
@@ -710,6 +769,7 @@ export function useLabGame(
       }
     },
     [
+      activeDeckCard,
       activeOpeningTree,
       activeTrainSide,
       clearSelection,
@@ -728,6 +788,7 @@ export function useLabGame(
       moveHistory,
       openingDrillActive,
       playDeckReplayToIndexRef,
+      reviewVariationState,
       advanceDrillToStepRef,
       cancelDrillOpponentMoveRef,
       drillPathRef,
@@ -745,13 +806,161 @@ export function useLabGame(
     ],
   );
 
+  const navigateReviewHistoryIndex = useCallback(
+    (targetIndex: number, direction: 'back' | 'forward') => {
+      const boundedIndex = Math.max(0, Math.min(targetIndex, moveHistory.length));
+
+      if (boundedIndex === historyIndex) {
+        return;
+      }
+
+      const nextGame = resolveReviewGameAtHistoryIndex(moveHistory, initialFen, boundedIndex, reviewVariationState);
+
+      if (direction === 'forward' && boundedIndex > historyIndex && boundedIndex <= moveHistory.length) {
+        const replayedMove = moveHistory[boundedIndex - 1];
+
+        if (replayedMove) {
+          const isSelfMove = orientation === 'white' ? replayedMove.color === 'w' : replayedMove.color === 'b';
+          playSoundSequence(
+            getMoveSoundSequence({
+              move: replayedMove,
+              isSelfMove,
+              isCheck: nextGame.isCheck(),
+              isCheckmate: nextGame.isCheckmate(),
+              isGameOver: nextGame.isGameOver(),
+            }),
+          );
+        }
+      } else if (direction === 'back' && boundedIndex < historyIndex) {
+        const replayedMove = moveHistory[boundedIndex];
+
+        if (replayedMove) {
+          const isSelfMove = orientation === 'white' ? replayedMove.color === 'w' : replayedMove.color === 'b';
+          playSoundSequence([getPrimaryMoveSound(replayedMove, isSelfMove)]);
+        }
+      }
+
+      setHistoryIndex(boundedIndex);
+      setGame(nextGame);
+      clearSelection();
+    },
+    [
+      clearSelection,
+      historyIndex,
+      initialFen,
+      moveHistory,
+      orientation,
+      playSoundSequence,
+      reviewVariationState,
+      setGame,
+      setHistoryIndex,
+    ],
+  );
+
+  const stepReviewHistoryBack = useCallback(() => {
+    const step = planReviewHistoryBack(historyIndex, reviewVariationState);
+
+    if (step.kind === 'noop') {
+      return;
+    }
+
+    if (step.kind === 'variation') {
+      const nextGame = restoreGameFromVariationBranch(
+        moveHistory,
+        initialFen,
+        variationBaseIndex!,
+        variationMoves,
+        step.variationIndex,
+      );
+      const undoneMove = variationMoves[step.variationIndex];
+
+      if (undoneMove) {
+        playSoundSequence([getPrimaryMoveSound(undoneMove, true)]);
+      }
+
+      setVariationIndex(step.variationIndex);
+      setGame(nextGame);
+      clearSelection();
+      return;
+    }
+
+    navigateReviewHistoryIndex(step.historyIndex, 'back');
+  }, [
+    clearSelection,
+    historyIndex,
+    initialFen,
+    moveHistory,
+    navigateReviewHistoryIndex,
+    playSoundSequence,
+    reviewVariationState,
+    setGame,
+    setVariationIndex,
+    variationBaseIndex,
+    variationMoves,
+  ]);
+
+  const stepReviewHistoryForward = useCallback(() => {
+    const step = planReviewHistoryForward(moveHistory, historyIndex, reviewVariationState);
+
+    if (step.kind === 'noop') {
+      return;
+    }
+
+    if (step.kind === 'variation') {
+      const nextGame = restoreGameFromVariationBranch(
+        moveHistory,
+        initialFen,
+        variationBaseIndex!,
+        variationMoves,
+        step.variationIndex,
+      );
+      const replayedMove = variationMoves[step.variationIndex - 1];
+
+      if (replayedMove) {
+        playSoundSequence(
+          getMoveSoundSequence({
+            move: replayedMove,
+            isSelfMove: true,
+            isCheck: nextGame.isCheck(),
+            isCheckmate: nextGame.isCheckmate(),
+            isGameOver: nextGame.isGameOver(),
+          }),
+        );
+      }
+
+      setVariationIndex(step.variationIndex);
+      setGame(nextGame);
+      clearSelection();
+      return;
+    }
+
+    navigateReviewHistoryIndex(step.historyIndex, 'forward');
+  }, [
+    clearSelection,
+    historyIndex,
+    initialFen,
+    moveHistory,
+    navigateReviewHistoryIndex,
+    playSoundSequence,
+    reviewVariationState,
+    setGame,
+    setVariationIndex,
+    variationBaseIndex,
+    variationMoves,
+  ]);
+
   const undoMove = useCallback(() => {
+    if (modeRef.current === 'review' && !activeDeckCard && !openingDrillActive) {
+      stepReviewHistoryBack();
+      return;
+    }
+
     if (historyIndex === 0) {
       return;
     }
 
     jumpToIndex(historyIndex - 1);
-  }, [historyIndex, jumpToIndex]);
+  }, [activeDeckCard, historyIndex, jumpToIndex, modeRef, openingDrillActive, stepReviewHistoryBack]);
 
   return {
     clearSelection,
@@ -761,5 +970,7 @@ export function useLabGame(
     tryMove,
     jumpToIndex,
     undoMove,
+    stepReviewHistoryBack,
+    stepReviewHistoryForward,
   };
 }

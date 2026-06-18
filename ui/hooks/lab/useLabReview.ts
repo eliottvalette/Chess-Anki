@@ -59,9 +59,8 @@ export function useLabReview(
         }
 
         setHistoryIndex(nextIndex);
-        deps.clearVariation();
-        setGame(nextGame);
         deps.clearSelection();
+        setGame(nextGame);
 
         await new Promise((resolve) => window.setTimeout(resolve, 210));
       }

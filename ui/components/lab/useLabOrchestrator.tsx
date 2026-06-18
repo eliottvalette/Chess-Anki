@@ -28,6 +28,7 @@ import {
   getBestMoveArrow,
   type ReviewCategory,
   restoreGameFromHistory,
+  restoreGameFromVariationBranch,
   reviewCategoryMeta,
   type StoredMove,
   type TimelineReview,
@@ -209,6 +210,7 @@ type WorkspaceSnapshot = {
   historyIndex: number;
   variationBaseIndex: number | null;
   variationMoves: StoredMove[];
+  variationIndex: number;
   metadata: GameMetadata | null;
   whiteAvatarUrl: string | null;
   blackAvatarUrl: string | null;
@@ -245,6 +247,8 @@ export function useLabOrchestrator() {
     setVariationBaseIndex,
     variationMoves,
     setVariationMoves,
+    variationIndex,
+    setVariationIndex,
     setSelectedSquare,
     squareStyles,
     setSquareStyles,
@@ -456,11 +460,11 @@ export function useLabOrchestrator() {
   const hasLoadedGame = moveHistory.length > 0 && metadata !== null;
   const currentMoves = useMemo(() => {
     if (variationBaseIndex != null) {
-      return [...moveHistory.slice(0, variationBaseIndex), ...variationMoves];
+      return [...moveHistory.slice(0, variationBaseIndex), ...variationMoves.slice(0, variationIndex)];
     }
 
     return moveHistory.slice(0, historyIndex);
-  }, [historyIndex, moveHistory, variationBaseIndex, variationMoves]);
+  }, [historyIndex, moveHistory, variationBaseIndex, variationIndex, variationMoves]);
 
   const currentMoveList = useMemo(() => buildMoveUciHistory(currentMoves), [currentMoves]);
   const currentLineKey = useMemo(
@@ -579,12 +583,16 @@ export function useLabOrchestrator() {
     return shouldUseLiveTrainMoveReview(activeDeckCard, currentMoves, historyIndex - 1, trainAnswerFeedback);
   }, [activeDeckCard, currentMoves, historyIndex, trainAnswerFeedback]);
   const reviewDisplayAnalysis = useMemo(() => {
-    if (!hasLoadedGame || activeDeckCard || variationBaseIndex != null) {
+    if (!hasLoadedGame || activeDeckCard) {
+      return null;
+    }
+
+    if (variationBaseIndex != null && variationIndex > 0) {
       return null;
     }
 
     return preMoveAnalyses[historyIndex] ?? null;
-  }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex]);
+  }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex, variationIndex]);
   const displayAnalysis = reviewDisplayAnalysis ?? positionAnalysis;
   const linesStudyTree = useMemo(() => {
     if (mode !== 'lines' || !activeOpeningTree) {
@@ -705,7 +713,8 @@ export function useLabOrchestrator() {
       positionAnalysis,
     );
   }, [activeDeckCard, historyIndex, isTrainCardFinished, moveHistory, positionAnalysis, trainPositionAnalyses]);
-  const reviewBestMoveArrow = showArrow && !activeDeckCard ? getBestMoveArrow(displayAnalysis?.bestMove ?? null) : [];
+  const reviewBestMoveArrow =
+    !activeDeckCard && (mode === 'review' || showArrow) ? getBestMoveArrow(displayAnalysis?.bestMove ?? null) : [];
   const deckAnswerArrow = isAtDeckFailureFeedbackView
     ? getBestMoveArrow(deckFeedback?.expectedUci ?? activeDeckCard?.answerUci ?? null)
     : [];
@@ -1036,22 +1045,39 @@ export function useLabOrchestrator() {
     ],
   );
 
-  const { clearSelection, clearVariation, highlightMoves, tryMove, jumpToIndex, undoMove } = useLabGame(
-    labState,
-    gameContext,
-  );
+  const {
+    clearSelection,
+    clearVariation,
+    highlightMoves,
+    tryMove,
+    jumpToIndex,
+    undoMove,
+    stepReviewHistoryBack,
+    stepReviewHistoryForward,
+  } = useLabGame(labState, gameContext);
   const applyWorkspaceSnapshot = useCallback(
     (snapshot: WorkspaceSnapshot) => {
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
       timelineRefineRequestIdRef.current += 1;
-      const nextGame = restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
+      const appliedVariationIndex = snapshot.variationIndex ?? snapshot.variationMoves.length;
+      const nextGame =
+        snapshot.variationBaseIndex != null
+          ? restoreGameFromVariationBranch(
+              snapshot.moveHistory,
+              snapshot.initialFen,
+              snapshot.variationBaseIndex,
+              snapshot.variationMoves,
+              appliedVariationIndex,
+            )
+          : restoreGameFromHistory(snapshot.moveHistory, snapshot.initialFen, snapshot.historyIndex);
 
       setInitialFen(snapshot.initialFen);
       setMoveHistory(snapshot.moveHistory);
       setHistoryIndex(snapshot.historyIndex);
       setVariationBaseIndex(snapshot.variationBaseIndex);
       setVariationMoves(snapshot.variationMoves);
+      setVariationIndex(appliedVariationIndex);
       setGame(nextGame);
       setMetadata(snapshot.metadata);
       setWhiteAvatarUrl(snapshot.whiteAvatarUrl);
@@ -1113,6 +1139,7 @@ export function useLabOrchestrator() {
       setTrainSessionStats,
       setVariationBaseIndex,
       setVariationMoves,
+      setVariationIndex,
       setWhiteAvatarUrl,
       setPositionLoading,
       setTimelineLoading,
@@ -1163,6 +1190,9 @@ export function useLabOrchestrator() {
       }
 
       setMode(nextMode);
+      if (nextMode === 'review') {
+        setShowArrow(true);
+      }
     },
     [
       applyWorkspaceSnapshot,
@@ -1170,6 +1200,7 @@ export function useLabOrchestrator() {
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
       setMode,
+      setShowArrow,
       persistTrainWorkspaceSnapshot,
       persistReviewWorkspaceSnapshot,
     ],
@@ -1687,6 +1718,8 @@ export function useLabOrchestrator() {
     playSoundSequence: ((_soundKeys: ChessSoundKey[]) => undefined) as typeof playSoundSequence,
     positionBestMove: null as string | null | undefined,
     reviewPlayerSide: null as typeof reviewPlayerSide,
+    stepReviewHistoryBack: (() => undefined) as typeof stepReviewHistoryBack,
+    stepReviewHistoryForward: (() => undefined) as typeof stepReviewHistoryForward,
     setDeckFeedback: ((_value: DeckFeedback | null) => undefined) as typeof setDeckFeedback,
     setDeckFeedbackArrowsVisible: ((_value: boolean) => undefined) as typeof setDeckFeedbackArrowsVisible,
     setGame: ((_game: Chess) => undefined) as typeof setGame,
@@ -1713,6 +1746,8 @@ export function useLabOrchestrator() {
     playSoundSequence,
     positionBestMove: positionAnalysis?.bestMove,
     reviewPlayerSide,
+    stepReviewHistoryBack,
+    stepReviewHistoryForward,
     setDeckFeedback,
     setDeckFeedbackArrowsVisible,
     setGame,
@@ -1770,6 +1805,8 @@ export function useLabOrchestrator() {
 
         if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
           state.cancelReviewPlayback();
+          state.stepReviewHistoryBack();
+          return;
         }
 
         if (state.mode === 'lines' && state.historyIndex > 0) {
@@ -1820,6 +1857,8 @@ export function useLabOrchestrator() {
 
         if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
           state.cancelReviewPlayback();
+          state.stepReviewHistoryForward();
+          return;
         }
 
         if (state.mode === 'lines' && state.historyIndex < state.moveHistory.length) {
@@ -1873,6 +1912,8 @@ export function useLabOrchestrator() {
 
         if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
           state.cancelReviewPlayback();
+          state.jumpToIndex(state.moveHistory.length);
+          return;
         }
 
         if (state.openingDrillActive) {
@@ -1902,6 +1943,8 @@ export function useLabOrchestrator() {
 
         if (state.mode === 'review' && !state.activeDeckCard && !state.openingDrillActive) {
           state.cancelReviewPlayback();
+          state.jumpToIndex(0);
+          return;
         }
 
         if (state.openingDrillActive) {
@@ -2068,6 +2111,7 @@ export function useLabOrchestrator() {
       setFileName(name);
       setMode('review');
       modeRef.current = 'review';
+      setShowArrow(true);
       setReviewIndex(0);
       setActiveDeckCard(null);
       setDeckFeedback(null);
@@ -2334,6 +2378,7 @@ export function useLabOrchestrator() {
     historyIndex,
     variationBaseIndex,
     variationMoves,
+    variationIndex,
     metadata,
     whiteAvatarUrl,
     blackAvatarUrl,
