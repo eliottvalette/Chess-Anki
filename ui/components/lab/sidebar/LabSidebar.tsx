@@ -17,13 +17,17 @@ export function LabSidebar() {
   return (
     <>
       <section
-        className={`min-h-0 min-w-0 flex flex-1 flex-col gap-3.5 overflow-hidden rounded-2xl border border-(--border) bg-(--panel-bg) p-[18px] shadow-(--glass-shadow) backdrop-blur-[22px] backdrop-saturate-[1.2]`}
+        className={`min-h-0 min-w-0 flex flex-1 flex-col gap-3.5 overflow-hidden rounded-xl border-0 bg-[rgba(7,12,20,0.85)] px-4 py-4 backdrop-blur-md backdrop-saturate-[1.1]`}
       >
-        <div className="grid grid-cols-3 gap-2">
+        <div className="flex w-full border-b border-(--border-soft)">
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
             <button
               key={tabMode}
-              className={`${lab.labState.mode === tabMode ? 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-[rgba(198,215,255,0.58)] bg-[rgba(46,58,82,0.58)] px-2 text-[11px] font-normal text-(--text) shadow-[inset_0_0_0_1px_rgba(198,215,255,0.1)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(198,215,255,0.58)] hover:bg-[rgba(46,58,82,0.58)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none' : 'box-border min-h-[38px] min-w-0 truncate rounded-[10px] border border-(--border) bg-[rgba(9,14,23,0.38)] px-2 text-[11px] font-normal text-(--text-muted) shadow-[inset_0_1px_0_rgba(0,0,0,0.24)] transition-[border-color,background-color,color,transform,box-shadow] duration-150 hover:border-[rgba(214,226,244,0.28)] hover:bg-[rgba(4,8,15,0.58)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:border-[rgba(214,226,244,0.1)] disabled:bg-[rgba(9,14,23,0.26)] disabled:text-(--text-disabled) disabled:shadow-none'}`}
+              className={`flex-1 relative box-border min-h-[38px] min-w-0 truncate border-0 bg-transparent px-1 text-[14px] font-normal transition-colors duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                lab.labState.mode === tabMode
+                  ? 'text-[#f5f8ff] font-medium after:absolute after:bottom-[-1px] after:left-0 after:h-[2px] after:w-full after:bg-[#98b8ff]'
+                  : 'text-[rgba(245,248,255,0.42)] hover:text-[rgba(245,248,255,0.62)]'
+              }`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
               type="button"
             >
@@ -90,7 +94,12 @@ export function LabSidebar() {
               recentGamesHasMore={lab.labState.recentChessGamesHasMore}
               reviewDeckSaveStatus={lab.labState.reviewDeckSaveStatus}
               reviewMoments={lab.reviewMoments}
-              onRecentGameTimeClassChange={lab.labState.setRecentGameTimeClass}
+              onRecentGameTimeClassChange={(timeClass) => {
+                lab.labState.setRecentGameTimeClass(timeClass);
+                if (lab.labState.chesscomUsername.trim()) {
+                  void lab.fetchRecentChessGames(lab.labState.chesscomUsername, timeClass);
+                }
+              }}
               canSaveReviewCard={Boolean(
                 lab.labState.trainingProfile &&
                   lab.labState.selectedDeckId &&

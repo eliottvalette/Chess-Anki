@@ -11,8 +11,8 @@
   --panel-bg: rgba(12, 18, 29, 0.54);
   --surface: rgba(18, 25, 38, 0.48);
   --surface-strong: rgba(9, 14, 23, 0.72);
-  --border: rgba(214, 226, 244, 0.2);
-  --border-soft: rgba(214, 226, 244, 0.12);
+  --border: rgba(245, 248, 255, 0.08);
+  --border-soft: rgba(245, 248, 255, 0.04);
   --text: #f5f8ff;
   --text-muted: #c0cadb;
   --text-soft: #8f9cb2;
@@ -23,7 +23,7 @@
   --positive: #8ae3c1;
   --warning: #ffd27a;
   --danger: #ff8d91;
-  --glass-shadow: 0 24px 70px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
   --glass-blur: blur(22px) saturate(1.2);
   --panel-scroll-gap: 14px;
 }
