@@ -38,7 +38,8 @@
     "supabase:backupdate:analysis": "node scripts/supabase/backupdate-analysis.mjs",
     "supabase:smoke": "node scripts/supabase/smoke.mjs",
     "supabase:audit:opening": "node scripts/supabase/audit-opening-graph.mjs",
-    "supabase:fix:opening": "node scripts/supabase/fix-opening-graph.mjs"
+    "supabase:fix:opening": "node scripts/supabase/fix-opening-graph.mjs",
+    "chesscom:build:recent-trees": "node scripts/chesscom/build-recent-trees.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

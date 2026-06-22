@@ -577,7 +577,10 @@ function buildGraphForScope(
 
     for (let gameIndex = scope.startMoveIndex; gameIndex <= boundedMoves.length; gameIndex += 1) {
       const graphPly = gameIndex - scope.startMoveIndex;
-      const fen = graphPly === 0 ? scope.graphRootFen : boundedMoves[gameIndex - 1]?.fenAfter;
+      const fen =
+        graphPly === 0
+          ? (boundedMoves[scope.startMoveIndex]?.fenBefore ?? scope.graphRootFen)
+          : boundedMoves[gameIndex - 1]?.fenAfter;
 
       if (!fen) {
         continue;
@@ -695,7 +698,10 @@ export function buildCatalogEntries(
 
     for (let gameIndex = scope.startMoveIndex; gameIndex <= parsed.length; gameIndex += 1) {
       const graphPly = gameIndex - scope.startMoveIndex;
-      const fen = graphPly === 0 ? scope.graphRootFen : parsed[gameIndex - 1]?.fenAfter;
+      const fen =
+        graphPly === 0
+          ? (parsed[scope.startMoveIndex]?.fenBefore ?? scope.graphRootFen)
+          : parsed[gameIndex - 1]?.fenAfter;
 
       if (!fen) {
         continue;

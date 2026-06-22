@@ -85,7 +85,7 @@ function ensureDraftEdge(draft, fromNode, uci, source, options) {
 
   if (!toNode) {
     toNode = {
-      id: `opening-node-${shortHash(`${draft.id}:${toFenKey}`)}`,
+      id: `opening-node-${shortHash(`${options.ownerProfileId}:${draft.trainSide}:${draft.library}:${toFenKey}`)}`,
       fen: toFen,
       fenKey: toFenKey,
       ply: fromNode.ply + 1,
@@ -100,15 +100,17 @@ function ensureDraftEdge(draft, fromNode, uci, source, options) {
     draft.nodes.push(toNode);
   }
 
-  let edge = draft.edges.find((candidate) => candidate.fromNodeId === fromNode.id && candidate.uci === uci);
+  const edgeId = `opening-edge-${shortHash(`${options.ownerProfileId}:${draft.trainSide}:${draft.library}:${fromNode.id}:${uci}`)}`;
+  let edge = draft.edges.find((e) => e.fromNodeId === fromNode.id && e.uci === uci);
+
   if (!edge) {
     edge = {
-      id: `opening-edge-${shortHash(`${draft.id}:${fromNode.id}:${uci}`)}`,
+      id: edgeId,
       fromNodeId: fromNode.id,
       toNodeId: toNode.id,
       uci,
       san: move.san,
-      moveBy: fromNode.sideToMove,
+      moveBy: move.color === 'w' ? 'white' : 'black',
       source,
       recentCount: 0,
       cardCount: 0,
@@ -236,7 +238,7 @@ function buildOpeningTrees(inputs, options) {
   );
 }
 
-async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
+async function enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId) {
   const nodesToEnrich = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
 
   for (const node of nodesToEnrich) {
@@ -256,7 +258,11 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
       node.bestSan = moveSanFromFen(node.fen, analysis.bestMove);
       node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
 
-      ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', { isEngineBest: true, priority: 100 });
+      ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
+        isEngineBest: true,
+        priority: 100,
+        ownerProfileId,
+      });
 
       const targetNode = draft.nodes.find((candidate) => {
         const chess = new Chess(node.fen);
@@ -282,7 +288,7 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl) {
   }
 }
 
-async function enrichLichessOpponentMoves(draft) {
+async function enrichLichessOpponentMoves(draft, ownerProfileId) {
   const opponentNodes = [...draft.nodes]
     .filter((node) => node.recentGames > 0)
     .sort((left, right) => left.ply - right.ply)
@@ -309,6 +315,7 @@ async function enrichLichessOpponentMoves(draft) {
         ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
           mastersGames: move.games,
           priority: Math.log10(move.games + 1) * 4,
+          ownerProfileId,
         });
       }
     } catch {
@@ -424,8 +431,8 @@ export async function buildAndUpsertOpeningTrees({
     logProgress(
       `[${index + 1}/${forest.graphs.length}] enriching graph ${graph.library}/${graph.trainSide} (${graph.nodes.length} nodes)`,
     );
-    await enrichEngineBestMoves(graphAsDraft(graph), analyzeBaseUrl);
-    await enrichLichessOpponentMoves(graphAsDraft(graph));
+    await enrichEngineBestMoves(graphAsDraft(graph), analyzeBaseUrl, ownerProfileId);
+    await enrichLichessOpponentMoves(graphAsDraft(graph), ownerProfileId);
     pruneOpeningTreeDraft({
       id: graph.id,
       name: graph.library,
