@@ -97,8 +97,8 @@ const TIMELINE_CACHE_PROGRESS = 4;
 const TIMELINE_ENGINE_PROGRESS_OFFSET = 8;
 const TIMELINE_ENGINE_PROGRESS_WEIGHT = 0.84;
 const LAST_MOVE_STYLE = {
-  backgroundColor: 'rgba(84, 173, 255, 0.26)',
-  boxShadow: 'inset 0 0 0 2px rgba(181, 222, 255, 0.42)',
+  backgroundColor: 'rgba(214, 182, 109, 0.20)',
+  boxShadow: 'inset 0 0 0 2px rgba(214, 182, 109, 0.45)',
 } satisfies CSSProperties;
 const RECENT_GAMES_PRELOAD_SCAN_MS = 10_000;
 
@@ -2457,8 +2457,9 @@ export function useLabOrchestrator() {
     .join(' ');
 
   const pageStyle = {
-    backgroundColor: '#07101b',
-    backgroundImage: 'linear-gradient(180deg, rgba(7, 12, 20, 0.34) 0%, rgba(5, 9, 15, 0.7) 100%), url("/bg.png")',
+    backgroundColor: '#050B08',
+    backgroundImage:
+      'radial-gradient(circle at 42% 45%, rgba(168, 216, 160, 0.08), transparent 42%), linear-gradient(90deg, rgba(3, 8, 6, 0.88) 0%, rgba(3, 8, 6, 0.62) 45%, rgba(3, 8, 6, 0.86) 100%), url("/bg-forest.png")',
     backgroundSize: 'cover',
     backgroundPosition: 'center',
     backgroundAttachment: 'scroll',

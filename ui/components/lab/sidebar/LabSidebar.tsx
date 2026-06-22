@@ -17,7 +17,7 @@ export function LabSidebar() {
   return (
     <>
       <section
-        className={`min-h-0 min-w-0 flex flex-1 flex-col gap-3.5 overflow-hidden rounded-xl border-0 bg-[rgba(7,12,20,0.85)] px-4 py-4 backdrop-blur-md backdrop-saturate-[1.1]`}
+        className={`min-h-0 min-w-0 flex flex-1 flex-col gap-3.5 overflow-hidden rounded-xl border border-[rgba(226,238,220,0.075)] bg-[rgba(5,12,9,0.82)] px-4 py-4 backdrop-blur-[18px] shadow-[0_24px_80px_rgba(0,0,0,0.32)]`}
       >
         <div className="flex w-full border-b border-(--border-soft)">
           {(['review', 'train', 'lines'] as WorkspaceMode[]).map((tabMode) => (
@@ -25,8 +25,8 @@ export function LabSidebar() {
               key={tabMode}
               className={`flex-1 relative box-border min-h-[38px] min-w-0 truncate border-0 bg-transparent px-1 text-[14px] font-normal transition-colors duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
                 lab.labState.mode === tabMode
-                  ? 'text-[#f5f8ff] font-medium after:absolute after:bottom-[-1px] after:left-0 after:h-[2px] after:w-full after:bg-[#98b8ff]'
-                  : 'text-[rgba(245,248,255,0.42)] hover:text-[rgba(245,248,255,0.62)]'
+                  ? 'text-[#F1F5EA] font-medium after:absolute after:bottom-[-1px] after:left-0 after:h-[2px] after:w-full after:bg-[#A8D8A0]'
+                  : 'text-[rgba(241,245,234,0.42)] hover:text-[rgba(241,245,234,0.66)]'
               }`}
               onClick={() => lab.switchWorkspaceMode(tabMode)}
               type="button"

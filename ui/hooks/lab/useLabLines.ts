@@ -7,7 +7,7 @@ import {
   buildStoredMovesFromUciList,
   restoreGameFromHistory,
 } from '@/lib/chess-analysis-client';
-import type { ChessSoundKey } from '@/lib/chess-sounds';
+import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
 import {
   DRILL_OPPONENT_DELAY_MS,
   delay,
@@ -140,6 +140,7 @@ export function useLabLines(
 
   const {
     playSound,
+    playSoundSequence,
     playDeckReplayToIndex,
     clearSelection,
     clearVariation,
@@ -580,14 +581,30 @@ export function useLabLines(
         const boardFen = restoreGameFromHistory(currentHistory, initialFenRef.current, currentIndex).fen();
         const appended = appendStoredMoveFromUci(currentHistory, boardFen, opponentUci);
 
+        const nextGame = new Chess(appended.nextFen);
+        const replayedMove = appended.moveHistory[appended.moveHistory.length - 1];
+
         moveHistoryRef.current = appended.moveHistory;
         historyIndexRef.current = currentIndex + 1;
         startTransition(() => {
           setMoveHistory(appended.moveHistory);
           setHistoryIndex(currentIndex + 1);
-          setGame(new Chess(appended.nextFen));
+          setGame(nextGame);
         });
-        playSound('move-opponent');
+
+        if (replayedMove) {
+          playSoundSequence(
+            getMoveSoundSequence({
+              move: replayedMove,
+              isSelfMove: false,
+              isCheck: nextGame.isCheck(),
+              isCheckmate: nextGame.isCheckmate(),
+              isGameOver: nextGame.isGameOver(),
+            }),
+          );
+        } else {
+          playSound('move-opponent');
+        }
       }
 
       setServerError('');
@@ -704,6 +721,7 @@ export function useLabLines(
       learnSourceTreeRef,
       markCurrentLearnBranchCompleted,
       playSound,
+      playSoundSequence,
       setActiveOpeningNodeId,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,

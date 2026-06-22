@@ -89,8 +89,8 @@ export const LabBoardArea = memo(function LabBoardArea() {
       onSquareRightClick,
       squareStyles: boardSquareStyles,
       arrows: boardArrows,
-      lightSquareStyle: { backgroundColor: '#728092' },
-      darkSquareStyle: { backgroundColor: '#253140' },
+      lightSquareStyle: { backgroundColor: '#B8C8AA' },
+      darkSquareStyle: { backgroundColor: '#173126' },
       animationDurationInMs: 180,
       showNotation: true,
     }),
@@ -113,13 +113,13 @@ export const LabBoardArea = memo(function LabBoardArea() {
         ref={boardStageRef}
       >
         <div
-          className="z-2 flex flex-col gap-1 self-center rounded-[10px] border border-(--border-soft) bg-[rgba(18,25,38,0.24)] p-1 shadow-sm backdrop-blur-md max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
+          className="z-2 flex flex-col gap-1 self-center rounded-[10px] border border-[rgba(226,238,220,0.075)] bg-[rgba(8,18,14,0.72)] p-1 shadow-sm backdrop-blur-md max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
           role="toolbar"
           aria-label="Board tools"
           style={{ '--board-size': `${labState.boardWidth}px` } as CSSProperties}
         >
           <button
-            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-[rgba(168,216,160,0.025)] p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.06)] hover:text-[--accent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setPgnDialogOpen(true)}
             title="Import PGN"
             type="button"
@@ -127,7 +127,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <ImportIcon />
           </button>
           <button
-            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-[rgba(168,216,160,0.025)] p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.06)] hover:text-[--accent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setOrientation((value) => (value === 'white' ? 'black' : 'white'))}
             title="Flip board"
             type="button"
@@ -135,7 +135,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <FlipIcon />
           </button>
           <button
-            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-[rgba(168,216,160,0.025)] p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.06)] hover:text-[--accent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setShowArrow((value) => !value)}
             disabled={Boolean(labState.activeDeckCard && !isTrainCardFinished)}
             title={
@@ -150,7 +150,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <ArrowIcon off={!labState.showArrow || Boolean(labState.activeDeckCard && !isTrainCardFinished)} />
           </button>
           <button
-            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-[rgba(168,216,160,0.025)] p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.06)] hover:text-[--accent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => void runTimelineAnalysis()}
             disabled={labState.timelineLoading || labState.moveHistory.length === 0}
             title="Refresh analysis"
@@ -159,7 +159,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <RefreshIcon />
           </button>
           <button
-            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-[rgba(168,216,160,0.025)] p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.06)] hover:text-[--accent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={resetWorkspace}
             title="Reset board"
             type="button"
@@ -177,18 +177,18 @@ export const LabBoardArea = memo(function LabBoardArea() {
             ref={evalRailRef}
           >
             <div
-              className="relative h-[var(--board-size)] w-[clamp(6px,calc(var(--board-size)*0.012),14px)] overflow-hidden rounded-full border-0 bg-[rgba(0,0,0,0.4)] max-[980px]:h-[clamp(6px,calc(var(--board-size)*0.012),14px)] max-[980px]:w-[var(--board-size)]"
+              className="relative h-[var(--board-size)] w-[clamp(6px,calc(var(--board-size)*0.012),14px)] overflow-hidden rounded-full border-0 bg-[rgba(241,245,234,0.10)] max-[980px]:h-[clamp(6px,calc(var(--board-size)*0.012),14px)] max-[980px]:w-[var(--board-size)]"
               style={{ '--white-share': `${whiteAdvantage}%` } as CSSProperties}
             >
               <div
-                className={`absolute w-full bg-linear-to-b from-[#04070c] to-[rgba(38,50,70,0.6)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${evalRailTransitionClass} ${
+                className={`absolute w-full bg-[#18231C] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${evalRailTransitionClass} ${
                   isBlackOrientation
                     ? 'bottom-0 h-[calc(100%-var(--white-share,50%))]'
                     : 'top-0 h-[calc(100%-var(--white-share,50%))]'
                 }`}
               />
               <div
-                className={`absolute w-full bg-linear-to-b from-[rgba(245,248,255,0.9)] to-[rgba(188,200,218,0.7)] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-(--white-share,50%) ${evalRailTransitionClass} ${
+                className={`absolute w-full bg-[#A8D8A0] max-[980px]:bottom-0 max-[980px]:left-0 max-[980px]:h-full max-[980px]:w-(--white-share,50%) ${evalRailTransitionClass} ${
                   isBlackOrientation ? 'top-0 h-(--white-share,50%)' : 'bottom-0 h-(--white-share,50%)'
                 }`}
               />
@@ -201,7 +201,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
               />
             </div>
             <div className="flex justify-center">
-              <span className="min-w-0 text-[clamp(11px,calc(var(--board-size)*0.02),18px)] font-medium leading-none text-[rgba(245,248,255,0.6)] max-[720px]:min-w-[32px]">
+              <span className="min-w-0 text-[clamp(11px,calc(var(--board-size)*0.02),18px)] font-medium leading-none text-[rgba(241,245,234,0.56)] max-[720px]:min-w-[32px]">
                 {boardScoreLabel}
               </span>
             </div>

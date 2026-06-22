@@ -1,30 +1,30 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0f1014;
-  --foreground: #f2f3f5;
+  --background: #050b08;
+  --foreground: #f1f5ea;
   --font-sans: "Avenir Next", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI", sans-serif;
 }
 
 .chess-lab {
-  --app-bg: #07101b;
-  --panel-bg: rgba(12, 18, 29, 0.54);
-  --surface: rgba(18, 25, 38, 0.48);
-  --surface-strong: rgba(9, 14, 23, 0.72);
-  --border: rgba(245, 248, 255, 0.08);
-  --border-soft: rgba(245, 248, 255, 0.04);
-  --text: #f5f8ff;
-  --text-muted: #c0cadb;
-  --text-soft: #8f9cb2;
-  --text-disabled: #657185;
-  --accent: #98b8ff;
-  --accent-strong: #c6d7ff;
-  --accent-bg: rgba(152, 184, 255, 0.16);
+  --app-bg: #050b08;
+  --panel-bg: rgba(5, 12, 9, 0.82);
+  --surface: rgba(8, 18, 14, 0.76);
+  --surface-strong: rgba(13, 28, 22, 0.86);
+  --border: rgba(226, 238, 220, 0.075);
+  --border-soft: rgba(226, 238, 220, 0.035);
+  --text: #f1f5ea;
+  --text-muted: rgba(241, 245, 234, 0.42);
+  --text-soft: rgba(241, 245, 234, 0.66);
+  --text-disabled: rgba(241, 245, 234, 0.28);
+  --accent: #a8d8a0;
+  --accent-strong: #7fbf75;
+  --accent-bg: rgba(168, 216, 160, 0.18);
   --positive: #8ae3c1;
-  --warning: #ffd27a;
-  --danger: #ff8d91;
-  --glass-shadow: 0 4px 20px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  --glass-blur: blur(22px) saturate(1.2);
+  --warning: #d6b66d;
+  --danger: #e17878;
+  --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.32), inset 0 1px 0 rgba(226, 238, 220, 0.075);
+  --glass-blur: blur(18px) saturate(1.1);
   --panel-scroll-gap: 14px;
 }
 
