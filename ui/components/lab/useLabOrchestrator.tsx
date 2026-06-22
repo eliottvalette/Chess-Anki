@@ -630,7 +630,7 @@ export function useLabOrchestrator() {
       return null;
     }
 
-    return timelineAnalyses[historyIndex] ?? preMoveAnalyses[historyIndex] ?? null;
+    return preMoveAnalyses[historyIndex] ?? timelineAnalyses[historyIndex - 1] ?? null;
   }, [
     activeDeckCard,
     hasLoadedGame,
