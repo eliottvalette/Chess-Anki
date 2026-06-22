@@ -369,6 +369,45 @@ export function useLabOrchestrator() {
   const currentFen = useMemo(() => game.fen(), [game]);
 
   useEffect(() => {
+    const stage = boardStageRef.current;
+    if (!stage) {
+      return;
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) {
+        return;
+      }
+
+      const { width, height } = entry.contentRect;
+      const isMobile = window.innerWidth <= 980;
+
+      let availableWidth = width;
+      let availableHeight = height;
+
+      if (!isMobile) {
+        // Subtract toolbar (46) + flex gap (12) + eval bar (32) + spacer (32) + grid gaps (14 * 2) = 150px
+        availableWidth -= 150;
+      }
+
+      // Subtract player bars (approx 44px each = 88px) and gaps = ~110px
+      availableHeight -= 110;
+
+      const maxSquare = Math.floor(Math.min(availableWidth, availableHeight));
+      const boardSize = Math.max(280, maxSquare);
+
+      labState.setBoardWidth(boardSize);
+    });
+
+    observer.observe(stage);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [boardStageRef, labState.setBoardWidth]);
+
+  useEffect(() => {
     const shouldFilter =
       mode === 'lines' &&
       labState.linesStudyMode === 'idle' &&
@@ -591,8 +630,16 @@ export function useLabOrchestrator() {
       return null;
     }
 
-    return preMoveAnalyses[historyIndex] ?? null;
-  }, [activeDeckCard, hasLoadedGame, historyIndex, preMoveAnalyses, variationBaseIndex, variationIndex]);
+    return timelineAnalyses[historyIndex] ?? preMoveAnalyses[historyIndex] ?? null;
+  }, [
+    activeDeckCard,
+    hasLoadedGame,
+    historyIndex,
+    preMoveAnalyses,
+    timelineAnalyses,
+    variationBaseIndex,
+    variationIndex,
+  ]);
   const displayAnalysis = reviewDisplayAnalysis ?? positionAnalysis;
   const linesStudyTree = useMemo(() => {
     if (mode !== 'lines' || !activeOpeningTree) {

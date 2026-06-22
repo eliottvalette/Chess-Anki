@@ -1951,7 +1951,7 @@ function ReviewTimelineStrip({
           </div>
           <div className="relative h-[8px] overflow-hidden rounded-[999px] bg-[rgba(245,242,232,0.12)]">
             <span
-              className="absolute inset-0 origin-left rounded-[inherit] bg-gradient-linear bg-gradient-[90deg,#e65d55_0%,#f09a45_48%] shadow-[0_0_18px_rgba(240,154,69,0.34)] transition-transform duration-200 ease-out will-change-transform"
+              className="absolute inset-0 origin-left rounded-[inherit] bg-[linear-gradient(90deg,#e65d55_0%,#f09a45_48%)] shadow-[0_0_18px_rgba(240,154,69,0.34)] transition-transform duration-200 ease-out will-change-transform"
               style={{ transform: `scaleX(${progressValue / 100})` }}
             />
           </div>

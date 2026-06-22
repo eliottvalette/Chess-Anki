@@ -108,14 +108,18 @@ export const LabBoardArea = memo(function LabBoardArea() {
 
   return (
     <section className="flex min-h-0 min-w-0 flex-col gap-2.5 overflow-hidden rounded-xl border-0 bg-transparent px-2 pb-4 pt-3.5 max-[980px]:min-h-[min(820px,calc(100svh-36px))] max-[720px]:min-h-0 max-[720px]:p-3.5">
-      <div className="relative flex min-h-0 flex-1 justify-center gap-[12px] overflow-hidden max-[720px]:flex-col">
+      <div
+        className="relative flex min-h-0 flex-1 justify-center gap-[12px] overflow-hidden max-[720px]:flex-col"
+        ref={boardStageRef}
+      >
         <div
           className="z-2 flex flex-col gap-1 self-center rounded-[10px] border border-(--border-soft) bg-[rgba(18,25,38,0.24)] p-1 shadow-sm backdrop-blur-md max-[720px]:order-2 max-[720px]:flex-row max-[720px]:justify-center max-[720px]:self-stretch"
           role="toolbar"
           aria-label="Board tools"
+          style={{ '--board-size': `${labState.boardWidth}px` } as CSSProperties}
         >
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setPgnDialogOpen(true)}
             title="Import PGN"
             type="button"
@@ -123,7 +127,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <ImportIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setOrientation((value) => (value === 'white' ? 'black' : 'white'))}
             title="Flip board"
             type="button"
@@ -131,7 +135,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <FlipIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => labState.setShowArrow((value) => !value)}
             disabled={Boolean(labState.activeDeckCard && !isTrainCardFinished)}
             title={
@@ -146,7 +150,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <ArrowIcon off={!labState.showArrow || Boolean(labState.activeDeckCard && !isTrainCardFinished)} />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={() => void runTimelineAnalysis()}
             disabled={labState.timelineLoading || labState.moveHistory.length === 0}
             title="Refresh analysis"
@@ -155,7 +159,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
             <RefreshIcon />
           </button>
           <button
-            className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
+            className="inline-flex h-[clamp(32px,calc(var(--board-size)*0.056),48px)] w-[clamp(32px,calc(var(--board-size)*0.056),48px)] flex-none items-center justify-center rounded-[6px] border-0 bg-transparent p-0 font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(245,248,255,0.06)] hover:text-(--text) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent-strong) disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent"
             onClick={resetWorkspace}
             title="Reset board"
             type="button"
@@ -165,16 +169,16 @@ export const LabBoardArea = memo(function LabBoardArea() {
         </div>
 
         <div
-          className="grid min-h-0 min-w-0 grid-cols-[32px_auto_32px] items-center justify-center gap-[14px] overflow-hidden p-0.5 max-[980px]:grid-cols-1 max-[980px]:justify-items-center max-[980px]:gap-2.5 max-[720px]:order-1"
-          ref={boardStageRef}
+          className="grid min-h-0 min-w-0 grid-cols-[clamp(24px,calc(var(--board-size)*0.05),48px)_auto_clamp(24px,calc(var(--board-size)*0.05),48px)] items-center justify-center gap-[14px] overflow-hidden p-0.5 max-[980px]:!grid-cols-1 max-[980px]:justify-items-center max-[980px]:gap-2.5 max-[720px]:order-1"
+          style={{ '--board-size': `${labState.boardWidth}px` } as CSSProperties}
         >
           <div
-            className="flex w-[32px] flex-col items-center gap-2 max-[980px]:w-full max-[980px]:flex-row max-[980px]:justify-center"
+            className="flex w-[clamp(24px,calc(var(--board-size)*0.05),48px)] flex-col items-center gap-[clamp(4px,calc(var(--board-size)*0.015),12px)] max-[980px]:!w-full max-[980px]:flex-row max-[980px]:justify-center"
             ref={evalRailRef}
           >
             <div
-              className="relative h-[min(620px,calc(100svh-340px))] w-[6px] overflow-hidden rounded-full border-0 bg-[rgba(0,0,0,0.4)] max-[980px]:h-[6px] max-[980px]:w-[min(720px,calc(100vw-128px))]"
-              style={{ ['--white-share' as string]: `${whiteAdvantage}%` }}
+              className="relative h-[var(--board-size)] w-[clamp(6px,calc(var(--board-size)*0.012),14px)] overflow-hidden rounded-full border-0 bg-[rgba(0,0,0,0.4)] max-[980px]:h-[clamp(6px,calc(var(--board-size)*0.012),14px)] max-[980px]:w-[var(--board-size)]"
+              style={{ '--white-share': `${whiteAdvantage}%` } as CSSProperties}
             >
               <div
                 className={`absolute w-full bg-linear-to-b from-[#04070c] to-[rgba(38,50,70,0.6)] max-[980px]:right-0 max-[980px]:top-0 max-[980px]:h-full max-[980px]:w-[calc(100%-var(--white-share,50%))] ${evalRailTransitionClass} ${
@@ -197,7 +201,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
               />
             </div>
             <div className="flex justify-center">
-              <span className="min-w-0 text-[11px] font-medium leading-none text-[rgba(245,248,255,0.6)] max-[720px]:min-w-[32px]">
+              <span className="min-w-0 text-[clamp(11px,calc(var(--board-size)*0.02),18px)] font-medium leading-none text-[rgba(245,248,255,0.6)] max-[720px]:min-w-[32px]">
                 {boardScoreLabel}
               </span>
             </div>
@@ -228,7 +232,10 @@ export const LabBoardArea = memo(function LabBoardArea() {
             </div>
             <BoardPlayerBar player={bottomBoardPlayer} />
           </div>
-          <div className="w-[32px] self-stretch max-[980px]:hidden" aria-hidden="true" />
+          <div
+            className="w-[clamp(24px,calc(var(--board-size)*0.05),48px)] self-stretch max-[980px]:hidden"
+            aria-hidden="true"
+          />
         </div>
       </div>
     </section>
