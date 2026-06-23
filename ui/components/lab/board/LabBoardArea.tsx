@@ -1,6 +1,6 @@
 import type { Square } from 'chess.js';
 import dynamic from 'next/dynamic';
-import { type CSSProperties, memo, useCallback, useMemo } from 'react';
+import { type CSSProperties, memo, useCallback, useMemo, useState } from 'react';
 import { useLab } from '../LabContext';
 import { ArrowIcon, FlipIcon, ImportIcon, RefreshIcon, ResetIcon } from '../lab-icons';
 import { BoardPlayerBar } from './BoardPlayerBar';
@@ -41,14 +41,19 @@ export const LabBoardArea = memo(function LabBoardArea() {
   const selectedSquare = labState.selectedSquare;
   const game = labState.game;
 
+  const [rightClickedSquares, setRightClickedSquares] = useState<Record<string, boolean>>({});
+
   const onPieceDrop = useCallback(
-    ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) =>
-      targetSquare ? tryMove(sourceSquare, targetSquare) : false,
+    ({ sourceSquare, targetSquare }: { sourceSquare: string; targetSquare: string | null }) => {
+      setRightClickedSquares({});
+      return targetSquare ? tryMove(sourceSquare, targetSquare) : false;
+    },
     [tryMove],
   );
 
   const onSquareClick = useCallback(
     ({ square }: { square: string }) => {
+      setRightClickedSquares({});
       if (selectedSquare) {
         const movePlayed = tryMove(selectedSquare, square);
 
@@ -71,7 +76,26 @@ export const LabBoardArea = memo(function LabBoardArea() {
     [clearSelection, game, highlightMoves, labState, selectedSquare, tryMove],
   );
 
-  const onSquareRightClick = useCallback(() => clearSelection(), [clearSelection]);
+  const onSquareRightClick = useCallback(
+    ({ square }: { square: string }) => {
+      clearSelection();
+      setRightClickedSquares((prev) => ({
+        ...prev,
+        [square]: !prev[square],
+      }));
+    },
+    [clearSelection],
+  );
+
+  const mergedSquareStyles = useMemo(() => {
+    const combined = { ...boardSquareStyles };
+    for (const [sq, active] of Object.entries(rightClickedSquares)) {
+      if (active) {
+        combined[sq] = { ...combined[sq], backgroundColor: 'rgba(225, 120, 120, 0.8)' };
+      }
+    }
+    return combined;
+  }, [boardSquareStyles, rightClickedSquares]);
 
   const chessboardOptions = useMemo(
     () => ({
@@ -87,7 +111,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
       onPieceDrop,
       onSquareClick,
       onSquareRightClick,
-      squareStyles: boardSquareStyles,
+      squareStyles: mergedSquareStyles,
       arrows: boardArrows,
       lightSquareStyle: { backgroundColor: '#B8C8AA' },
       darkSquareStyle: { backgroundColor: '#173126' },
@@ -96,7 +120,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
     }),
     [
       boardArrows,
-      boardSquareStyles,
+      mergedSquareStyles,
       boardWidth,
       currentFen,
       labState.orientation,
