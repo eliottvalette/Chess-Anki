@@ -117,7 +117,6 @@ import {
   formatMasteryScoreLabel,
   formatOpeningTreeDisplayName,
   type LinesStudyMode,
-  type OpeningLibrary,
   type OpeningTreeDetail,
   type OpeningTreeSummary,
 } from '@/lib/opening-tree';
@@ -138,16 +137,6 @@ const masteryGradeClassByGrade = {
   B: 'bg-[#7FBF75] text-[#F1F5EA]',
   A: 'bg-[#A8D8A0] text-[#050B08]',
   S: 'bg-[#A8D8A0] text-[#050B08]',
-} as const satisfies Record<string, string>;
-
-const masteryToneClassByGrade = {
-  F: 'border-[rgba(225,120,120,0.14)] bg-[rgba(225,120,120,0.055)]',
-  E: 'border-[rgba(225,120,120,0.14)] bg-[rgba(225,120,120,0.055)]',
-  D: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
-  C: 'border-[rgba(255,176,84,0.36)] bg-[rgba(130,82,32,0.18)]',
-  B: 'border-[rgba(168,216,160,0.38)] bg-[rgba(168,216,160,0.18)]',
-  A: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
-  S: 'border-[rgba(138,227,193,0.38)] bg-[rgba(38,118,90,0.18)]',
 } as const satisfies Record<string, string>;
 
 const masteryDistributionClassByGrade = {
@@ -219,7 +208,7 @@ export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedbac
 
 export const LinesPanel = memo(function LinesPanel({
   actionError,
-  actionLoading,
+  actionLoading: _actionLoading,
   activeNodeId,
   activeTree,
   activeTreeId,
@@ -232,11 +221,12 @@ export const LinesPanel = memo(function LinesPanel({
   linesStudyMode,
   loading,
   onChangeTrainSide,
-  onImportRecent,
+  onImportRecent: _onImportRecent,
   onNextLearnBranch,
   onQuitSession,
   onSelectNode,
   onSelectTree,
+  onPreviewTreeRoot,
   onStartLearn,
   onStartReview,
   reviewIndex,
@@ -277,6 +267,7 @@ export const LinesPanel = memo(function LinesPanel({
   onQuitSession: () => void;
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
+  onPreviewTreeRoot: (tree: OpeningTreeSummary) => void;
   onStartLearn: () => void;
   onStartReview: () => void;
   reviewIndex: number;
@@ -303,8 +294,6 @@ export const LinesPanel = memo(function LinesPanel({
     () => catalogTrees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
     [catalogTrees, minDepth, minNodes],
   );
-  const groupedTrees = useMemo(() => groupOpeningTrees(filteredTrees), [filteredTrees]);
-  const catalogGroupedTrees = useMemo(() => groupOpeningTrees(catalogTrees), [catalogTrees]);
   const graphLayout = useMemo(() => layoutOpeningTreeGraph(activeTree), [activeTree]);
   const graphNodes = useMemo(
     () => buildOpeningTreeGraphNodes(activeTree, graphLayout, trainSide),
@@ -419,11 +408,9 @@ export const LinesPanel = memo(function LinesPanel({
             <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-normal leading-[1.15] tracking-normal text-(--text)">
               Lines
             </h2>
-            <span className="text-sm leading-[1.45] text-(--text-muted)">
-              {loading || positionFilterLoading
-                ? 'loading'
-                : `${filteredTrees.length}${catalogTrees.length !== filteredTrees.length ? ` / ${catalogTrees.length}` : ''} openings`}
-            </span>
+            {loading || positionFilterLoading ? (
+              <span className="text-sm leading-[1.45] text-(--text-muted)">loading</span>
+            ) : null}
           </div>
           {catalogTrees.length === 0 ? (
             <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
@@ -445,56 +432,38 @@ export const LinesPanel = memo(function LinesPanel({
                 </div>
               ) : null}
               {filteredTrees.length === 0 ? (
-                <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">No openings match the current filters.</p>
+                <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">No lines match the current filters.</p>
               ) : (
-                <>
-                  <span className="text-[11px] text-(--text-soft)">
-                    {filteredTrees.length} / {catalogTrees.length} openings
-                  </span>
-                  {OPENING_LIBRARY_ORDER.map((library) => {
-                    const libraryTrees = groupedTrees.get(library) ?? [];
-                    const catalogLibraryTrees = catalogGroupedTrees.get(library) ?? [];
-
-                    if (libraryTrees.length === 0) {
-                      return null;
-                    }
-
-                    return (
-                      <section className="flex min-w-0 flex-col gap-2" key={library}>
-                        <h3 className="m-0 text-[11px] font-normal text-(--text-soft)">
-                          {libraryTrees.length} / {catalogLibraryTrees.length} openings {formatOpeningLibrary(library)}
-                        </h3>
-                        <div className="flex min-h-0 flex-col gap-2">
-                          {libraryTrees.map((tree) => (
-                            <button
-                              className={`flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${tree.id === activeTreeId ? 'bg-[rgba(168,216,160,0.08)]' : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]'}`}
-                              key={tree.id}
-                              onClick={() => onSelectTree(tree.id)}
-                              type="button"
-                            >
-                              <span className="flex min-w-0 items-center justify-between gap-2.5 w-full">
-                                <strong className="text-[14px] font-normal text-[rgba(241,245,234,0.88)] truncate">
-                                  {formatOpeningTreeDisplayName(tree.name)}
-                                </strong>
-                                <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft)">
-                                  {tree.masteryScore > 0 ? formatMasteryScoreLabel(tree.masteryScore) : 'New'}
-                                </span>
-                              </span>
-                              <span className="block font-mono text-[11px] leading-[1.35] text-(--text-muted) wrap-anywhere">
-                                {tree.rootSan.join(' ') || 'Starting position'}
-                              </span>
-                              <span className="flex flex-wrap gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
-                                <span>{tree.sourceCount} sources</span>
-                                <span>{tree.nodeCount} nodes</span>
-                                {tree.dueCount > 0 ? <span>{tree.dueCount} weak</span> : null}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </section>
-                    );
-                  })}
-                </>
+                <div className="flex min-h-0 flex-col gap-2">
+                  {filteredTrees.map((tree) => (
+                    <button
+                      className={`flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${tree.id === activeTreeId ? 'bg-[rgba(168,216,160,0.08)]' : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]'}`}
+                      key={tree.id}
+                      onClick={() => onSelectTree(tree.id)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        onPreviewTreeRoot(tree);
+                      }}
+                      type="button"
+                    >
+                      <span className="flex min-w-0 items-start justify-between gap-2.5 w-full">
+                        <strong className="min-w-0 text-[14px] font-normal leading-[1.25] text-[rgba(241,245,234,0.88)] wrap-anywhere">
+                          {formatLinesTreeTitle(tree)}
+                        </strong>
+                        <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft)">
+                          {tree.masteryScore > 0 ? formatMasteryScoreLabel(tree.masteryScore) : 'New'}
+                        </span>
+                      </span>
+                      <span className="block text-[11px] leading-[1.35] text-(--text-muted)">
+                        {formatPresenceLabel(tree.presencePercent)}
+                      </span>
+                      <span className="grid grid-cols-2 gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
+                        <span>{formatLineCount(tree.linesWhite ?? 0, 'white')}</span>
+                        <span>{formatLineCount(tree.linesBlack ?? 0, 'black')}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           )}
@@ -629,7 +598,6 @@ export const LinesPanel = memo(function LinesPanel({
               <span>depth {activeTree.targetDepth}</span>
               {learnMaxPly > 0 && linesStudyMode !== 'review' ? <span>cap ply {learnMaxPly}</span> : null}
               <span>{activeTree.nodes?.length ?? activeTree.nodeCount} nodes</span>
-              {activeTree.dueCount > 0 ? <span>{activeTree.dueCount} weak</span> : null}
               {activeForkStats ? (
                 <span>
                   {activeForkStats.played}/{activeForkStats.total} replies
@@ -674,33 +642,26 @@ export const LinesPanel = memo(function LinesPanel({
   );
 });
 
-const OPENING_LIBRARY_ORDER: OpeningLibrary[] = ['e4', 'd4', 'c4', 'nf3', 'other'];
+function formatLinesTreeTitle(tree: OpeningTreeSummary) {
+  const rootLine = tree.rootSan.join(' ').trim();
+  const displayName = formatOpeningTreeDisplayName(tree.name);
 
-function groupOpeningTrees(trees: OpeningTreeSummary[]) {
-  const groups = new Map<OpeningLibrary, OpeningTreeSummary[]>();
-
-  for (const tree of trees) {
-    const group = groups.get(tree.library) ?? [];
-    group.push(tree);
-    groups.set(tree.library, group);
+  if (!displayName || displayName === 'Opening') {
+    return rootLine || 'Starting position';
   }
 
-  return groups;
+  return displayName;
 }
 
-function formatOpeningLibrary(library: OpeningLibrary) {
-  switch (library) {
-    case 'e4':
-      return 'vs 1.e4';
-    case 'd4':
-      return 'vs 1.d4';
-    case 'c4':
-      return 'vs 1.c4';
-    case 'nf3':
-      return 'vs 1.Nf3';
-    case 'other':
-      return 'Other';
-  }
+function formatPresenceLabel(value: number | undefined) {
+  const percent = Number.isFinite(value) ? Math.max(0, value ?? 0) : 0;
+  const text = Number.isInteger(percent) ? String(percent) : percent.toFixed(2).replace(/\.?0+$/, '');
+
+  return `${text}% presence`;
+}
+
+function formatLineCount(count: number, side: 'white' | 'black') {
+  return `${count} ${count === 1 ? 'line' : 'lines'} ${side}`;
 }
 
 const openingTreeLayoutCache = new Map<string, Map<string, { x: number; y: number }>>();
@@ -1451,7 +1412,7 @@ export function GameReviewPanel({
 
     const scrollTop = scroller.scrollTop + activeRow.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
     scroller.scrollTo({ top: scrollTop });
-  }, [displayActivePly, hasLoadedGame, historyIndex]);
+  }, [displayActivePly, hasLoadedGame]);
 
   if (!hasLoadedGame) {
     return (
@@ -1565,6 +1526,7 @@ export function GameReviewPanel({
           <div className="min-w-0 flex items-center gap-[8px] text-[rgba(241,245,234,0.88)] text-[14px] font-normal overflow-hidden text-ellipsis whitespace-nowrap">
             {coachBadgeSrc ? (
               <span
+                role="img"
                 aria-label={coachReview?.label ?? 'Review'}
                 className="inline-block h-[17px] w-[17px] shrink-0 bg-contain bg-center bg-no-repeat"
                 style={{ backgroundImage: `url(${coachBadgeSrc})` }}
@@ -2148,10 +2110,6 @@ function buildMasteryGradeDistribution(lines: ReturnType<typeof import('@/lib/de
 
 function getMasteryGradeClass(grade: MasteryGrade) {
   return masteryGradeClassByGrade[grade];
-}
-
-function getMasteryToneClass(grade: MasteryGrade) {
-  return masteryToneClassByGrade[grade];
 }
 
 function getOpeningDisplayName(card: DeckCard) {

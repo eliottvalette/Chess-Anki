@@ -152,6 +152,7 @@ export function LabSidebar() {
               onQuitSession={() => lab.quitLinesSession()}
               onSelectNode={lab.selectOpeningNode}
               onSelectTree={lab.selectOpeningTree}
+              onPreviewTreeRoot={lab.previewOpeningTreeRoot}
               onStartLearn={() => lab.startLinesLearn()}
               onStartReview={() => lab.startLinesReview()}
               reviewIndex={lab.labState.linesReviewIndex}

@@ -4,11 +4,11 @@ import { NextResponse } from 'next/server';
 
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { AsyncTtlCache } from '@/lib/async-ttl-cache';
+import { fetchArchives, fetchRecentGames, type RawChessComGame } from '@/lib/chesscom';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
-  buildDynamicBrowseSummaries,
+  buildRecentDynamicBrowseSummaries,
   catalogDraftFromRow,
-  catalogToSummary,
   findDynamicCatalogEntry,
   findDynamicCatalogEntryById,
   graphDraftFromRows,
@@ -27,12 +27,14 @@ import {
   normalizeOpeningFen,
   type OpeningBuildMode,
   type OpeningLibrary,
+  type OpeningSide,
   type OpeningTreeBuildInput,
   type OpeningTreeDetail,
   type OpeningTreeDraft,
   type OpeningTreeSummary,
   pruneOpeningTreeDraft,
   resolveTargetDepthForBuildMode,
+  shortHash,
 } from '@/lib/opening-tree';
 import {
   buildFreshOpeningForest,
@@ -57,6 +59,10 @@ const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,sourc
 const MAX_ENGINE_IMPORT_NODES = 120;
 const MAX_LICHESS_IMPORT_NODES = 80;
 const openingGraphCache = new AsyncTtlCache<string, OpeningGraphDraft[]>({ maxEntries: 4, ttlMs: 60_000 });
+const recentOpeningGraphCache = new AsyncTtlCache<string, RecentOpeningForest>({
+  maxEntries: 8,
+  ttlMs: 60_000,
+});
 const openingProgressCache = new AsyncTtlCache<string, Map<string, ProgressEntry>>({ maxEntries: 4, ttlMs: 1_000 });
 const openingProfileCache = new AsyncTtlCache<string, TrainingProfileCookie | null>({
   maxEntries: 8,
@@ -78,6 +84,9 @@ export async function GET(request: Request) {
   const atFenKey = url.searchParams.get('atFenKey');
   const browsePlyParam = url.searchParams.get('browsePly');
   const browsePly = browsePlyParam == null ? null : Math.max(1, Number(browsePlyParam) || 1);
+  const chesscomUsername = String(url.searchParams.get('username') ?? profile.username)
+    .trim()
+    .toLowerCase();
 
   try {
     const supabase = createAdminClient();
@@ -88,7 +97,7 @@ export async function GET(request: Request) {
     }
 
     if (treeId) {
-      const detail = await fetchTreeDetail(supabase, profile.id, treeId, browsePly);
+      const detail = await fetchTreeDetail(supabase, profile, treeId, browsePly, chesscomUsername);
       return detail
         ? NextResponse.json({ tree: detail })
         : NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
@@ -101,7 +110,7 @@ export async function GET(request: Request) {
 
     const summaries =
       browsePly != null
-        ? await fetchDynamicTreeSummaries(supabase, profile.id, browsePly)
+        ? await fetchRecentDynamicTreeSummaries(supabase, profile, browsePly, chesscomUsername)
         : await fetchTreeSummaries(supabase, profile.id);
     return NextResponse.json({ trees: summaries });
   } catch (error) {
@@ -427,7 +436,7 @@ async function chooseNextStep(profile: TrainingProfileCookie, body: Record<strin
     return NextResponse.json({ error: 'Tree and node are required.' }, { status: 400 });
   }
 
-  const detail = await fetchTreeDetail(createAdminClient(), profile.id, treeId);
+  const detail = await fetchTreeDetail(createAdminClient(), profile, treeId);
 
   if (!detail) {
     return NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
@@ -701,12 +710,110 @@ async function loadOwnerGraphForest(
   return { graphs: graphsResult.value, progress: progressResult };
 }
 
-async function fetchDynamicTreeSummaries(
+type RecentOpeningForest = {
+  graphs: OpeningGraphDraft[];
+  totalGames: number;
+};
+
+async function loadRecentOpeningForest(
+  profile: TrainingProfileCookie,
+  chesscomUsername: string,
+): Promise<RecentOpeningForest> {
+  const username = chesscomUsername.trim().toLowerCase() || profile.username.toLowerCase();
+  const cacheKey = `${profile.id}:${username}:bullet-blitz-50`;
+  const cached = await recentOpeningGraphCache.get(cacheKey, async () => {
+    const archives = await fetchArchives(username);
+    const pages = await Promise.all(
+      (['bullet', 'blitz'] as const).map(async (timeClass) => {
+        const page = await fetchRecentGames({
+          username,
+          archives,
+          count: 50,
+          timeClass,
+        });
+
+        return page.games.map((game) => ({ game, timeClass }));
+      }),
+    );
+    const inputs = buildRecentGameOpeningInputs(username, pages.flat());
+    const forest = buildFreshOpeningForest(inputs, {
+      ownerProfileId: profile.id,
+      targetDepth: DEFAULT_OPENING_TARGET_DEPTH,
+      catalogPly: Math.max(1, OPENING_BUILD_ROOT_PLY),
+    });
+
+    return {
+      graphs: forest.graphs,
+      totalGames: inputs.length,
+    };
+  });
+
+  return cached.value;
+}
+
+function buildRecentGameOpeningInputs(
+  username: string,
+  games: Array<{ game: RawChessComGame; timeClass: 'bullet' | 'blitz' }>,
+): OpeningTreeBuildInput[] {
+  return games.flatMap(({ game, timeClass }, index) => {
+    const moves = parsePgnSanMoves(game.pgn);
+    const trainSide = resolveRecentGameTrainSide(game, username);
+
+    if (moves.length === 0 || !trainSide) {
+      return [];
+    }
+
+    return [
+      {
+        id: `recent-lines-${timeClass}-${shortHash(`${game.url ?? ''}:${game.end_time ?? ''}:${index}`)}`,
+        name: moves.slice(0, 8).join(' ') || 'Opening',
+        trainSide,
+        moves,
+        source: 'recent_game' as const,
+        count: 1,
+      },
+    ];
+  });
+}
+
+function parsePgnSanMoves(pgn: string | undefined): string[] {
+  if (!pgn?.trim()) {
+    return [];
+  }
+
+  try {
+    const chess = new Chess();
+    chess.loadPgn(pgn);
+    return chess.history();
+  } catch {
+    return [];
+  }
+}
+
+function resolveRecentGameTrainSide(game: RawChessComGame, username: string): OpeningSide | null {
+  const normalized = username.toLowerCase();
+
+  if (game.white?.username?.toLowerCase() === normalized) {
+    return 'white';
+  }
+
+  if (game.black?.username?.toLowerCase() === normalized) {
+    return 'black';
+  }
+
+  return null;
+}
+
+async function fetchRecentDynamicTreeSummaries(
   supabase: ReturnType<typeof createAdminClient>,
-  profileId: string,
+  profile: TrainingProfileCookie,
   browsePly: number,
+  chesscomUsername: string,
 ): Promise<OpeningTreeSummary[]> {
-  const { graphs, progress } = await loadOwnerGraphForest(supabase, profileId);
+  const [{ graphs, totalGames }, progress] = await Promise.all([
+    loadRecentOpeningForest(profile, chesscomUsername),
+    fetchProgressCached(supabase, profile.id),
+  ]);
   const progressMap = new Map(
     [...progress.entries()].map(([nodeId, entry]) => [
       nodeId,
@@ -719,7 +826,7 @@ async function fetchDynamicTreeSummaries(
     ]),
   );
 
-  return buildDynamicBrowseSummaries(graphs, browsePly, progressMap);
+  return buildRecentDynamicBrowseSummaries(graphs, browsePly, progressMap, totalGames);
 }
 
 async function fetchProjectedTreeAtFenKey(
@@ -757,48 +864,54 @@ async function fetchTreeSummaries(
     throw new Error(error.message);
   }
 
-  const progress = await fetchProgressCached(supabase, profileId);
-
-  return (catalogs ?? []).map((row) => summarizeCatalog(row, progress));
+  return (catalogs ?? []).map((row) => summarizeCatalog(row));
 }
 
 async function fetchTreeDetail(
   supabase: ReturnType<typeof createAdminClient>,
-  profileId: string,
+  profile: TrainingProfileCookie,
   treeId: string,
   browsePly: number | null = null,
+  chesscomUsername: string = profile.username,
 ): Promise<OpeningTreeDetail | null> {
   if (browsePly != null) {
-    const { graphs, progress } = await loadOwnerGraphForest(supabase, profileId);
-    const progressMap = new Map(
-      [...progress.entries()].map(([nodeId, entry]) => [
-        nodeId,
-        {
-          seenCount: entry.seenCount,
-          correctCount: entry.correctCount,
-          missCount: entry.missCount,
-          masteryScore: entry.masteryScore,
-        },
-      ]),
-    );
-    const dynamicMatch =
-      findDynamicCatalogEntry(graphs, treeId, browsePly) ?? findDynamicCatalogEntryById(graphs, treeId);
-
-    if (dynamicMatch) {
-      return projectCatalogSubgraph(
-        dynamicMatch.graph,
-        dynamicMatch.graph.nodes,
-        dynamicMatch.graph.edges,
-        dynamicMatch.catalog,
-        progressMap,
+    try {
+      const [{ graphs: recentGraphs }, progress] = await Promise.all([
+        loadRecentOpeningForest(profile, chesscomUsername),
+        fetchProgressCached(supabase, profile.id),
+      ]);
+      const progressMap = new Map(
+        [...progress.entries()].map(([nodeId, entry]) => [
+          nodeId,
+          {
+            seenCount: entry.seenCount,
+            correctCount: entry.correctCount,
+            missCount: entry.missCount,
+            masteryScore: entry.masteryScore,
+          },
+        ]),
       );
+      const dynamicMatch =
+        findDynamicCatalogEntry(recentGraphs, treeId, browsePly) ?? findDynamicCatalogEntryById(recentGraphs, treeId);
+
+      if (dynamicMatch) {
+        return projectCatalogSubgraph(
+          dynamicMatch.graph,
+          dynamicMatch.graph.nodes,
+          dynamicMatch.graph.edges,
+          dynamicMatch.catalog,
+          progressMap,
+        );
+      }
+    } catch {
+      // Persisted trees below remain usable when Chess.com is temporarily unavailable.
     }
   }
 
   const { data: catalogRow, error } = await supabase
     .from('opening_catalog')
     .select(CATALOG_SELECT)
-    .eq('owner_profile_id', profileId)
+    .eq('owner_profile_id', profile.id)
     .eq('id', treeId)
     .maybeSingle();
 
@@ -819,7 +932,7 @@ async function fetchTreeDetail(
       .maybeSingle(),
     fetchNodes(supabase, [graphId]),
     fetchEdges(supabase, [graphId]),
-    fetchProgressCached(supabase, profileId),
+    fetchProgressCached(supabase, profile.id),
   ]);
 
   if (graphRow.error) {
@@ -910,7 +1023,7 @@ async function fetchFullTrees(
   });
 }
 
-function summarizeCatalog(catalog: Record<string, unknown>, progress: Map<string, ProgressEntry>): OpeningTreeSummary {
+function summarizeCatalog(catalog: Record<string, unknown>): OpeningTreeSummary {
   return {
     id: String(catalog.id),
     name: String(catalog.name ?? 'Opening'),
@@ -993,6 +1106,7 @@ async function fetchAllRows<T extends Record<string, unknown>>(
     const baseQuery = supabase
       .from(table)
       .select(select)
+      .order('id')
       .range(offset, offset + pageSize - 1);
     const filteredQuery = applyFilter(baseQuery as OpeningTablePagedQuery);
     const { data, error } = await filteredQuery;
@@ -1110,12 +1224,6 @@ async function getTrainingProfileFromCookie(): Promise<TrainingProfileCookie | n
 
 function normalizeLibrary(value: unknown): OpeningLibrary {
   return mapOpeningLibraryFromDb(value);
-}
-
-function normalizeEdgeSource(value: unknown) {
-  return value === 'card' || value === 'lichess_masters' || value === 'engine_best' || value === 'mixed'
-    ? value
-    : 'recent_game';
 }
 
 function toStringArray(value: unknown) {

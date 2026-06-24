@@ -7,6 +7,7 @@ import {
   buildOpeningGraphForest,
   buildOpeningGraphId,
   buildOpeningNodeId,
+  buildRecentDynamicBrowseSummaries,
   mergeOpeningGraphDraft,
   OPENING_CATALOG_PLY,
   projectCatalogSubgraph,
@@ -380,6 +381,38 @@ test('buildDynamicCatalogEntries groups unique prefixes at the requested browse 
   const plyTwoEntries = buildDynamicCatalogEntries(graph, 2);
   assert.equal(plyTwoEntries.length, 2);
   assert.deepEqual(plyTwoEntries.map((entry) => entry.displaySan.join(' ')).sort(), ['e4 c5', 'e4 e5']);
+});
+
+test('buildRecentDynamicBrowseSummaries aggregates matching white and black game prefixes', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'white-game',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+      {
+        id: 'black-game',
+        name: 'Italian',
+        trainSide: 'black',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+
+  const summaries = buildRecentDynamicBrowseSummaries(forest.graphs, 4, new Map(), 2);
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].name, 'e4 e5 Nf3 Nc6');
+  assert.deepEqual(summaries[0].rootSan, ['e4', 'e5', 'Nf3', 'Nc6']);
+  assert.equal(summaries[0].sourceCount, 2);
+  assert.equal(summaries[0].linesWhite, 1);
+  assert.equal(summaries[0].linesBlack, 1);
+  assert.equal(summaries[0].presencePercent, 100);
 });
 
 test('projectTreeFromFenKey projects the continuation tree from a played position', () => {

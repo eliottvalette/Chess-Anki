@@ -356,6 +356,7 @@ export function useLabOrchestrator() {
   const activeRecentGameCacheKeyRef = useRef<string | null>(null);
   const activeRecentGameLinkRef = useRef<string | null>(null);
   const activeRecentGamePgnRef = useRef<string | null>(null);
+  const linesBoardFilterPreviewKeyRef = useRef<string | null>(null);
   const lastReviewInteractionAtRef = useRef(Date.now());
   const progressHydratedRef = useRef(false);
   const progressSyncTimerRef = useRef<number | null>(null);
@@ -430,6 +431,16 @@ export function useLabOrchestrator() {
       return;
     }
 
+    const boardLineKey = buildMoveUciHistory(moveHistory.slice(0, historyIndex)).join(' ');
+
+    if (linesBoardFilterPreviewKeyRef.current === boardLineKey) {
+      labState.setLinesBrowseOverrideTrees(null);
+      labState.setLinesPositionFilterLoading(false);
+      return;
+    }
+
+    linesBoardFilterPreviewKeyRef.current = null;
+
     let cancelled = false;
     let debounceTimer: number | null = null;
     let fetchController: AbortController | null = null;
@@ -488,6 +499,7 @@ export function useLabOrchestrator() {
   }, [
     currentFen,
     historyIndex,
+    moveHistory,
     mode,
     openingDrillActive,
     labState.linesStudyMode,
@@ -574,6 +586,7 @@ export function useLabOrchestrator() {
     [deckFeedback],
   );
   const trainPositionAnalyses = useMemo(() => {
+    void trainAnalysisTick;
     const prefetchComplete = Boolean(activeDeckCard && deckFeedback && !deckFeedback.pending);
     const maxMoveCount = prefetchComplete ? moveHistory.length : Math.min(moveHistory.length, historyIndex + 1);
     const analyses: Array<AnalysisResult | null> = [];
@@ -1316,6 +1329,7 @@ export function useLabOrchestrator() {
       modeRef,
       linesSession,
       learnBranchForkConfirmedRef,
+      linesBoardFilterPreviewKeyRef,
     }),
     [
       clearSelection,
@@ -1328,9 +1342,7 @@ export function useLabOrchestrator() {
       deckReplayMovesRef,
       deckReplayInitialFenRef,
       deckPlaybackRequestIdRef,
-      linesGameTimeoutRef,
       linesSession,
-      learnBranchForkConfirmedRef,
     ],
   );
 
@@ -1346,6 +1358,7 @@ export function useLabOrchestrator() {
     quitLinesSession,
     stopOpeningDrill,
     cancelDrillOpponentMove,
+    previewOpeningTreeRoot,
     selectOpeningTree,
     selectOpeningNode,
   } = useLabLines(labState, linesContext);
@@ -1441,7 +1454,6 @@ export function useLabOrchestrator() {
 
     void loadOpeningTrees();
   }, [
-    labState.minForcedPlies,
     loadOpeningTrees,
     mode,
     trainingProfile?.id,
@@ -2495,10 +2507,10 @@ export function useLabOrchestrator() {
 
   const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
 
-  const linesForkCoverage = useMemo(
-    () => linesSession.getForkCoverage(),
-    [linesSession, linesSession.forkCoverageRevision],
-  );
+  const linesForkCoverage = useMemo(() => {
+    void linesSession.forkCoverageRevision;
+    return linesSession.getForkCoverage();
+  }, [linesSession, linesSession.forkCoverageRevision]);
 
   const linesHasNextLearnBranch = useMemo(() => {
     const tree = labState.activeOpeningTree;
@@ -2521,7 +2533,6 @@ export function useLabOrchestrator() {
     labState.learnMaxPly,
     labState.linesCompletedLearnBranches,
     labState.linesActiveLearnBranch,
-    labState.linesLearnBranchComplete,
   ]);
 
   const getLinesStudyDebugSnapshot = useCallback(() => {
@@ -2615,6 +2626,7 @@ export function useLabOrchestrator() {
     finishDeckTrainingSession,
     loadTrainingDeck,
     selectOpeningTree: handleSelectOpeningTree,
+    previewOpeningTreeRoot,
     selectOpeningNode,
     startLinesLearn,
     startLinesReview,

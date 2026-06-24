@@ -35,6 +35,7 @@ import {
   listSiblingBranchEdges,
   type OpeningSide,
   type OpeningTreeDetail,
+  type OpeningTreeSummary,
   pickLearnBranch,
   prepareOpeningTreeAtFenWithBoard,
   prepareOpeningTreeForLines,
@@ -71,6 +72,7 @@ export function useLabLines(
     modeRef: React.MutableRefObject<WorkspaceMode> | React.RefObject<WorkspaceMode>;
     linesSession: LinesSessionApi;
     learnBranchForkConfirmedRef: React.MutableRefObject<boolean>;
+    linesBoardFilterPreviewKeyRef: React.MutableRefObject<string | null>;
   },
 ) {
   const {
@@ -106,6 +108,7 @@ export function useLabLines(
     drillPathRef,
     drillPathIndexRef,
     activeTrainSide,
+    chesscomUsername,
     minForcedPlies,
     learnMaxPly,
     linesStudyMode,
@@ -152,6 +155,7 @@ export function useLabLines(
     linesGameTimeoutRef,
     modeRef,
     linesSession,
+    linesBoardFilterPreviewKeyRef,
   } = context;
 
   const { learnBranchForkConfirmedRef } = context;
@@ -316,9 +320,17 @@ export function useLabLines(
 
         if (!displayTree) {
           const effectiveBrowsePly = options.browsePly ?? minForcedPlies;
-          const payload = await requestOpeningTreesJson<OpeningTreesPayload>(
-            `/api/opening-trees?treeId=${encodeURIComponent(treeId)}&browsePly=${effectiveBrowsePly}`,
-          );
+          const params = new URLSearchParams({
+            treeId,
+            browsePly: String(effectiveBrowsePly),
+          });
+          const normalizedChesscomUsername = chesscomUsername.trim().toLowerCase();
+
+          if (normalizedChesscomUsername) {
+            params.set('username', normalizedChesscomUsername);
+          }
+
+          const payload = await requestOpeningTreesJson<OpeningTreesPayload>(`/api/opening-trees?${params.toString()}`);
 
           const tree = payload.tree ?? null;
           displayTree = tree ? prepareOpeningTreeForLines(tree) : null;
@@ -374,6 +386,7 @@ export function useLabLines(
     },
     [
       loadOpeningTreeRootOnBoard,
+      chesscomUsername,
       minForcedPlies,
       setActiveOpeningNodeId,
       setActiveOpeningTree,
@@ -387,9 +400,14 @@ export function useLabLines(
     setOpeningTreeActionError('');
 
     try {
-      const payload = await requestOpeningTreesJson<OpeningTreesPayload>(
-        `/api/opening-trees?browsePly=${minForcedPlies}`,
-      );
+      const params = new URLSearchParams({ browsePly: String(minForcedPlies) });
+      const normalizedChesscomUsername = chesscomUsername.trim().toLowerCase();
+
+      if (normalizedChesscomUsername) {
+        params.set('username', normalizedChesscomUsername);
+      }
+
+      const payload = await requestOpeningTreesJson<OpeningTreesPayload>(`/api/opening-trees?${params.toString()}`);
 
       const nextTrees = payload.trees ?? [];
       setOpeningTrees(nextTrees);
@@ -399,7 +417,7 @@ export function useLabLines(
     } finally {
       setOpeningTreesLoading(false);
     }
-  }, [minForcedPlies, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
+  }, [chesscomUsername, minForcedPlies, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
 
   const importRecentOpeningTrees = useCallback(async () => {
     setOpeningTreeActionLoading(true);
@@ -718,8 +736,9 @@ export function useLabLines(
       drillPathRef,
       linesSession,
       learnMaxPly,
-      learnSourceTreeRef,
       markCurrentLearnBranchCompleted,
+      appendStudySessionLog,
+      learnBranchForkConfirmedRef,
       playSound,
       playSoundSequence,
       setActiveOpeningNodeId,
@@ -870,6 +889,8 @@ export function useLabLines(
       setLinesActiveLearnBranch,
       setLinesLearnBranchComplete,
       setLinesStudyMode,
+      setLinesTrainPlyCurrent,
+      setLinesTrainPlyTotal,
       setOpeningDrillActive,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
@@ -1199,6 +1220,86 @@ export function useLabLines(
 
   const stopOpeningDrill = quitLinesSession;
 
+  const previewOpeningTreeRoot = useCallback(
+    (tree: OpeningTreeSummary) => {
+      if (deckPlaybackBusy) {
+        return;
+      }
+
+      cancelDrillOpponentMove();
+      deckPlaybackRequestIdRef.current += 1;
+      linesBoardFilterPreviewKeyRef.current = tree.rootUci.join(' ');
+      const moves = buildStoredMovesFromUciList(null, tree.rootUci);
+
+      setOpeningDrillActive(false);
+      setDeckFeedback(null);
+      setDeckFeedbackArrowsVisible(false);
+      setShowArrow(false);
+      setOpeningDrillExpected(null);
+      setOpeningDrillStatus('');
+      setLinesStudyMode('idle');
+      setLinesLearnBranchComplete(false);
+      setLinesReviewQueue([]);
+      setLinesReviewIndex(0);
+      setLinesCompletedLearnBranches([]);
+      setLinesStudySessionLog(null);
+      setLinesActiveLearnBranch(null);
+      activeLearnBranchRef.current = null;
+      activeBranchEdgeIdRef.current = null;
+      drillPathRef.current = [];
+      drillPathIndexRef.current = 0;
+      learnSourceTreeRef.current = null;
+      linesSession.clearSession();
+
+      setSelectedOpeningTreeId(null);
+      setActiveOpeningNodeId(null);
+      setActiveOpeningTree(null);
+      setInitialFen(null);
+      setMoveHistory(moves);
+      deckReplayInitialFenRef.current = null;
+      deckReplayMovesRef.current = moves;
+      setHistoryIndex(moves.length);
+      setGame(restoreGameFromHistory(moves, null, moves.length));
+      setDeckPlaybackBusy(false);
+      clearVariation();
+      clearSelection();
+    },
+    [
+      cancelDrillOpponentMove,
+      clearSelection,
+      clearVariation,
+      deckPlaybackBusy,
+      deckPlaybackRequestIdRef,
+      deckReplayInitialFenRef,
+      deckReplayMovesRef,
+      drillPathIndexRef,
+      drillPathRef,
+      linesSession,
+      linesBoardFilterPreviewKeyRef,
+      setActiveOpeningNodeId,
+      setActiveOpeningTree,
+      setDeckFeedback,
+      setDeckFeedbackArrowsVisible,
+      setDeckPlaybackBusy,
+      setGame,
+      setHistoryIndex,
+      setInitialFen,
+      setLinesActiveLearnBranch,
+      setLinesCompletedLearnBranches,
+      setLinesLearnBranchComplete,
+      setLinesReviewIndex,
+      setLinesReviewQueue,
+      setLinesStudyMode,
+      setLinesStudySessionLog,
+      setMoveHistory,
+      setOpeningDrillActive,
+      setOpeningDrillExpected,
+      setOpeningDrillStatus,
+      setSelectedOpeningTreeId,
+      setShowArrow,
+    ],
+  );
+
   const selectOpeningTree = useCallback(
     async (treeId: string) => {
       if (deckPlaybackBusy) {
@@ -1286,6 +1387,8 @@ export function useLabLines(
       setPreMoveAnalyses,
       setSelectedOpeningTreeId,
       setTimelineAnalyses,
+      setLinesCompletedLearnBranches,
+      setLinesLearnBranchComplete,
     ],
   );
 
@@ -1354,6 +1457,7 @@ export function useLabLines(
     quitLinesSession,
     stopOpeningDrill,
     cancelDrillOpponentMove,
+    previewOpeningTreeRoot,
     selectOpeningTree,
     selectOpeningNode,
     countTrainPliesInDrillPath,

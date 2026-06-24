@@ -18,7 +18,6 @@ import {
   filterOpeningTreeForDisplay,
   formatOpeningTreeDisplayName,
   mapOpeningLibraryFromDb,
-  mapOpeningLibraryToDb,
   normalizeOpeningFen,
   parseSanMoves,
   resolveOpeningLibrary,
@@ -386,6 +385,141 @@ export function buildDynamicBrowseSummaries(
   }
 
   return summaries.sort((left, right) => right.sourceCount - left.sourceCount);
+}
+
+function firstMoveSanForLibrary(library: OpeningLibrary) {
+  switch (library) {
+    case 'e4':
+      return 'e4';
+    case 'd4':
+      return 'd4';
+    case 'c4':
+      return 'c4';
+    case 'nf3':
+      return 'Nf3';
+    case 'other':
+      return null;
+  }
+}
+
+function buildFullGameRootSan(graph: OpeningGraphDraft, catalog: OpeningCatalogDraft) {
+  if (graph.trainSide === 'white') {
+    return catalog.displaySan;
+  }
+
+  const firstMove = firstMoveSanForLibrary(graph.library);
+
+  return firstMove ? [firstMove, ...catalog.displaySan] : catalog.displaySan;
+}
+
+function buildFullGameRootUci(graph: OpeningGraphDraft, catalog: OpeningCatalogDraft) {
+  const firstMove = graph.trainSide === 'black' ? libraryFirstMoveUci(graph.library) : null;
+
+  return firstMove ? [firstMove, ...catalog.displayUci] : catalog.displayUci;
+}
+
+export function buildRecentDynamicBrowseSummaries(
+  graphs: OpeningGraphDraft[],
+  browsePly: number,
+  progress: Map<string, OpeningGraphProgressEntry>,
+  totalGames: number,
+): OpeningTreeSummary[] {
+  const summariesByRoot = new Map<
+    string,
+    {
+      summaries: OpeningTreeSummary[];
+      sourceCount: number;
+      linesWhite: number;
+      linesBlack: number;
+      weightedMasteryTotal: number;
+      weightedMasteryCount: number;
+      rootSan: string[];
+      rootUci: string[];
+    }
+  >();
+
+  for (const graph of graphs) {
+    const graphBrowsePly = graph.trainSide === 'black' ? Math.max(0, browsePly - 1) : browsePly;
+
+    if (graphBrowsePly < 0) {
+      continue;
+    }
+
+    for (const catalog of buildDynamicCatalogEntries(graph, graphBrowsePly)) {
+      const rootSan = buildFullGameRootSan(graph, catalog);
+      const rootUci = buildFullGameRootUci(graph, catalog);
+
+      if (rootSan.length !== browsePly) {
+        continue;
+      }
+
+      const summary = catalogToSummary(graph, catalog, progress, graph.nodes, graph.edges);
+      const rootKey = rootUci.length > 0 ? rootUci.join(' ') : rootSan.join(' ');
+      const current =
+        summariesByRoot.get(rootKey) ??
+        ({
+          summaries: [],
+          sourceCount: 0,
+          linesWhite: 0,
+          linesBlack: 0,
+          weightedMasteryTotal: 0,
+          weightedMasteryCount: 0,
+          rootSan,
+          rootUci,
+        } satisfies {
+          summaries: OpeningTreeSummary[];
+          sourceCount: number;
+          linesWhite: number;
+          linesBlack: number;
+          weightedMasteryTotal: number;
+          weightedMasteryCount: number;
+          rootSan: string[];
+          rootUci: string[];
+        });
+
+      current.summaries.push(summary);
+      current.sourceCount += summary.sourceCount;
+
+      if (graph.trainSide === 'white') {
+        current.linesWhite += summary.sourceCount;
+      } else {
+        current.linesBlack += summary.sourceCount;
+      }
+
+      if (summary.sourceCount > 0) {
+        current.weightedMasteryTotal += summary.masteryScore * summary.sourceCount;
+        current.weightedMasteryCount += summary.sourceCount;
+      }
+
+      summariesByRoot.set(rootKey, current);
+    }
+  }
+
+  return [...summariesByRoot.values()]
+    .map((entry) => {
+      const primary = [...entry.summaries].sort(
+        (left, right) => right.sourceCount - left.sourceCount || left.id.localeCompare(right.id),
+      )[0]!;
+      const masteryScore =
+        entry.weightedMasteryCount > 0
+          ? Number((entry.weightedMasteryTotal / entry.weightedMasteryCount).toFixed(2))
+          : 0;
+      const presencePercent = totalGames > 0 ? Number(((entry.sourceCount / totalGames) * 100).toFixed(2)) : 0;
+
+      return {
+        ...primary,
+        name: entry.rootSan.join(' ') || primary.name,
+        rootSan: entry.rootSan,
+        rootUci: entry.rootUci,
+        rootPly: browsePly,
+        sourceCount: entry.sourceCount,
+        linesWhite: entry.linesWhite,
+        linesBlack: entry.linesBlack,
+        masteryScore,
+        presencePercent,
+      };
+    })
+    .sort((left, right) => right.sourceCount - left.sourceCount || left.name.localeCompare(right.name));
 }
 
 export function findDynamicCatalogEntry(

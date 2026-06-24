@@ -96,6 +96,9 @@ export type OpeningTreeSummary = {
   nodeCount: number;
   dueCount: number;
   masteryScore: number;
+  linesWhite?: number;
+  linesBlack?: number;
+  presencePercent?: number;
   updatedAt: string | null;
 };
 
@@ -185,10 +188,6 @@ export function classifyRootPrefixMove(
   }
 
   return playedUci === expectedUci ? 'book' : 'miss';
-}
-
-function moveSideAtIndex(moveIndex: number): OpeningSide {
-  return moveIndex % 2 === 0 ? 'white' : 'black';
 }
 
 export type OpeningBuildMode = 'fast' | 'normal' | 'backfill' | 'extend_depth';
@@ -353,7 +352,7 @@ export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string
 export function classifyOpeningDrillMove(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
   nodeId: string,
-  fenBefore: string,
+  _fenBefore: string,
   playedUci: string,
   expected: Pick<AcceptedTrainMoves, 'primaryUci' | 'acceptedUcis'> | null,
 ) {
@@ -1416,10 +1415,6 @@ export function chooseWeightedOpponentEdge(edges: OpeningTreeEdge[], seed = Date
   return weighted[0]?.edge ?? null;
 }
 
-function chooseDeterministicOpponentEdge(outgoing: OpeningTreeEdge[]): OpeningTreeEdge | null {
-  return rankOpponentEdgesForDrill(outgoing)[0] ?? null;
-}
-
 export function rankOpponentEdgesForDrill(outgoing: OpeningTreeEdge[]): OpeningTreeEdge[] {
   const repertoire = outgoing.filter((edge) => isRepertoireEdge(edge));
   const pool = repertoire.length > 0 ? repertoire : outgoing;
@@ -2223,122 +2218,6 @@ export function findPathToNode(
   }
 
   return path;
-}
-
-function buildTreeForGroup(
-  group: { input: OpeningTreeBuildInput; parsed: OpeningMove[]; library: OpeningLibrary; rootFenKey: string }[],
-  options: { ownerProfileId: string; rootPly: number; targetDepth: number },
-): OpeningTreeDraft {
-  const first = group[0]!;
-  const rootMoves = first.parsed.slice(0, options.rootPly);
-  const treeId = `opening-tree-${shortHash(`${options.ownerProfileId}:${first.library}:${first.rootFenKey}`)}`;
-  const nodes = new Map<string, OpeningNodeDraft>();
-  const edges = new Map<string, OpeningEdgeDraft>();
-
-  for (const item of group) {
-    const count = item.input.count ?? 1;
-    const boundedMoves = item.parsed.slice(0, options.targetDepth);
-
-    for (let index = options.rootPly; index <= boundedMoves.length; index += 1) {
-      const fen = index === 0 ? new Chess().fen() : boundedMoves[index - 1]?.fenAfter;
-
-      if (!fen) {
-        continue;
-      }
-
-      const fenKey = normalizeOpeningFen(fen);
-      const nodeId = `opening-node-${shortHash(`${treeId}:${fenKey}`)}`;
-      const node = nodes.get(nodeId) ?? {
-        id: nodeId,
-        fen,
-        fenKey,
-        ply: index,
-        sideToMove: getSideToMove(fen),
-        trainSide: item.input.trainSide,
-        recentGames: 0,
-        cardCount: 0,
-      };
-
-      if (item.input.source === 'recent_game') {
-        node.recentGames += count;
-      } else {
-        node.cardCount += count;
-      }
-
-      nodes.set(nodeId, node);
-    }
-
-    for (let index = options.rootPly; index < boundedMoves.length; index += 1) {
-      const move = boundedMoves[index];
-      const fromFen = boundedMoves[index - 1]?.fenAfter;
-
-      if (!move || !fromFen) {
-        continue;
-      }
-
-      const fromNodeId = `opening-node-${shortHash(`${treeId}:${normalizeOpeningFen(fromFen)}`)}`;
-      const toNodeId = `opening-node-${shortHash(`${treeId}:${normalizeOpeningFen(move.fenAfter)}`)}`;
-      const edgeId = `opening-edge-${shortHash(`${treeId}:${fromNodeId}:${move.uci}`)}`;
-      const edge = edges.get(edgeId) ?? {
-        id: edgeId,
-        fromNodeId,
-        toNodeId,
-        uci: move.uci,
-        san: move.san,
-        moveBy: move.color,
-        source: item.input.source,
-        recentCount: 0,
-        cardCount: 0,
-        mastersGames: 0,
-        priority: 0,
-        isEngineBest: false,
-      };
-
-      if (item.input.source === 'recent_game') {
-        edge.recentCount += item.input.count ?? 1;
-      } else {
-        edge.cardCount += item.input.count ?? 1;
-      }
-
-      edge.priority = edge.recentCount * 3 + edge.cardCount * 8 + Math.max(0, item.input.scoreSwingCp ?? 0) / 40;
-      edge.source = edge.recentCount > 0 && edge.cardCount > 0 ? 'mixed' : edge.source;
-      edges.set(edgeId, edge);
-    }
-  }
-
-  return {
-    id: treeId,
-    name: deriveOpeningName(first.input.name, rootMoves),
-    library: first.library,
-    rootFenKey: first.rootFenKey,
-    rootPly: options.rootPly,
-    rootSan: rootMoves.map((move) => move.san),
-    rootUci: rootMoves.map((move) => move.uci),
-    sourceCount: group.reduce((total, item) => total + (item.input.count ?? 1), 0),
-    targetDepth: options.targetDepth,
-    trainSide: first.input.trainSide,
-    nodes: [...nodes.values()].sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id)),
-    edges: [...edges.values()].sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id)),
-  };
-}
-
-function deriveOpeningName(name: string, rootMoves: OpeningMove[]) {
-  const formattedName = formatOpeningTreeDisplayName(name);
-
-  if (formattedName && formattedName !== 'Opening') {
-    return formattedName.slice(0, 96);
-  }
-
-  return (
-    rootMoves
-      .map((move) => move.san)
-      .join(' ')
-      .slice(0, 96) || 'Opening'
-  );
-}
-
-function getSideToMove(fen: string): OpeningSide {
-  return fen.split(' ')[1] === 'b' ? 'black' : 'white';
 }
 
 function seededUnit(seed: number) {
