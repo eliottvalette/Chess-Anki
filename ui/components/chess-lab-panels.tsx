@@ -435,34 +435,45 @@ export const LinesPanel = memo(function LinesPanel({
                 <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">No lines match the current filters.</p>
               ) : (
                 <div className="flex min-h-0 flex-col gap-2">
-                  {filteredTrees.map((tree) => (
-                    <button
-                      className={`flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${tree.id === activeTreeId ? 'bg-[rgba(168,216,160,0.08)]' : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]'}`}
-                      key={tree.id}
-                      onClick={() => onSelectTree(tree.id)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        onPreviewTreeRoot(tree);
-                      }}
-                      type="button"
-                    >
-                      <span className="flex min-w-0 items-start justify-between gap-2.5 w-full">
-                        <strong className="min-w-0 text-[14px] font-normal leading-[1.25] text-[rgba(241,245,234,0.88)] wrap-anywhere">
-                          {formatLinesTreeTitle(tree)}
-                        </strong>
-                        <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft)">
-                          {tree.masteryScore > 0 ? formatMasteryScoreLabel(tree.masteryScore) : 'New'}
+                  {filteredTrees.map((tree) => {
+                    const isSelected = tree.id === activeTreeId;
+                    const concernBackground = tree.earlyOpeningConcern
+                      ? isSelected
+                        ? 'bg-[rgba(225,120,120,0.12)]'
+                        : 'bg-[rgba(225,120,120,0.055)] hover:bg-[rgba(225,120,120,0.085)]'
+                      : isSelected
+                        ? 'bg-[rgba(168,216,160,0.08)]'
+                        : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]';
+
+                    return (
+                      <button
+                        className={`flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${concernBackground}`}
+                        key={tree.id}
+                        onClick={() => onSelectTree(tree.id)}
+                        onContextMenu={(event) => {
+                          event.preventDefault();
+                          onPreviewTreeRoot(tree);
+                        }}
+                        type="button"
+                      >
+                        <span className="flex min-w-0 items-start justify-between gap-2.5 w-full">
+                          <strong className="min-w-0 text-[14px] font-normal leading-[1.25] text-[rgba(241,245,234,0.88)] wrap-anywhere">
+                            {formatLinesTreeTitle(tree)}
+                          </strong>
+                          <span className="flex-none text-[11px] font-normal leading-none text-(--text-soft)">
+                            {tree.masteryScore > 0 ? formatMasteryScoreLabel(tree.masteryScore) : 'New'}
+                          </span>
                         </span>
-                      </span>
-                      <span className="block text-[11px] leading-[1.35] text-(--text-muted)">
-                        {formatPresenceLabel(tree.presencePercent)}
-                      </span>
-                      <span className="grid grid-cols-2 gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
-                        <span>{formatLineCount(tree.linesWhite ?? 0, 'white')}</span>
-                        <span>{formatLineCount(tree.linesBlack ?? 0, 'black')}</span>
-                      </span>
-                    </button>
-                  ))}
+                        <span className="block text-[11px] leading-[1.35] text-(--text-muted)">
+                          {formatPresenceLabel(tree.presencePercent)}
+                        </span>
+                        <span className="grid grid-cols-2 gap-2.5 [&_span]:text-[10px] font-normal leading-none text-(--text-soft)">
+                          <span>{formatLineCount(tree.linesWhite ?? 0, 'white')}</span>
+                          <span>{formatLineCount(tree.linesBlack ?? 0, 'black')}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  detectEarlyOpeningConcernOnPath,
   isPositionAnalysisCurrent,
   LINES_BOARD_NEUTRAL_WHITE_ADVANTAGE,
+  resolveLinesBoardEarlyOpeningConcern,
   resolveLinesBoardEvalCp,
   resolveLinesBoardScoreLabel,
   resolveLinesBoardWhiteAdvantage,
@@ -157,4 +159,53 @@ test('isPositionAnalysisCurrent only accepts the cached analysis instance for th
   assert.equal(isPositionAnalysisCurrent(current, current), true);
   assert.equal(isPositionAnalysisCurrent(stale, current), false);
   assert.equal(isPositionAnalysisCurrent(null, current), false);
+});
+
+test('detectEarlyOpeningConcernOnPath flags bad white eval in the opening', () => {
+  const nodes = [
+    { id: 'root', ply: 0, evalCp: 20, sideToMove: 'white' },
+    { id: 'after-e4', ply: 1, evalCp: 18, sideToMove: 'black' },
+    { id: 'after-e5', ply: 2, evalCp: 16, sideToMove: 'white' },
+    { id: 'after-qh4', ply: 3, evalCp: -140, sideToMove: 'black' },
+  ];
+  const edges = [
+    { fromNodeId: 'root', toNodeId: 'after-e4', uci: 'e2e4' },
+    { fromNodeId: 'after-e4', toNodeId: 'after-e5', uci: 'e7e5' },
+    { fromNodeId: 'after-e5', toNodeId: 'after-qh4', uci: 'd1h4' },
+  ];
+
+  assert.equal(detectEarlyOpeningConcernOnPath(nodes, edges, ['e2e4', 'e7e5', 'd1h4'], 'white'), true);
+});
+
+test('detectEarlyOpeningConcernOnPath ignores late positions', () => {
+  const nodes = [
+    { id: 'root', ply: 0, evalCp: 20, sideToMove: 'white' },
+    { id: 'late', ply: 14, evalCp: -200, sideToMove: 'white' },
+  ];
+  const edges = [{ fromNodeId: 'root', toNodeId: 'late', uci: 'e2e4' }];
+
+  assert.equal(detectEarlyOpeningConcernOnPath(nodes, edges, ['e2e4'], 'white'), false);
+});
+
+test('resolveLinesBoardEarlyOpeningConcern uses repertoire eval in early lines mode', () => {
+  assert.equal(
+    resolveLinesBoardEarlyOpeningConcern({
+      mode: 'lines',
+      trainSide: 'white',
+      historyIndex: 4,
+      linesBoardEvalCp: -35,
+      linesBoardClassification: null,
+    }),
+    true,
+  );
+  assert.equal(
+    resolveLinesBoardEarlyOpeningConcern({
+      mode: 'lines',
+      trainSide: 'white',
+      historyIndex: 20,
+      linesBoardEvalCp: -35,
+      linesBoardClassification: null,
+    }),
+    false,
+  );
 });

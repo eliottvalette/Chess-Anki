@@ -99,6 +99,7 @@ export type OpeningTreeSummary = {
   linesWhite?: number;
   linesBlack?: number;
   presencePercent?: number;
+  earlyOpeningConcern?: boolean;
   updatedAt: string | null;
 };
 
@@ -888,7 +889,7 @@ export function classifyBoardMoveAtHistoryIndex(
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
   trainSide: OpeningSide,
-): { moveUci: string; category: LinesMoveCategory } | null {
+): { moveUci: string; category: LinesMoveCategory; evalLossCp: number | null } | null {
   if (historyIndex <= 0 || historyIndex > moveHistory.length) {
     return null;
   }
@@ -909,7 +910,7 @@ export function classifyBoardMoveAtHistoryIndex(
       return null;
     }
 
-    return { moveUci: move.uci, category: prefixCategory };
+    return { moveUci: move.uci, category: prefixCategory, evalLossCp: null };
   }
 
   const { nodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, moveIndex);
@@ -930,6 +931,7 @@ export function classifyBoardMoveAtHistoryIndex(
     return {
       moveUci: move.uci,
       category: classified.category,
+      evalLossCp: classified.evalLossCp,
     };
   }
 
@@ -938,6 +940,7 @@ export function classifyBoardMoveAtHistoryIndex(
   return {
     moveUci: move.uci,
     category: edge ? 'book' : 'miss',
+    evalLossCp: null,
   };
 }
 
@@ -946,7 +949,7 @@ export function classifyLinesMoveAtHistoryIndex(
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
   trainSide: OpeningSide,
-): { moveUci: string; category: LinesMoveCategory } | null {
+): { moveUci: string; category: LinesMoveCategory; evalLossCp: number | null } | null {
   return classifyBoardMoveAtHistoryIndex(tree, moveHistory, historyIndex, trainSide);
 }
 

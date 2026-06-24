@@ -5,9 +5,17 @@ import {
   getAdvantageMeter,
   getAdvantageMeterFromEvalCp,
 } from './chess-analysis-client.ts';
-import { normalizeOpeningFen, type OpeningTreeDetail, resolveOpeningNodeFromHistory } from './opening-tree.ts';
+import {
+  type LinesMoveCategory,
+  normalizeOpeningFen,
+  type OpeningSide,
+  type OpeningTreeDetail,
+  resolveOpeningNodeFromHistory,
+} from './opening-tree.ts';
 
 export const LINES_BOARD_NEUTRAL_WHITE_ADVANTAGE = 50;
+export const LINES_EARLY_OPENING_MAX_PLY = 12;
+export const LINES_EARLY_OPENING_BLUNDER_LOSS_CP = 100;
 
 export function resolveLinesBoardEvalCp(
   tree: Pick<OpeningTreeDetail, 'nodes' | 'edges' | 'rootSan' | 'rootPly' | 'rootFenKey' | 'rootUci'>,
@@ -76,4 +84,107 @@ export function resolveLinesBoardWhiteAdvantage(options: {
   }
 
   return LINES_BOARD_NEUTRAL_WHITE_ADVANTAGE;
+}
+
+export function isEarlyOpeningPly(ply: number, maxPly = LINES_EARLY_OPENING_MAX_PLY) {
+  return ply > 0 && ply <= maxPly;
+}
+
+export function isLinesEvalConcerningForTrainSide(evalCp: number, trainSide: OpeningSide) {
+  if (trainSide === 'white') {
+    return evalCp < 0;
+  }
+
+  return evalCp > 0;
+}
+
+export function evalSwingCpForSide(
+  before: { evalCp: number | null | undefined; sideToMove: OpeningSide },
+  after: { evalCp: number | null | undefined },
+) {
+  if (before.evalCp == null || after.evalCp == null) {
+    return null;
+  }
+
+  return before.sideToMove === 'white' ? after.evalCp - before.evalCp : before.evalCp - after.evalCp;
+}
+
+export function detectEarlyOpeningConcernOnPath(
+  nodes: Array<{ id: string; ply: number; evalCp?: number | null; sideToMove: OpeningSide }>,
+  edges: Array<{ fromNodeId: string; toNodeId: string; uci: string }>,
+  rootUci: string[],
+  trainSide: OpeningSide,
+  maxPly = LINES_EARLY_OPENING_MAX_PLY,
+) {
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const rootNode = nodes.find((node) => node.ply === 0);
+
+  if (!rootNode) {
+    return false;
+  }
+
+  let currentNode = rootNode;
+
+  for (const uci of rootUci.slice(0, maxPly)) {
+    const edge = edges.find((candidate) => candidate.fromNodeId === currentNode.id && candidate.uci === uci);
+
+    if (!edge) {
+      break;
+    }
+
+    const nextNode = nodeById.get(edge.toNodeId);
+
+    if (!nextNode || nextNode.ply !== currentNode.ply + 1) {
+      break;
+    }
+
+    if (isEarlyOpeningPly(nextNode.ply, maxPly)) {
+      const swing = evalSwingCpForSide(currentNode, nextNode);
+
+      if (swing != null && swing <= -LINES_EARLY_OPENING_BLUNDER_LOSS_CP && currentNode.sideToMove === trainSide) {
+        return true;
+      }
+
+      if (nextNode.evalCp != null && isLinesEvalConcerningForTrainSide(nextNode.evalCp, trainSide)) {
+        return true;
+      }
+    }
+
+    currentNode = nextNode;
+  }
+
+  return false;
+}
+
+export function resolveLinesBoardEarlyOpeningConcern(options: {
+  mode: string;
+  trainSide: OpeningSide;
+  historyIndex: number;
+  linesBoardEvalCp: number | null;
+  linesBoardClassification: { category: LinesMoveCategory; evalLossCp: number | null } | null;
+}) {
+  if (options.mode !== 'lines' || options.historyIndex <= 0) {
+    return false;
+  }
+
+  if (!isEarlyOpeningPly(options.historyIndex)) {
+    return false;
+  }
+
+  if (
+    options.linesBoardEvalCp != null &&
+    isLinesEvalConcerningForTrainSide(options.linesBoardEvalCp, options.trainSide)
+  ) {
+    return true;
+  }
+
+  if (options.linesBoardClassification?.category === 'miss') {
+    const loss = options.linesBoardClassification.evalLossCp;
+
+    if (loss != null && loss >= LINES_EARLY_OPENING_BLUNDER_LOSS_CP) {
+      return true;
+    }
+  }
+
+  return false;
 }

@@ -1,5 +1,6 @@
 import { Chess } from 'chess.js';
 
+import { detectEarlyOpeningConcernOnPath } from './lines-board-eval.ts';
 import type {
   OpeningEdgeDraft,
   OpeningLibrary,
@@ -517,6 +518,9 @@ export function buildRecentDynamicBrowseSummaries(
         linesBlack: entry.linesBlack,
         masteryScore,
         presencePercent,
+        earlyOpeningConcern: graphs.some((graph) =>
+          detectEarlyOpeningConcernOnPath(graph.nodes, graph.edges, entry.rootUci, graph.trainSide),
+        ),
       };
     })
     .sort((left, right) => right.sourceCount - left.sourceCount || left.name.localeCompare(right.name));

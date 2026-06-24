@@ -19,6 +19,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
     labState,
     boardStageRef,
     evalRailRef,
+    linesEarlyOpeningConcern,
     whiteAdvantage,
     boardScoreLabel,
     topBoardPlayer,
@@ -36,6 +37,8 @@ export const LabBoardArea = memo(function LabBoardArea() {
   } = useLab();
 
   const isBlackOrientation = labState.orientation === 'black';
+  const boardConcernBackground =
+    labState.mode === 'lines' && linesEarlyOpeningConcern ? 'bg-[rgba(225,120,120,0.07)]' : 'bg-transparent';
   const evalRailTransitionClass = 'transition-[height,width] duration-200 ease-out will-change-[height,width]';
   const boardWidth = labState.boardWidth;
   const selectedSquare = labState.selectedSquare;
@@ -234,7 +237,7 @@ export const LabBoardArea = memo(function LabBoardArea() {
           <div className="flex max-w-full flex-col gap-2" style={{ width: `${boardWidth}px` }}>
             <BoardPlayerBar player={topBoardPlayer} />
             <div
-              className="relative flex max-h-full max-w-full flex-none items-center justify-center overflow-hidden rounded-[2px] border-0 bg-transparent p-0 max-[980px]:max-w-[calc(100vw-112px)] max-[720px]:max-w-[calc(100vw-56px)]"
+              className={`relative flex max-h-full max-w-full flex-none items-center justify-center overflow-hidden rounded-[2px] border-0 p-0 max-[980px]:max-w-[calc(100vw-112px)] max-[720px]:max-w-[calc(100vw-56px)] ${boardConcernBackground}`}
               style={{ width: `${boardWidth}px`, height: `${boardWidth}px` }}
             >
               <Chessboard options={chessboardOptions} />

@@ -46,6 +46,7 @@ import {
 import { isLinesBoardPlayAllowed } from '@/lib/lab-helpers';
 import {
   isPositionAnalysisCurrent,
+  resolveLinesBoardEarlyOpeningConcern,
   resolveLinesBoardEvalCp,
   resolveLinesBoardScoreLabel,
   resolveLinesBoardWhiteAdvantage,
@@ -904,8 +905,22 @@ export function useLabOrchestrator() {
     return {
       move,
       category: classified.category,
+      evalLossCp: classified.evalLossCp,
     };
   }, [activeOpeningTree, activeTrainSide, historyIndex, mode, moveHistory]);
+  const linesEarlyOpeningConcern = useMemo(() => {
+    const classification = linesBoardClassification
+      ? { category: linesBoardClassification.category, evalLossCp: linesBoardClassification.evalLossCp }
+      : null;
+
+    return resolveLinesBoardEarlyOpeningConcern({
+      mode,
+      trainSide: activeTrainSide,
+      historyIndex,
+      linesBoardEvalCp,
+      linesBoardClassification: classification,
+    });
+  }, [activeTrainSide, historyIndex, linesBoardClassification, linesBoardEvalCp, mode]);
   const linesBoardReviewCategory = useMemo(() => {
     const lastMove = currentMoves[currentMoves.length - 1];
     const classifiedMove = linesBoardClassification?.move ?? lastMove;
@@ -2655,6 +2670,7 @@ export function useLabOrchestrator() {
     bottomBoardPlayer,
     boardScoreLabel,
     whiteAdvantage,
+    linesEarlyOpeningConcern,
     deckOpponentBestSan,
     reviewSaveMoveSan,
     deckBusy,
