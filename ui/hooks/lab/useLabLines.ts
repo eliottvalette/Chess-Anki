@@ -12,6 +12,7 @@ import {
   DRILL_OPPONENT_DELAY_MS,
   delay,
   LINES_LINE_PREVIEW_DELAY_MS,
+  LINES_ROOT_PREVIEW_MOVE_DELAY_MS,
   type OpeningTreesPayload,
   readJsonResponse,
 } from '@/lib/lab-helpers';
@@ -162,6 +163,7 @@ export function useLabLines(
 
   const drillTimeoutRef = useRef<number | null>(null);
   const learnSourceTreeRef = useRef<OpeningTreeDetail | null>(null);
+  const openingTreeDetailRequestIdRef = useRef(0);
 
   const cancelDrillOpponentMove = useCallback(() => {
     if (drillTimeoutRef.current) {
@@ -290,8 +292,13 @@ export function useLabLines(
         boardHistoryIndex?: number;
         browsePly?: number;
         initialFen?: string | null;
+        requestId?: number;
       } = {},
     ) => {
+      const requestId = options.requestId ?? null;
+      const isStaleRequest = () => requestId != null && openingTreeDetailRequestIdRef.current !== requestId;
+
+      setOpeningTreeActionLoading(true);
       setOpeningTreeActionError('');
 
       try {
@@ -301,6 +308,10 @@ export function useLabLines(
           const projectedPayload = await requestOpeningTreesJson<OpeningTreesPayload>(
             `/api/opening-trees?atFenKey=${encodeURIComponent(options.atFenKey)}`,
           ).catch(() => null);
+
+          if (isStaleRequest()) {
+            return null;
+          }
 
           if (projectedPayload?.tree) {
             displayTree = prepareOpeningTreeForLines(projectedPayload.tree);
@@ -331,6 +342,10 @@ export function useLabLines(
           }
 
           const payload = await requestOpeningTreesJson<OpeningTreesPayload>(`/api/opening-trees?${params.toString()}`);
+
+          if (isStaleRequest()) {
+            return null;
+          }
 
           const tree = payload.tree ?? null;
           displayTree = tree ? prepareOpeningTreeForLines(tree) : null;
@@ -363,6 +378,10 @@ export function useLabLines(
           displayTree = ensureOpeningTreeRootPrefix(displayTree);
         }
 
+        if (isStaleRequest()) {
+          return null;
+        }
+
         setActiveOpeningTree(displayTree);
 
         if (displayTree && options.syncBoard) {
@@ -379,9 +398,19 @@ export function useLabLines(
 
         return displayTree;
       } catch (error) {
-        setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening tree.');
+        if (isStaleRequest()) {
+          return null;
+        }
+
+        const message = error instanceof Error ? error.message : 'Unable to load opening tree.';
+        console.error('[lines] opening tree detail failed', { treeId, error });
+        setOpeningTreeActionError(message);
         setActiveOpeningTree(null);
         return null;
+      } finally {
+        if (!isStaleRequest()) {
+          setOpeningTreeActionLoading(false);
+        }
       }
     },
     [
@@ -392,6 +421,7 @@ export function useLabLines(
       setActiveOpeningTree,
       setOpeningDrillExpected,
       setOpeningTreeActionError,
+      setOpeningTreeActionLoading,
     ],
   );
 
@@ -1222,14 +1252,11 @@ export function useLabLines(
 
   const previewOpeningTreeRoot = useCallback(
     (tree: OpeningTreeSummary) => {
-      if (deckPlaybackBusy) {
-        return;
-      }
-
       cancelDrillOpponentMove();
-      deckPlaybackRequestIdRef.current += 1;
+      const requestId = ++deckPlaybackRequestIdRef.current;
+      openingTreeDetailRequestIdRef.current += 1;
+      setOpeningTreeActionLoading(false);
       linesBoardFilterPreviewKeyRef.current = tree.rootUci.join(' ');
-      const moves = buildStoredMovesFromUciList(null, tree.rootUci);
 
       setOpeningDrillActive(false);
       setDeckFeedback(null);
@@ -1255,20 +1282,79 @@ export function useLabLines(
       setActiveOpeningNodeId(null);
       setActiveOpeningTree(null);
       setInitialFen(null);
-      setMoveHistory(moves);
+      moveHistoryRef.current = [];
+      historyIndexRef.current = 0;
+      initialFenRef.current = null;
+      setMoveHistory([]);
       deckReplayInitialFenRef.current = null;
-      deckReplayMovesRef.current = moves;
-      setHistoryIndex(moves.length);
-      setGame(restoreGameFromHistory(moves, null, moves.length));
-      setDeckPlaybackBusy(false);
+      deckReplayMovesRef.current = [];
+      setHistoryIndex(0);
+      setGame(new Chess());
+      setDeckPlaybackBusy(tree.rootUci.length > 0);
       clearVariation();
       clearSelection();
+
+      void (async () => {
+        if (tree.rootUci.length === 0) {
+          setDeckPlaybackBusy(false);
+          return;
+        }
+
+        let previewMoves: StoredMove[] = [];
+        let previewFen = new Chess().fen();
+
+        for (const uci of tree.rootUci) {
+          await delay(LINES_ROOT_PREVIEW_MOVE_DELAY_MS);
+
+          if (deckPlaybackRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          let appended: ReturnType<typeof appendStoredMoveFromUci>;
+
+          try {
+            appended = appendStoredMoveFromUci(previewMoves, previewFen, uci);
+          } catch {
+            setDeckPlaybackBusy(false);
+            return;
+          }
+
+          previewMoves = appended.moveHistory;
+          previewFen = appended.nextFen;
+
+          const nextGame = new Chess(previewFen);
+          const nextHistoryIndex = previewMoves.length;
+
+          moveHistoryRef.current = previewMoves;
+          historyIndexRef.current = nextHistoryIndex;
+          deckReplayMovesRef.current = previewMoves;
+
+          startTransition(() => {
+            setMoveHistory(previewMoves);
+            setHistoryIndex(nextHistoryIndex);
+            setGame(nextGame);
+          });
+
+          playSoundSequence(
+            getMoveSoundSequence({
+              move: appended.stored,
+              isSelfMove: false,
+              isCheck: nextGame.isCheck(),
+              isCheckmate: nextGame.isCheckmate(),
+              isGameOver: nextGame.isGameOver(),
+            }),
+          );
+        }
+
+        if (deckPlaybackRequestIdRef.current === requestId) {
+          setDeckPlaybackBusy(false);
+        }
+      })();
     },
     [
       cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
-      deckPlaybackBusy,
       deckPlaybackRequestIdRef,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
@@ -1276,6 +1362,7 @@ export function useLabLines(
       drillPathRef,
       linesSession,
       linesBoardFilterPreviewKeyRef,
+      playSoundSequence,
       setActiveOpeningNodeId,
       setActiveOpeningTree,
       setDeckFeedback,
@@ -1295,6 +1382,7 @@ export function useLabLines(
       setOpeningDrillActive,
       setOpeningDrillExpected,
       setOpeningDrillStatus,
+      setOpeningTreeActionLoading,
       setSelectedOpeningTreeId,
       setShowArrow,
     ],
@@ -1302,15 +1390,15 @@ export function useLabLines(
 
   const selectOpeningTree = useCallback(
     async (treeId: string) => {
-      if (deckPlaybackBusy) {
-        return;
-      }
-
       cancelDrillOpponentMove();
       deckPlaybackRequestIdRef.current += 1;
       setDeckPlaybackBusy(false);
+      const detailRequestId = ++openingTreeDetailRequestIdRef.current;
+      const isRootPreviewPosition = linesBoardFilterPreviewKeyRef.current != null;
+      linesBoardFilterPreviewKeyRef.current = null;
 
       if (!treeId) {
+        setOpeningTreeActionLoading(false);
         quitLinesSession();
         setSelectedOpeningTreeId(null);
         setActiveOpeningNodeId(null);
@@ -1335,7 +1423,8 @@ export function useLabLines(
       }
 
       const boardContext = resolveLinesBoardContext(game.fen(), moveHistory, historyIndex, initialFen);
-      const keepBoard = boardContext.historyIndex > 0 && !isStandardStartFenKey(boardContext.fenKey);
+      const keepBoard =
+        !isRootPreviewPosition && boardContext.historyIndex > 0 && !isStandardStartFenKey(boardContext.fenKey);
       const effectiveBrowsePly = keepBoard ? Math.max(minForcedPlies, boardContext.historyIndex) : minForcedPlies;
       const tree = await loadOpeningTreeDetail(treeId, {
         syncBoard: !keepBoard,
@@ -1344,7 +1433,12 @@ export function useLabLines(
         boardHistoryIndex: keepBoard ? boardContext.historyIndex : undefined,
         browsePly: effectiveBrowsePly,
         initialFen,
+        requestId: detailRequestId,
       });
+
+      if (openingTreeDetailRequestIdRef.current !== detailRequestId) {
+        return;
+      }
 
       if (!tree) {
         setSelectedOpeningTreeId(null);
@@ -1364,11 +1458,11 @@ export function useLabLines(
       cancelDrillOpponentMove,
       clearSelection,
       clearVariation,
-      deckPlaybackBusy,
       deckPlaybackRequestIdRef,
       game,
       historyIndex,
       initialFen,
+      linesBoardFilterPreviewKeyRef,
       minForcedPlies,
       loadOpeningTreeDetail,
       loadOpeningTreeRootOnBoard,

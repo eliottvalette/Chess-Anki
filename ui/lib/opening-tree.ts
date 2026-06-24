@@ -99,7 +99,7 @@ export type OpeningTreeSummary = {
   linesWhite?: number;
   linesBlack?: number;
   presencePercent?: number;
-  earlyOpeningConcern?: boolean;
+  openingEvalCp?: number | null;
   updatedAt: string | null;
 };
 

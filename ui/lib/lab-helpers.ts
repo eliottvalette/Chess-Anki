@@ -339,6 +339,7 @@ export function delay(ms: number) {
 
 export const DRILL_OPPONENT_DELAY_MS = 200;
 export const LINES_LINE_PREVIEW_DELAY_MS = 300;
+export const LINES_ROOT_PREVIEW_MOVE_DELAY_MS = 85;
 
 export { isLinesBoardPlayAllowed } from './lines-board-guards';
 

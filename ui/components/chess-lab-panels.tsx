@@ -208,7 +208,7 @@ export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedbac
 
 export const LinesPanel = memo(function LinesPanel({
   actionError,
-  actionLoading: _actionLoading,
+  actionLoading,
   activeNodeId,
   activeTree,
   activeTreeId,
@@ -408,10 +408,11 @@ export const LinesPanel = memo(function LinesPanel({
             <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-normal leading-[1.15] tracking-normal text-(--text)">
               Lines
             </h2>
-            {loading || positionFilterLoading ? (
+            {loading || positionFilterLoading || actionLoading ? (
               <span className="text-sm leading-[1.45] text-(--text-muted)">loading</span>
             ) : null}
           </div>
+          {actionError ? <p className="m-0 text-sm leading-[1.45] text-[#E17878]">{actionError}</p> : null}
           {catalogTrees.length === 0 ? (
             <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
               Import your recent games to build opening graphs, then browse them at any ply depth.
@@ -437,17 +438,15 @@ export const LinesPanel = memo(function LinesPanel({
                 <div className="flex min-h-0 flex-col gap-2">
                   {filteredTrees.map((tree) => {
                     const isSelected = tree.id === activeTreeId;
-                    const concernBackground = tree.earlyOpeningConcern
-                      ? isSelected
-                        ? 'bg-[rgba(225,120,120,0.12)]'
-                        : 'bg-[rgba(225,120,120,0.055)] hover:bg-[rgba(225,120,120,0.085)]'
-                      : isSelected
-                        ? 'bg-[rgba(168,216,160,0.08)]'
-                        : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]';
+                    const itemBackground = isSelected
+                      ? 'bg-[rgba(168,216,160,0.08)]'
+                      : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]';
+                    const evalFillPercent =
+                      tree.openingEvalCp == null ? null : formatOpeningEvalFillPercent(tree.openingEvalCp);
 
                     return (
                       <button
-                        className={`flex w-full min-w-0 cursor-pointer flex-col gap-1 rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${concernBackground}`}
+                        className={`relative flex w-full min-w-0 cursor-pointer flex-col gap-1 overflow-hidden rounded-none border-b border-[rgba(226,238,220,0.04)] px-2 py-2.5 text-left transition-[background-color] duration-150 ${itemBackground}`}
                         key={tree.id}
                         onClick={() => onSelectTree(tree.id)}
                         onContextMenu={(event) => {
@@ -471,6 +470,18 @@ export const LinesPanel = memo(function LinesPanel({
                           <span>{formatLineCount(tree.linesWhite ?? 0, 'white')}</span>
                           <span>{formatLineCount(tree.linesBlack ?? 0, 'black')}</span>
                         </span>
+                        {evalFillPercent != null ? (
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-x-0 bottom-0 h-[3px] bg-[rgba(0,0,0,0.82)]"
+                            title={formatOpeningEvalTitle(tree.openingEvalCp ?? null)}
+                          >
+                            <span
+                              className="block h-full bg-[rgba(245,247,242,0.9)]"
+                              style={{ width: `${evalFillPercent}%` }}
+                            />
+                          </span>
+                        ) : null}
                       </button>
                     );
                   })}
@@ -478,7 +489,6 @@ export const LinesPanel = memo(function LinesPanel({
               )}
             </div>
           )}
-          {actionError ? <p className="m-0 text-sm leading-[1.45] text-[#E17878]">{actionError}</p> : null}
         </section>
       ) : null}
 
@@ -673,6 +683,45 @@ function formatPresenceLabel(value: number | undefined) {
 
 function formatLineCount(count: number, side: 'white' | 'black') {
   return `${count} ${count === 1 ? 'line' : 'lines'} ${side}`;
+}
+
+const OPENING_EVAL_MIN_CP = -60;
+const OPENING_EVAL_CENTER_CP = 30;
+const OPENING_EVAL_MAX_CP = 120;
+const OPENING_EVAL_LOG_FACTOR = 8;
+
+function logarithmicProgress(value: number) {
+  const clamped = Math.max(0, Math.min(1, value));
+  return Math.log1p(OPENING_EVAL_LOG_FACTOR * clamped) / Math.log1p(OPENING_EVAL_LOG_FACTOR);
+}
+
+function formatOpeningEvalFillPercent(evalCp: number) {
+  if (evalCp <= OPENING_EVAL_MIN_CP) {
+    return 0;
+  }
+
+  if (evalCp >= OPENING_EVAL_MAX_CP) {
+    return 100;
+  }
+
+  if (evalCp <= OPENING_EVAL_CENTER_CP) {
+    const progress = (evalCp - OPENING_EVAL_MIN_CP) / (OPENING_EVAL_CENTER_CP - OPENING_EVAL_MIN_CP);
+    return Math.round(logarithmicProgress(progress) * 50 * 100) / 100;
+  }
+
+  const progress = (evalCp - OPENING_EVAL_CENTER_CP) / (OPENING_EVAL_MAX_CP - OPENING_EVAL_CENTER_CP);
+  return Math.round((50 + logarithmicProgress(progress) * 50) * 100) / 100;
+}
+
+function formatOpeningEvalTitle(evalCp: number | null) {
+  if (evalCp == null) {
+    return '';
+  }
+
+  const pawns = evalCp / 100;
+  const prefix = pawns > 0 ? '+' : '';
+
+  return `Eval ${prefix}${pawns.toFixed(2)}`;
 }
 
 const openingTreeLayoutCache = new Map<string, Map<string, { x: number; y: number }>>();

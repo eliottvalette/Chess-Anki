@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { AsyncTtlCache } from '@/lib/async-ttl-cache';
 import { fetchArchives, fetchRecentGames, type RawChessComGame } from '@/lib/chesscom';
+import { LINES_EARLY_OPENING_MAX_PLY } from '@/lib/lines-board-eval';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
   buildRecentDynamicBrowseSummaries,
@@ -45,7 +46,7 @@ import {
   OPENING_BUILD_ROOT_PLY,
   type OpeningTreeImportResult,
 } from '@/lib/opening-tree-import';
-import { getStockfishSession } from '@/lib/stockfish-session';
+import { getStockfishSession, getStockfishSessionPool } from '@/lib/stockfish-session';
 import { hashTrainingSessionToken, parseTrainingSessionCookie, TRAINING_SESSION_COOKIE } from '@/lib/training-profile';
 import { createAdminClient } from '@/utils/supabase/admin';
 
@@ -58,6 +59,8 @@ const EDGE_SELECT =
 const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
 const MAX_ENGINE_IMPORT_NODES = 120;
 const MAX_LICHESS_IMPORT_NODES = 80;
+const MAX_RECENT_LINE_EVALS = 80;
+const RECENT_LINE_EVAL_DEPTH = 10;
 const openingGraphCache = new AsyncTtlCache<string, OpeningGraphDraft[]>({ maxEntries: 4, ttlMs: 60_000 });
 const recentOpeningGraphCache = new AsyncTtlCache<string, RecentOpeningForest>({
   maxEntries: 8,
@@ -826,7 +829,80 @@ async function fetchRecentDynamicTreeSummaries(
     ]),
   );
 
-  return buildRecentDynamicBrowseSummaries(graphs, browsePly, progressMap, totalGames);
+  return attachRecentLineEvals(buildRecentDynamicBrowseSummaries(graphs, browsePly, progressMap, totalGames));
+}
+
+async function attachRecentLineEvals(summaries: OpeningTreeSummary[]): Promise<OpeningTreeSummary[]> {
+  const candidates = summaries
+    .filter((summary) => summary.rootUci.length > 0)
+    .filter((summary) => summary.rootUci.length <= LINES_EARLY_OPENING_MAX_PLY)
+    .slice(0, MAX_RECENT_LINE_EVALS);
+
+  if (candidates.length === 0) {
+    return summaries;
+  }
+
+  let sessions: Awaited<ReturnType<typeof getStockfishSessionPool>>;
+
+  try {
+    sessions = await getStockfishSessionPool();
+  } catch {
+    return summaries;
+  }
+
+  const evalById = new Map<string, number>();
+
+  await Promise.all(
+    candidates.map(async (summary, index) => {
+      const fen = fenAfterUciMoves(summary.rootUci);
+
+      if (!fen) {
+        return;
+      }
+
+      const session = sessions[index % sessions.length];
+
+      try {
+        const analysis = await session.analyze({
+          fen,
+          depth: RECENT_LINE_EVAL_DEPTH,
+          multipv: 1,
+        });
+        const score = analysis.whitePerspective;
+
+        if (score?.type === 'cp') {
+          evalById.set(summary.id, score.value);
+        } else if (score?.type === 'mate') {
+          evalById.set(summary.id, score.value > 0 ? 100_000 : -100_000);
+        }
+      } catch {
+        // Missing eval should not block the list.
+      }
+    }),
+  );
+
+  return summaries.map((summary) => ({
+    ...summary,
+    openingEvalCp: evalById.get(summary.id) ?? summary.openingEvalCp ?? null,
+  }));
+}
+
+function fenAfterUciMoves(ucis: string[]) {
+  const chess = new Chess();
+
+  for (const uci of ucis) {
+    try {
+      chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        ...(uci[4] ? { promotion: uci[4] } : {}),
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  return chess.fen();
 }
 
 async function fetchProjectedTreeAtFenKey(
@@ -903,7 +979,12 @@ async function fetchTreeDetail(
           progressMap,
         );
       }
-    } catch {
+    } catch (error) {
+      console.warn('[opening-trees] recent dynamic detail failed; falling back to persisted tree', {
+        treeId,
+        browsePly,
+        error: error instanceof Error ? error.message : error,
+      });
       // Persisted trees below remain usable when Chess.com is temporarily unavailable.
     }
   }

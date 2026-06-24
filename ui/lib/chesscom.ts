@@ -53,6 +53,7 @@ export type RawChessComGame = {
 };
 
 const ARCHIVE_FETCH_CONCURRENCY = 2;
+const CHESSCOM_FETCH_TIMEOUT_MS = 8_000;
 
 export async function fetchArchives(username: string) {
   const response = await fetchJson(`https://api.chess.com/pub/player/${username}/games/archives`);
@@ -187,14 +188,30 @@ export function extractTag(pgn: string | null | undefined, tagName: string) {
 }
 
 async function fetchJson(url: string) {
-  const response = await fetch(url, {
-    headers: {
-      'user-agent': 'chess-analysis-v2/1.0',
-    },
-    next: {
-      revalidate: 300,
-    },
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), CHESSCOM_FETCH_TIMEOUT_MS);
+
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      headers: {
+        'user-agent': 'chess-analysis-v2/1.0',
+      },
+      next: {
+        revalidate: 300,
+      },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new Error(`Chess.com request timed out for ${url}`);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     throw new Error(`Chess.com request failed for ${url}: HTTP ${response.status}`);

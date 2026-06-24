@@ -99,8 +99,8 @@ export function isLinesEvalConcerningForTrainSide(evalCp: number, trainSide: Ope
 }
 
 export function evalSwingCpForSide(
-  before: { evalCp: number | null | undefined; sideToMove: OpeningSide },
-  after: { evalCp: number | null | undefined },
+  before: { evalCp?: number | null; sideToMove: OpeningSide },
+  after: { evalCp?: number | null },
 ) {
   if (before.evalCp == null || after.evalCp == null) {
     return null;

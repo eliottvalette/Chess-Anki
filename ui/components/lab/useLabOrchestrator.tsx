@@ -433,8 +433,9 @@ export function useLabOrchestrator() {
     }
 
     const boardLineKey = buildMoveUciHistory(moveHistory.slice(0, historyIndex)).join(' ');
+    const previewLineKey = linesBoardFilterPreviewKeyRef.current;
 
-    if (linesBoardFilterPreviewKeyRef.current === boardLineKey) {
+    if (previewLineKey != null && (previewLineKey === boardLineKey || previewLineKey.startsWith(`${boardLineKey} `))) {
       labState.setLinesBrowseOverrideTrees(null);
       labState.setLinesPositionFilterLoading(false);
       return;
