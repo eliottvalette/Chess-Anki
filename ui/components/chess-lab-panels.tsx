@@ -761,6 +761,7 @@ function formatLineOutcomeBar(tree: OpeningTreeSummary) {
   const lossPercent = Math.round((100 - winPercent) * 100) / 100;
 
   return {
+    hasPresence: true,
     winPercent,
     lossPercent,
     title: `${wins} win${wins === 1 ? '' : 's'} · ${losses} loss${losses === 1 ? '' : 'es'}${

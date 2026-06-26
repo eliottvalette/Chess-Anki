@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from 'react';
 import type { WorkspaceMode } from '@/lib/analysis-types';
 import type { StoredMove } from '@/lib/chess-analysis-client';
 import { restoreGameFromHistory } from '@/lib/chess-analysis-client';
-import { type ChessSoundKey, getMoveSoundSequence } from '@/lib/chess-sounds';
+import { type ChessSoundKey, getPrimaryMoveSound } from '@/lib/chess-sounds';
 import { buildMixedTrainingQueue, getDeckStudyQueue } from '@/lib/deck-progress';
 import {
   createEmptyTrainSessionStats,
@@ -71,7 +71,6 @@ export function useLabTraining(
 
   const {
     playSound,
-    playSoundSequence,
     clearVariation,
     clearSelection,
     persistReviewWorkspaceSnapshot,
@@ -193,15 +192,7 @@ export function useLabTraining(
             (trainSide === 'white' && replayedMove.color === 'w') ||
             (trainSide === 'black' && replayedMove.color === 'b');
 
-          playSoundSequence(
-            getMoveSoundSequence({
-              move: replayedMove,
-              isSelfMove,
-              isCheck: nextGame.isCheck(),
-              isCheckmate: nextGame.isCheckmate(),
-              isGameOver: nextGame.isGameOver(),
-            }),
-          );
+          playSound(getPrimaryMoveSound(replayedMove, isSelfMove));
         }
 
         setHistoryIndex(nextIndex);
@@ -224,7 +215,7 @@ export function useLabTraining(
       clearVariation,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
-      playSoundSequence,
+      playSound,
       setDeckFeedbackArrowsVisible,
       setDeckPlaybackBusy,
       setGame,

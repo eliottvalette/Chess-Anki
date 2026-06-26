@@ -178,7 +178,7 @@ test('buildLearnDrillExpectedFromStep accepts only the drill line move', () => {
   });
 });
 
-test('buildLearnDrillExpectedFromStep falls back to the drill path continuation when bestUci is missing', () => {
+test('buildLearnDrillExpectedFromStep does not fall back to the drill path continuation when bestUci is missing', () => {
   const expected = buildLearnDrillExpectedFromStep(
     {
       nodeId: 'after-qe5',
@@ -191,12 +191,7 @@ test('buildLearnDrillExpectedFromStep falls back to the drill path continuation 
     },
   );
 
-  assert.deepEqual(expected, {
-    nodeId: 'after-qe5',
-    uci: 'f1e2',
-    san: 'Be2',
-    acceptedUcis: ['f1e2'],
-  });
+  assert.equal(expected, null);
 });
 
 test('learn drill classification rejects repertoire alternatives at the same node', () => {
@@ -1027,16 +1022,23 @@ test('buildDrillPath at depth 22 spans more than 15 train plies on long line inp
     { ownerProfileId: 'profile-1', targetDepth: OPENING_TARGET_DEPTH_NORMAL, rootPly: 4 },
   );
 
+  const baseTree = trees[0];
   const tree = {
-    ...trees[0],
-    nodes: trees[0].nodes.map((node) => ({
-      ...node,
-      masteryScore: 40,
-      seenCount: 0,
-      correctCount: 0,
-      missCount: 0,
-    })),
-    edges: trees[0].edges,
+    ...baseTree,
+    nodes: baseTree.nodes.map((node) => {
+      const trainEdge = node.sideToMove === 'white' ? baseTree.edges.find((edge) => edge.fromNodeId === node.id) : null;
+
+      return {
+        ...node,
+        bestUci: trainEdge?.uci ?? node.bestUci ?? null,
+        bestSan: trainEdge?.san ?? node.bestSan ?? null,
+        masteryScore: 40,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      };
+    }),
+    edges: baseTree.edges,
   };
   const path = buildDrillPath(tree, { trainSide: 'white', preferWeak: true, seed: 7 });
   const maxPly = Math.max(...tree.nodes.map((node) => node.ply));

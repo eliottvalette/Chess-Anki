@@ -8,6 +8,7 @@ import { extractTag, fetchArchives, fetchRecentGames, inferOutcome, type RawChes
 import { LINES_EARLY_OPENING_MAX_PLY } from '@/lib/lines-board-eval';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
+  buildDynamicCatalogEntries,
   buildRecentDynamicBrowseSummaries,
   catalogDraftFromRow,
   findDynamicCatalogEntry,
@@ -53,7 +54,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 const CATALOG_SELECT =
   'id,graph_id,entry_node_id,catalog_ply,library,fen_key,name,display_san,display_uci,source_count,subgraph_node_count,target_depth,updated_at';
 const NODE_SELECT =
-  'id,graph_id,fen,fen_key,ply,side_to_move,train_side,best_uci,best_san,eval_cp,recent_games,card_count';
+  'id,graph_id,fen,fen_key,ply,side_to_move,train_side,best_uci,best_san,eval_cp,recent_games,card_count,win_count,loss_count,draw_count';
 const EDGE_SELECT =
   'id,graph_id,from_node_id,to_node_id,uci,san,move_by,source,recent_count,card_count,masters_games,priority,is_engine_best';
 const _CARD_SELECT = 'id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp';
@@ -87,6 +88,8 @@ export async function GET(request: Request) {
   const atFenKey = url.searchParams.get('atFenKey');
   const browsePlyParam = url.searchParams.get('browsePly');
   const browsePly = browsePlyParam == null ? null : Math.max(1, Number(browsePlyParam) || 1);
+  const requestedTrainSide = parseOpeningSide(url.searchParams.get('trainSide'));
+  const requestedRootUci = parseRootUciParam(url.searchParams.get('rootUci'));
   const chesscomUsername = String(url.searchParams.get('username') ?? profile.username)
     .trim()
     .toLowerCase();
@@ -100,7 +103,12 @@ export async function GET(request: Request) {
     }
 
     if (treeId) {
-      const detail = await fetchTreeDetail(supabase, profile, treeId, browsePly, chesscomUsername);
+      const detail = await fetchTreeDetail(supabase, profile, treeId, {
+        browsePly,
+        chesscomUsername,
+        requestedTrainSide,
+        requestedRootUci,
+      });
       return detail
         ? NextResponse.json({ tree: detail })
         : NextResponse.json({ error: 'Opening tree not found.' }, { status: 404 });
@@ -404,6 +412,23 @@ function parseTimeClasses(value: unknown) {
   return value.map((item) => String(item));
 }
 
+function parseOpeningSide(value: unknown): OpeningSide | null {
+  return value === 'white' || value === 'black' ? value : null;
+}
+
+function parseRootUciParam(value: string | null): string[] | null {
+  if (!value?.trim()) {
+    return null;
+  }
+
+  const ucis = value
+    .split(',')
+    .map((uci) => uci.trim())
+    .filter(Boolean);
+
+  return ucis.length > 0 ? ucis : null;
+}
+
 async function recordAttempt(profile: TrainingProfileCookie, body: Record<string, unknown>) {
   const nodeId = String(body.nodeId ?? '');
   const correct = Boolean(body.correct);
@@ -538,13 +563,18 @@ function pruneOpeningGraphDraft(graph: OpeningGraphDraft) {
   pruneOpeningTreeDraft(asTreeDraft(graph));
 }
 
-async function enrichOpeningGraphDraft(graph: OpeningGraphDraft, mode: OpeningBuildMode) {
-  const nodesToEnrich = listNodesNeedingEnrichment(graph, mode);
-  const limitedDraft = { ...asTreeDraft(graph), nodes: nodesToEnrich };
-  await enrichEngineBestMoves(limitedDraft);
+async function enrichOpeningGraphDraft(
+  graph: OpeningGraphDraft,
+  mode: OpeningBuildMode,
+  nodesToAnalyze: OpeningTreeDraft['nodes'] = listNodesNeedingEnrichment(graph, mode),
+  maxNodes: number = MAX_ENGINE_IMPORT_NODES,
+) {
+  const nodesToEnrich = nodesToAnalyze.filter((node) => graph.nodes.some((candidate) => candidate.id === node.id));
+  const draft = asTreeDraft(graph);
+  await enrichEngineBestMoves(draft, nodesToEnrich, maxNodes);
 
   for (const node of nodesToEnrich) {
-    const updated = limitedDraft.nodes.find((candidate) => candidate.id === node.id);
+    const updated = draft.nodes.find((candidate) => candidate.id === node.id);
 
     if (updated) {
       node.bestUci = updated.bestUci ?? null;
@@ -556,8 +586,14 @@ async function enrichOpeningGraphDraft(graph: OpeningGraphDraft, mode: OpeningBu
   await enrichLichessBookMoves(asTreeDraft(graph));
 }
 
-async function enrichEngineBestMoves(draft: OpeningTreeDraft) {
-  const nodesToEnrich = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
+async function enrichEngineBestMoves(
+  draft: OpeningTreeDraft,
+  nodesToAnalyze: OpeningTreeDraft['nodes'] = draft.nodes,
+  maxNodes: number = MAX_ENGINE_IMPORT_NODES,
+) {
+  const nodesToEnrich = [...nodesToAnalyze]
+    .sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id))
+    .slice(0, maxNodes);
   const session = nodesToEnrich.length > 0 ? await getStockfishSession() : null;
 
   if (!session) {
@@ -816,6 +852,30 @@ async function fetchRecentDynamicTreeSummaries(
   browsePly: number,
   chesscomUsername: string,
 ): Promise<OpeningTreeSummary[]> {
+  const persisted = await loadOwnerGraphForest(supabase, profile.id);
+
+  if (persisted.graphs.length > 0) {
+    const progressMap = new Map(
+      [...persisted.progress.entries()].map(([nodeId, entry]) => [
+        nodeId,
+        {
+          seenCount: entry.seenCount,
+          correctCount: entry.correctCount,
+          missCount: entry.missCount,
+          masteryScore: entry.masteryScore,
+        },
+      ]),
+    );
+    const totalGames = persisted.graphs.reduce((total, graph) => {
+      const rootNode = graph.nodes.find((node) => node.ply === 0);
+      return total + (rootNode?.recentGames ?? 0) + (rootNode?.cardCount ?? 0);
+    }, 0);
+
+    return attachRecentLineEvals(
+      buildRecentDynamicBrowseSummaries(persisted.graphs, browsePly, progressMap, totalGames),
+    );
+  }
+
   const [{ graphs, totalGames }, progress] = await Promise.all([
     loadRecentOpeningForest(profile, chesscomUsername),
     fetchProgressCached(supabase, profile.id),
@@ -950,9 +1010,38 @@ async function fetchTreeDetail(
   supabase: ReturnType<typeof createAdminClient>,
   profile: TrainingProfileCookie,
   treeId: string,
-  browsePly: number | null = null,
-  chesscomUsername: string = profile.username,
+  options: {
+    browsePly?: number | null;
+    chesscomUsername?: string;
+    requestedTrainSide?: OpeningSide | null;
+    requestedRootUci?: string[] | null;
+  } = {},
 ): Promise<OpeningTreeDetail | null> {
+  const browsePly = options.browsePly ?? null;
+  const chesscomUsername = options.chesscomUsername ?? profile.username;
+  const requestedTrainSide = options.requestedTrainSide ?? null;
+  const requestedRootUci = options.requestedRootUci ?? null;
+
+  if (browsePly != null && requestedTrainSide && requestedRootUci) {
+    const persistedByRoot = await fetchPersistedTreeDetailByRoot(
+      supabase,
+      profile,
+      browsePly,
+      requestedTrainSide,
+      requestedRootUci,
+    );
+
+    if (persistedByRoot) {
+      return persistedByRoot;
+    }
+  }
+
+  const persistedTree = await fetchPersistedTreeDetail(supabase, profile, treeId);
+
+  if (persistedTree) {
+    return persistedTree;
+  }
+
   if (browsePly != null) {
     try {
       const [{ graphs: recentGraphs }, progress] = await Promise.all([
@@ -992,6 +1081,79 @@ async function fetchTreeDetail(
     }
   }
 
+  return null;
+}
+
+async function fetchPersistedTreeDetailByRoot(
+  supabase: ReturnType<typeof createAdminClient>,
+  profile: TrainingProfileCookie,
+  browsePly: number,
+  trainSide: OpeningSide,
+  rootUci: string[],
+): Promise<OpeningTreeDetail | null> {
+  const { graphs, progress } = await loadOwnerGraphForest(supabase, profile.id);
+  const graphBrowsePly = trainSide === 'black' ? Math.max(0, browsePly - 1) : browsePly;
+  const progressMap = new Map(
+    [...progress.entries()].map(([nodeId, entry]) => [
+      nodeId,
+      {
+        seenCount: entry.seenCount,
+        correctCount: entry.correctCount,
+        missCount: entry.missCount,
+        masteryScore: entry.masteryScore,
+      },
+    ]),
+  );
+
+  for (const graph of graphs) {
+    if (graph.trainSide !== trainSide) {
+      continue;
+    }
+
+    for (const catalog of buildDynamicCatalogEntries(graph, graphBrowsePly)) {
+      if (fullRootUciForCatalog(graph, catalog).join(',') !== rootUci.join(',')) {
+        continue;
+      }
+
+      return projectCatalogSubgraph(graph, graph.nodes, graph.edges, catalog, progressMap);
+    }
+  }
+
+  return null;
+}
+
+function fullRootUciForCatalog(
+  graph: Pick<OpeningGraphDraft, 'library' | 'trainSide'>,
+  catalog: { displayUci: string[] },
+) {
+  if (graph.trainSide === 'white') {
+    return catalog.displayUci;
+  }
+
+  const firstMove = firstMoveUciForLibrary(graph.library);
+  return firstMove ? [firstMove, ...catalog.displayUci] : catalog.displayUci;
+}
+
+function firstMoveUciForLibrary(library: OpeningLibrary): string | null {
+  switch (library) {
+    case 'e4':
+      return 'e2e4';
+    case 'd4':
+      return 'd2d4';
+    case 'c4':
+      return 'c2c4';
+    case 'nf3':
+      return 'g1f3';
+    case 'other':
+      return null;
+  }
+}
+
+async function fetchPersistedTreeDetail(
+  supabase: ReturnType<typeof createAdminClient>,
+  profile: TrainingProfileCookie,
+  treeId: string,
+): Promise<OpeningTreeDetail | null> {
   const { data: catalogRow, error } = await supabase
     .from('opening_catalog')
     .select(CATALOG_SELECT)

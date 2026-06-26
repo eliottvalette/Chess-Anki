@@ -402,6 +402,7 @@ export async function buildAndUpsertOpeningTrees({
     moves: line.moves,
     source: 'recent_game',
     count: 1,
+    outcome: line.outcome ?? 'unknown',
   }));
 
   const cardInputs = cards.map((card) => {

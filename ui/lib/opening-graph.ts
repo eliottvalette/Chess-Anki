@@ -1011,6 +1011,9 @@ export function mergeOpeningGraphDraft(
 
     current.recentGames += node.recentGames;
     current.cardCount += node.cardCount;
+    current.winCount = (current.winCount ?? 0) + (node.winCount ?? 0);
+    current.lossCount = (current.lossCount ?? 0) + (node.lossCount ?? 0);
+    current.drawCount = (current.drawCount ?? 0) + (node.drawCount ?? 0);
   }
 
   for (const edge of fresh.edges) {
@@ -1065,6 +1068,9 @@ export function graphDraftFromRows(
       evalCp: row.eval_cp == null ? null : Number(row.eval_cp),
       recentGames: Number(row.recent_games ?? 0),
       cardCount: Number(row.card_count ?? 0),
+      winCount: Number(row.win_count ?? 0),
+      lossCount: Number(row.loss_count ?? 0),
+      drawCount: Number(row.draw_count ?? 0),
     })),
     edges: edgeRows.map((row) => ({
       id: String(row.id),
@@ -1102,6 +1108,9 @@ export function catalogDraftFromRow(row: Record<string, unknown>): OpeningCatalo
     displayUci: Array.isArray(row.display_uci) ? row.display_uci.map(String) : [],
     sourceCount: Number(row.source_count ?? 0),
     subgraphNodeCount: Number(row.subgraph_node_count ?? 0),
+    winCount: Number(row.win_count ?? 0),
+    lossCount: Number(row.loss_count ?? 0),
+    drawCount: Number(row.draw_count ?? 0),
   };
 }
 
@@ -1130,6 +1139,9 @@ export function projectCatalogToTreeDraft(graph: OpeningGraphDraft, catalog: Ope
       evalCp: node.evalCp,
       recentGames: node.recentGames,
       cardCount: node.cardCount,
+      winCount: node.winCount,
+      lossCount: node.lossCount,
+      drawCount: node.drawCount,
     })),
     edges: detail.edges.map((edge) => ({
       id: edge.id,
@@ -1169,6 +1181,9 @@ export function projectCatalogSubgraph(
       evalCp: node.evalCp ?? null,
       recentGames: node.recentGames,
       cardCount: node.cardCount,
+      winCount: node.winCount,
+      lossCount: node.lossCount,
+      drawCount: node.drawCount,
       masteryScore: entry?.masteryScore ?? 0,
       seenCount: entry?.seenCount ?? 0,
       correctCount: entry?.correctCount ?? 0,

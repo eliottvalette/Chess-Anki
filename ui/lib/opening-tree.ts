@@ -132,6 +132,9 @@ export type OpeningTreeNode = {
   evalCp: number | null;
   recentGames: number;
   cardCount: number;
+  winCount?: number;
+  lossCount?: number;
+  drawCount?: number;
   masteryScore: number;
   seenCount: number;
   correctCount: number;
@@ -342,24 +345,20 @@ export function buildLearnDrillExpectedFromStep(
     bestUci: string | null;
     bestSan: string | null;
   },
-  nextStep?: {
+  _nextStep?: {
     edgeSanFromParent: string | null;
     edgeUciFromParent: string | null;
   } | null,
 ): OpeningDrillExpectedMove | null {
-  const uci = step.bestUci ?? nextStep?.edgeUciFromParent ?? null;
-
-  if (!uci) {
+  if (!step.bestUci) {
     return null;
   }
 
-  const san = step.bestSan ?? nextStep?.edgeSanFromParent ?? null;
-
   return {
     nodeId: step.nodeId,
-    uci,
-    san,
-    acceptedUcis: [uci],
+    uci: step.bestUci,
+    san: step.bestSan,
+    acceptedUcis: [step.bestUci],
   };
 }
 
@@ -1484,31 +1483,16 @@ export function listOpponentNodesNeedingBookEnrichment(
 
 function rankTrainEdgesForDrill(
   outgoing: OpeningTreeEdge[],
-  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
+  _tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'>,
   node: OpeningTreeNode,
 ): OpeningTreeEdge[] {
   const bestEdge = node.bestUci ? outgoing.find((edge) => edge.uci === node.bestUci) : null;
-  const validMoves = outgoing.filter((edge) => {
-    if (edge.isEngineBest || edge.mastersGames > 0) {
-      return true;
-    }
 
-    const target = tree.nodes.find((candidate) => candidate.id === edge.toNodeId);
+  if (!bestEdge) {
+    return [];
+  }
 
-    if (!target || node.evalCp == null || target.evalCp == null) {
-      return true;
-    }
-
-    const swing = node.sideToMove === 'white' ? target.evalCp - node.evalCp : node.evalCp - target.evalCp;
-
-    return swing > -30;
-  });
-  const pool = validMoves.length > 0 ? validMoves : outgoing;
-  const ranked = [...pool]
-    .filter((edge) => edge.id !== bestEdge?.id)
-    .sort((left, right) => right.recentCount - left.recentCount);
-
-  return bestEdge ? [bestEdge, ...ranked] : ranked;
+  return [bestEdge];
 }
 
 function pickDrillOutgoingEdge(

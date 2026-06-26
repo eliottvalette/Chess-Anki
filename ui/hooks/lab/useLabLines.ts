@@ -296,6 +296,7 @@ export function useLabLines(
         browsePly?: number;
         initialFen?: string | null;
         requestId?: number;
+        trainSide?: OpeningSide;
         rootPrefix?: Pick<OpeningTreeSummary, 'rootFenKey' | 'rootSan' | 'rootUci'>;
       } = {},
     ) => {
@@ -340,6 +341,14 @@ export function useLabLines(
             browsePly: String(effectiveBrowsePly),
           });
           const normalizedChesscomUsername = chesscomUsername.trim().toLowerCase();
+
+          if (options.trainSide) {
+            params.set('trainSide', options.trainSide);
+          }
+
+          if (options.rootPrefix?.rootUci.length) {
+            params.set('rootUci', options.rootPrefix.rootUci.join(','));
+          }
 
           if (normalizedChesscomUsername) {
             params.set('username', normalizedChesscomUsername);
@@ -1371,6 +1380,7 @@ export function useLabLines(
       })();
     },
     [
+      activeTrainSide,
       cancelDrillOpponentMove,
       cancelSoundSequence,
       clearSelection,
@@ -1456,6 +1466,7 @@ export function useLabLines(
         browsePly: effectiveBrowsePly,
         initialFen,
         requestId: detailRequestId,
+        trainSide: activeTrainSide,
         rootPrefix: selectedSummary
           ? {
               rootFenKey: selectedSummary.rootFenKey,

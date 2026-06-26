@@ -1,8 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
+import { inferOutcome } from '../../lib/chesscom.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
-import { fetchArchives, fetchRecentGames } from './api.mjs';
+import { extractTag, fetchArchives, fetchRecentGames } from './api.mjs';
 import { buildAndUpsertOpeningTrees } from './build-opening-trees.mjs';
 
 const DEFAULT_COUNT = 100;
@@ -102,12 +103,14 @@ async function main() {
 
   const openingLines = games.map((game, index) => {
     const playerColor = game.white?.username?.toLowerCase() === username.toLowerCase() ? 'white' : 'black';
+    const player = playerColor === 'white' ? game.white : game.black;
     const moves = extractSanMoves(game.pgn);
     return {
       id: `recent-game-${game.uuid || index}`,
       name: `Recent Game`,
       side: playerColor, // This maps to trainSide
       moves,
+      outcome: inferOutcome(player?.result ?? null, extractTag(game.pgn, 'Result')),
     };
   });
 
