@@ -1,14 +1,21 @@
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
-import { pruneOpeningTreeDraft } from '../../lib/opening-tree.ts';
-import { buildFreshOpeningForest, forestToUpsertRows } from '../../lib/opening-tree-import.ts';
+import { buildLichessExplorerHeaders } from '../../lib/lichess-explorer.ts';
+import {
+  listOpponentNodesForLichessEnrichment,
+  listOpponentNodesNeedingBookEnrichment,
+  pruneOpeningTreeDraft,
+} from '../../lib/opening-tree.ts';
+import {
+  buildFreshOpeningForest,
+  forestToUpsertRows,
+  listNodesNeedingEnrichment,
+} from '../../lib/opening-tree-import.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 
 const DEFAULT_OPENING_ROOT_PLY = 4;
 const DEFAULT_OPENING_TARGET_DEPTH = 22;
-const MAX_ENGINE_IMPORT_NODES = 120;
-const MAX_LICHESS_IMPORT_NODES = 80;
 const LICHESS_EXPLORER_URL = 'https://explorer.lichess.org/masters';
 
 function shortHash(value) {
@@ -238,8 +245,10 @@ function buildOpeningTrees(inputs, options) {
   );
 }
 
-async function enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId) {
-  const nodesToEnrich = [...draft.nodes].sort((left, right) => left.ply - right.ply).slice(0, MAX_ENGINE_IMPORT_NODES);
+async function enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId, nodesToAnalyze = null) {
+  const nodesToEnrich = [...(nodesToAnalyze ?? listNodesNeedingEnrichment(draft, 'backfill'))].sort(
+    (left, right) => left.ply - right.ply || left.id.localeCompare(right.id),
+  );
 
   for (const node of nodesToEnrich) {
     try {
@@ -249,10 +258,14 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId) {
         body: JSON.stringify({ fen: node.fen, depth: 18, multipv: 1 }),
       });
 
-      if (!response.ok) continue;
+      if (!response.ok) {
+        throw new Error(`Analyze request failed with status ${response.status}.`);
+      }
 
       const analysis = await response.json();
-      if (!analysis?.bestMove) continue;
+      if (!analysis?.bestMove) {
+        throw new Error('Analyze response did not include bestMove.');
+      }
 
       node.bestUci = analysis.bestMove;
       node.bestSan = moveSanFromFen(node.fen, analysis.bestMove);
@@ -282,24 +295,26 @@ async function enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId) {
       if (targetNode && targetNode.evalCp == null && analysis.lines?.[0]?.whitePerspective?.type === 'cp') {
         targetNode.evalCp = analysis.lines[0].whitePerspective.value;
       }
-    } catch {
-      // continue
+    } catch (error) {
+      throw new Error(`Unable to enrich training node ${node.id} at ply ${node.ply}.`, { cause: error });
     }
   }
 }
 
-async function enrichLichessOpponentMoves(draft, ownerProfileId) {
-  const opponentNodes = [...draft.nodes]
-    .filter((node) => node.recentGames > 0)
-    .sort((left, right) => left.ply - right.ply)
-    .slice(0, MAX_LICHESS_IMPORT_NODES);
+async function enrichLichessOpponentMoves(draft, ownerProfileId, lichessApiToken, nodesToEnrich = null, maxMoves = 4) {
+  const maxGraphPly = draft.targetDepth - (draft.trainSide === 'black' ? 1 : 0);
+  const opponentNodes = [...(nodesToEnrich ?? listOpponentNodesForLichessEnrichment(draft))]
+    .filter((node) => node.ply < maxGraphPly)
+    .sort((left, right) => left.ply - right.ply || left.id.localeCompare(right.id));
 
   for (const node of opponentNodes) {
     try {
       const url = new URL(LICHESS_EXPLORER_URL);
       url.searchParams.set('fen', node.fen);
-      const response = await fetch(url.toString(), { headers: { Accept: 'application/json' } });
-      if (!response.ok) continue;
+      const response = await fetch(url.toString(), { headers: buildLichessExplorerHeaders(lichessApiToken) });
+      if (!response.ok) {
+        throw new Error(`Opening explorer request failed with status ${response.status}.`);
+      }
 
       const explorer = await response.json();
       const moves = (explorer.moves ?? [])
@@ -309,7 +324,7 @@ async function enrichLichessOpponentMoves(draft, ownerProfileId) {
         }))
         .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
-        .slice(0, 4);
+        .slice(0, maxMoves);
 
       for (const move of moves) {
         ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
@@ -318,10 +333,63 @@ async function enrichLichessOpponentMoves(draft, ownerProfileId) {
           ownerProfileId,
         });
       }
-    } catch {
-      // continue
+    } catch (error) {
+      throw new Error(`Unable to enrich opponent node ${node.id} at ply ${node.ply}.`, { cause: error });
     }
   }
+}
+
+async function extendForcedTrainingContinuations(draft, analyzeBaseUrl, ownerProfileId, lichessApiToken) {
+  const maxGraphPly = draft.targetDepth - (draft.trainSide === 'black' ? 1 : 0);
+  const attemptedBookNodeIds = new Set();
+  const attemptedEngineNodeIds = new Set();
+
+  while (true) {
+    const opponentLeaves = listOpponentNodesNeedingBookEnrichment(draft).filter(
+      (node) => node.ply < maxGraphPly && !attemptedBookNodeIds.has(node.id),
+    );
+
+    for (const node of opponentLeaves) {
+      attemptedBookNodeIds.add(node.id);
+    }
+
+    if (opponentLeaves.length > 0) {
+      await enrichLichessOpponentMoves(draft, ownerProfileId, lichessApiToken, opponentLeaves, 1);
+    }
+
+    const trainLeaves = listNodesNeedingEnrichment(draft, 'backfill').filter(
+      (node) => !node.bestUci && !attemptedEngineNodeIds.has(node.id),
+    );
+
+    for (const node of trainLeaves) {
+      attemptedEngineNodeIds.add(node.id);
+    }
+
+    if (trainLeaves.length > 0) {
+      await enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId, trainLeaves);
+    }
+
+    if (opponentLeaves.length === 0 && trainLeaves.length === 0) {
+      break;
+    }
+  }
+}
+
+function assertTrainingContinuationsComplete(draft) {
+  const missingNodes = listNodesNeedingEnrichment(draft, 'backfill').filter((node) => !node.bestUci);
+
+  if (missingNodes.length === 0) {
+    return;
+  }
+
+  const sample = missingNodes
+    .slice(0, 5)
+    .map((node) => `${node.id}@ply${node.ply}`)
+    .join(', ');
+
+  throw new Error(
+    `Opening tree ${draft.library}/${draft.trainSide} still has ${missingNodes.length} train nodes without bestUci after enrichment: ${sample}`,
+  );
 }
 
 function graphAsDraft(graph) {
@@ -393,6 +461,7 @@ export async function buildAndUpsertOpeningTrees({
   cards,
   ownerProfileId,
   analyzeBaseUrl,
+  lichessApiToken,
   logProgress,
 }) {
   const lineInputs = openingLines.map((line) => ({
@@ -432,8 +501,11 @@ export async function buildAndUpsertOpeningTrees({
     logProgress(
       `[${index + 1}/${forest.graphs.length}] enriching graph ${graph.library}/${graph.trainSide} (${graph.nodes.length} nodes)`,
     );
-    await enrichEngineBestMoves(graphAsDraft(graph), analyzeBaseUrl, ownerProfileId);
-    await enrichLichessOpponentMoves(graphAsDraft(graph), ownerProfileId);
+    const draft = graphAsDraft(graph);
+    await enrichLichessOpponentMoves(draft, ownerProfileId, lichessApiToken);
+    await enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId);
+    await extendForcedTrainingContinuations(draft, analyzeBaseUrl, ownerProfileId, lichessApiToken);
+    assertTrainingContinuationsComplete(draft);
     pruneOpeningTreeDraft({
       id: graph.id,
       name: graph.library,
@@ -467,6 +539,7 @@ async function main() {
   const supabaseUrl = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const adminKey = requireAdminKey(env);
   const analyzeBaseUrl = env.ANALYZE_BASE_URL?.trim() || 'http://localhost:3000';
+  const lichessApiToken = requireEnv(env, 'LICHESS_API_TOKEN');
 
   const supabase = createClient(supabaseUrl, adminKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -511,6 +584,7 @@ async function main() {
     cards: cards ?? [],
     ownerProfileId: profile.id,
     analyzeBaseUrl,
+    lichessApiToken,
     logProgress: (message) => console.error(`[build-opening-trees ${new Date().toISOString()}] ${message}`),
   });
 }

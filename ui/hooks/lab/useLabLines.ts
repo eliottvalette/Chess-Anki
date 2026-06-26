@@ -502,10 +502,15 @@ export function useLabLines(
 
   const activeBranchEdgeIdRef = useRef<string | null>(null);
   const activeLearnBranchRef = useRef<LearnBranchCompletion | null>(null);
+  const linesCompletedLearnBranchesRef = useRef(linesCompletedLearnBranches);
   const advanceDrillToStepRef = useRef<
     (stepIndex: number, options?: { isOpponentMovePlayback?: boolean; syncOnly?: boolean }) => void
   >(() => {});
   const advanceReviewCardRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    linesCompletedLearnBranchesRef.current = linesCompletedLearnBranches;
+  }, [linesCompletedLearnBranches]);
 
   const appendStudySessionLog = useCallback(
     (kind: string, detail: Record<string, string | number | boolean | string[]>) => {
@@ -525,7 +530,7 @@ export function useLabLines(
       const branch = activeLearnBranchRef.current;
 
       if (!branch) {
-        return;
+        return linesCompletedLearnBranchesRef.current;
       }
 
       if (!learnBranchForkConfirmedRef.current && !options?.allowWithoutForkConfirm) {
@@ -535,7 +540,7 @@ export function useLabLines(
           edgeId: branch.edgeId,
           edgeUci: branch.edgeUci,
         });
-        return;
+        return linesCompletedLearnBranchesRef.current;
       }
 
       appendStudySessionLog('branch_complete', {
@@ -544,16 +549,19 @@ export function useLabLines(
         edgeUci: branch.edgeUci,
       });
 
-      setLinesCompletedLearnBranches((current) => {
-        if (isLearnBranchEdgeCompleted(branch.forkNodeId, { id: branch.edgeId, uci: branch.edgeUci }, current)) {
-          return current;
-        }
-
-        return [...current, branch];
-      });
+      const nextCompleted = isLearnBranchEdgeCompleted(
+        branch.forkNodeId,
+        { id: branch.edgeId, uci: branch.edgeUci },
+        linesCompletedLearnBranchesRef.current,
+      )
+        ? linesCompletedLearnBranchesRef.current
+        : [...linesCompletedLearnBranchesRef.current, branch];
+      linesCompletedLearnBranchesRef.current = nextCompleted;
+      setLinesCompletedLearnBranches(nextCompleted);
       activeLearnBranchRef.current = null;
       activeBranchEdgeIdRef.current = null;
       setLinesActiveLearnBranch(null);
+      return nextCompleted;
     },
     [appendStudySessionLog, learnBranchForkConfirmedRef, setLinesActiveLearnBranch, setLinesCompletedLearnBranches],
   );
@@ -840,7 +848,7 @@ export function useLabLines(
         setActiveOpeningTree(learnSourceTreeRef.current);
       }
 
-      const completedBefore = linesCompletedLearnBranches;
+      const completedBefore = pickTrigger === 'initial' ? [] : linesCompletedLearnBranchesRef.current;
       const { path, branchEdgeId, branchForkNodeId, branchEdgeUci } = pickLearnBranch(
         treeForDrill,
         trainSide,
@@ -1070,6 +1078,7 @@ export function useLabLines(
       if (treeForLearn !== tree) {
         setActiveOpeningTree(treeForLearn);
       }
+      linesCompletedLearnBranchesRef.current = [];
       setLinesCompletedLearnBranches([]);
       positionRequestIdRef.current += 1;
       timelineRequestIdRef.current += 1;
@@ -1191,42 +1200,59 @@ export function useLabLines(
     const treeForLearn = resolveLinesStudyOpeningTree(tree, 'learn', learnMaxPly) ?? tree;
 
     const previousBranch = activeLearnBranchRef.current;
+    const completedBeforeCount = linesCompletedLearnBranchesRef.current.length;
 
     if (previousBranch) {
       appendStudySessionLog('next_branch_clicked', {
         forkNodeId: previousBranch.forkNodeId,
         edgeId: previousBranch.edgeId,
         edgeUci: previousBranch.edgeUci,
-        completedCountBefore: linesCompletedLearnBranches.length,
+        completedCountBefore: completedBeforeCount,
       });
     } else {
       appendStudySessionLog('next_branch_clicked', {
         forkNodeId: 'none',
         edgeId: 'none',
         edgeUci: 'none',
-        completedCountBefore: linesCompletedLearnBranches.length,
+        completedCountBefore: completedBeforeCount,
       });
     }
 
-    markCurrentLearnBranchCompleted();
+    const completedAfter = markCurrentLearnBranchCompleted();
     cancelDrillOpponentMove();
     setDeckFeedback(null);
     setDeckFeedbackArrowsVisible(false);
     setOpeningDrillStatus('');
     setLinesLearnBranchComplete(false);
+
+    const nextBranch = pickLearnBranch(treeForLearn, activeTrainSide, completedAfter);
+
+    if (nextBranch.path.length === 0) {
+      appendStudySessionLog('learn_branches_complete', {
+        completedCount: completedAfter.length,
+      });
+      setOpeningDrillStatus('All learn branches complete.');
+      setOpeningDrillActive(false);
+      setOpeningDrillExpected(null);
+      setLinesStudyMode('idle');
+      return;
+    }
+
     beginLearnDrill(treeForLearn, activeTrainSide, 'next');
   }, [
     activeOpeningTree,
     activeTrainSide,
     appendStudySessionLog,
     beginLearnDrill,
-    learnMaxPly,
     cancelDrillOpponentMove,
-    linesCompletedLearnBranches.length,
+    learnMaxPly,
     markCurrentLearnBranchCompleted,
     setDeckFeedback,
     setDeckFeedbackArrowsVisible,
     setLinesLearnBranchComplete,
+    setLinesStudyMode,
+    setOpeningDrillActive,
+    setOpeningDrillExpected,
     setOpeningDrillStatus,
   ]);
 
@@ -1244,6 +1270,7 @@ export function useLabLines(
     setLinesLearnBranchComplete(false);
     setLinesReviewQueue([]);
     setLinesReviewIndex(0);
+    linesCompletedLearnBranchesRef.current = [];
     setLinesCompletedLearnBranches([]);
     setLinesStudySessionLog(null);
     setLinesActiveLearnBranch(null);
@@ -1294,6 +1321,7 @@ export function useLabLines(
       setLinesLearnBranchComplete(false);
       setLinesReviewQueue([]);
       setLinesReviewIndex(0);
+      linesCompletedLearnBranchesRef.current = [];
       setLinesCompletedLearnBranches([]);
       setLinesStudySessionLog(null);
       setLinesActiveLearnBranch(null);
@@ -1449,6 +1477,7 @@ export function useLabLines(
       setOpeningDrillStatus('');
       setOpeningDrillExpected(null);
       if (treeId !== selectedOpeningTreeId) {
+        linesCompletedLearnBranchesRef.current = [];
         setLinesCompletedLearnBranches([]);
         setLinesLearnBranchComplete(false);
       }

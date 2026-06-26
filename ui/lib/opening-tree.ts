@@ -1074,20 +1074,12 @@ export function shouldSkipNodeEnrichment(_node: OpeningNodeDraft, _staleBeforeMs
   return false;
 }
 
-export function shouldEnrichNodeLazy(node: OpeningNodeDraft, _trainSide: OpeningSide, mode: OpeningBuildMode): boolean {
+export function shouldEnrichNodeLazy(node: OpeningNodeDraft, trainSide: OpeningSide, mode: OpeningBuildMode): boolean {
   if (mode === 'fast') {
     return false;
   }
 
-  if (node.ply <= 16) {
-    return true;
-  }
-
-  if (node.ply <= 22) {
-    return node.recentGames >= 2;
-  }
-
-  return node.cardCount > 0;
+  return node.sideToMove === trainSide;
 }
 
 export function buildOpeningTreesIncremental(

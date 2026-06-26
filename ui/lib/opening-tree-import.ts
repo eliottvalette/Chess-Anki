@@ -310,8 +310,13 @@ export function draftToUpsertRows(draft: OpeningTreeDraft, now: string) {
   };
 }
 
-export function listNodesNeedingEnrichment(graph: OpeningGraphDraft, mode: OpeningBuildMode) {
-  return graph.nodes.filter((node) => shouldEnrichNodeLazy(node, graph.trainSide, mode));
+export function listNodesNeedingEnrichment(
+  graph: Pick<OpeningGraphDraft, 'nodes' | 'trainSide' | 'targetDepth'>,
+  mode: OpeningBuildMode,
+) {
+  return graph.nodes.filter(
+    (node) => node.ply < graph.targetDepth && shouldEnrichNodeLazy(node, graph.trainSide, mode),
+  );
 }
 
 export function legacyDraftFromPreloadedTree(

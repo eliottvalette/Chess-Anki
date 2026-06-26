@@ -74,6 +74,7 @@ async function main() {
   const supabaseUrl = requireEnv(env, 'NEXT_PUBLIC_SUPABASE_URL');
   const adminKey = requireAdminKey(env);
   const analyzeBaseUrl = env.ANALYZE_BASE_URL?.trim() || 'http://localhost:3000';
+  const lichessApiToken = requireEnv(env, 'LICHESS_API_TOKEN');
 
   const supabase = createClient(supabaseUrl, adminKey, {
     auth: { persistSession: false, autoRefreshToken: false },
@@ -120,6 +121,7 @@ async function main() {
     cards: [], // No cards, strictly game lines
     ownerProfileId: profile.id,
     analyzeBaseUrl,
+    lichessApiToken,
     logProgress,
   });
 

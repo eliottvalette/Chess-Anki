@@ -25,8 +25,29 @@ import {
   parseSanMoves,
   resolveOpeningTreeRootPly,
 } from './opening-tree.ts';
+import { listNodesNeedingEnrichment } from './opening-tree-import.ts';
 
 const FOUR_KNIGHTS = ['e4', 'e5', 'Nf3', 'Nc6', 'Bb5', 'Nf6'];
+
+test('engine enrichment includes every train-side node before the target depth', () => {
+  const graph = {
+    trainSide: 'black',
+    targetDepth: 22,
+    nodes: Array.from({ length: 320 }, (_, index) => ({
+      id: `node-${index}`,
+      ply: index % 22,
+      sideToMove: index % 2 === 0 ? 'black' : 'white',
+      recentGames: 0,
+      cardCount: 0,
+    })),
+  };
+
+  const selected = listNodesNeedingEnrichment(graph, 'backfill');
+
+  assert.equal(selected.length, 160);
+  assert.ok(selected.length > 120);
+  assert.ok(selected.every((node) => node.sideToMove === 'black' && node.ply < graph.targetDepth));
+});
 
 test('resolveOpeningGraphScope routes white e4 games into e4 graph at startpos', () => {
   const parsed = parseSanMoves(FOUR_KNIGHTS);

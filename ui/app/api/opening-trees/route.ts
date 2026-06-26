@@ -566,12 +566,12 @@ function pruneOpeningGraphDraft(graph: OpeningGraphDraft) {
 async function enrichOpeningGraphDraft(
   graph: OpeningGraphDraft,
   mode: OpeningBuildMode,
-  nodesToAnalyze: OpeningTreeDraft['nodes'] = listNodesNeedingEnrichment(graph, mode),
-  maxNodes: number = MAX_ENGINE_IMPORT_NODES,
+  nodesToAnalyze?: OpeningTreeDraft['nodes'],
 ) {
-  const nodesToEnrich = nodesToAnalyze.filter((node) => graph.nodes.some((candidate) => candidate.id === node.id));
   const draft = asTreeDraft(graph);
-  await enrichEngineBestMoves(draft, nodesToEnrich, maxNodes);
+  const candidates = nodesToAnalyze ?? listNodesNeedingEnrichment(graph, mode);
+  const nodesToEnrich = candidates.filter((node) => graph.nodes.some((candidate) => candidate.id === node.id));
+  await enrichEngineBestMoves(draft, nodesToEnrich, MAX_ENGINE_IMPORT_NODES);
 
   for (const node of nodesToEnrich) {
     const updated = draft.nodes.find((candidate) => candidate.id === node.id);
@@ -649,7 +649,11 @@ async function enrichLichessBookMoves(draft: OpeningTreeDraft) {
   await enrichLichessBookMovesForNodes(draft, opponentNodes);
 }
 
-async function enrichLichessBookMovesForNodes(draft: OpeningTreeDraft, opponentNodes: OpeningTreeDraft['nodes']) {
+async function enrichLichessBookMovesForNodes(
+  draft: OpeningTreeDraft,
+  opponentNodes: OpeningTreeDraft['nodes'],
+  maxMoves: number = 4,
+) {
   for (const node of opponentNodes) {
     try {
       const explorer = await fetchLichessOpeningExplorer(node.fen);
@@ -660,7 +664,7 @@ async function enrichLichessBookMovesForNodes(draft: OpeningTreeDraft, opponentN
         }))
         .filter((move) => move.games > 0)
         .sort((left, right) => right.games - left.games)
-        .slice(0, 4);
+        .slice(0, maxMoves);
 
       for (const move of moves) {
         ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {

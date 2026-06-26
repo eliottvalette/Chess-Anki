@@ -1,6 +1,7 @@
 import { Chess } from 'chess.js';
 
 import type { StoredMove } from '@/lib/chess-analysis-client';
+import { buildLichessExplorerHeaders } from '@/lib/lichess-explorer';
 import openingBookKeys from '@/lib/opening-book-keys.json';
 import { OPENING_REPERTOIRE } from '@/lib/opening-training';
 
@@ -99,9 +100,7 @@ export async function fetchLichessOpeningExplorer(fen: string) {
   url.searchParams.set('fen', fen);
 
   const response = await fetch(url.toString(), {
-    headers: {
-      Accept: 'application/json',
-    },
+    headers: buildLichessExplorerHeaders(),
     next: { revalidate: 60 * 60 * 24 },
   });
 
