@@ -24,13 +24,18 @@ export function resolveLinesBoardEvalCp(
   currentFen: string,
   activeOpeningNodeId: string | null,
 ): number | null {
+  const currentFenKey = normalizeOpeningFen(currentFen);
   const { nodeId: historyNodeId } = resolveOpeningNodeFromHistory(tree, moveHistory, historyIndex);
   let node = historyNodeId ? tree.nodes.find((candidate) => candidate.id === historyNodeId) : null;
+
+  if (node && normalizeOpeningFen(node.fen) !== currentFenKey) {
+    node = null;
+  }
 
   if (!node && activeOpeningNodeId) {
     const activeNode = tree.nodes.find((candidate) => candidate.id === activeOpeningNodeId);
 
-    if (activeNode && normalizeOpeningFen(activeNode.fen) === normalizeOpeningFen(currentFen)) {
+    if (activeNode && normalizeOpeningFen(activeNode.fen) === currentFenKey) {
       node = activeNode;
     }
   }

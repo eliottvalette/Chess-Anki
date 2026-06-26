@@ -530,9 +530,9 @@ export function useLabOrchestrator() {
       currentFen,
       currentMoveList,
       currentLineKey,
-      skipLinesEngineAnalysis: mode === 'lines' && activeOpeningTree != null,
+      skipLinesEngineAnalysis: false,
     }),
-    [activeOpeningTree, currentFen, currentLineKey, currentMoveList, mode],
+    [currentFen, currentLineKey, currentMoveList],
   );
 
   const { analyzeTimelineDeep, clearEngineCache, positionCacheRef, positionInFlightRef, timelineBatchInFlightRef } =
@@ -574,7 +574,7 @@ export function useLabOrchestrator() {
 
   const { saveTrainingAttempt, hydrateTrainingProgressRef } = useTrainingProfile(labState, trainingProfileRefs);
 
-  const { playSound, playSoundSequence } = useLabAudio();
+  const { cancelSoundSequence, playSound, playSoundSequence } = useLabAudio();
 
   const trainAnswerFeedback = useMemo(
     () =>
@@ -1333,6 +1333,7 @@ export function useLabOrchestrator() {
     () => ({
       playSound,
       playSoundSequence,
+      cancelSoundSequence,
       playDeckReplayToIndex,
       clearSelection,
       clearVariation,
@@ -1351,6 +1352,7 @@ export function useLabOrchestrator() {
       clearSelection,
       clearVariation,
       playDeckReplayToIndex,
+      cancelSoundSequence,
       playSound,
       playSoundSequence,
       positionRequestIdRef,

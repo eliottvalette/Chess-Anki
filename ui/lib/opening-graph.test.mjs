@@ -8,6 +8,8 @@ import {
   buildOpeningGraphId,
   buildOpeningNodeId,
   buildRecentDynamicBrowseSummaries,
+  findDynamicCatalogEntry,
+  findDynamicCatalogEntryById,
   mergeOpeningGraphDraft,
   OPENING_CATALOG_PLY,
   projectCatalogSubgraph,
@@ -392,6 +394,7 @@ test('buildRecentDynamicBrowseSummaries aggregates matching white and black game
         trainSide: 'white',
         moves: FOUR_KNIGHTS,
         source: 'recent_game',
+        outcome: 'win',
       },
       {
         id: 'black-game',
@@ -399,6 +402,7 @@ test('buildRecentDynamicBrowseSummaries aggregates matching white and black game
         trainSide: 'black',
         moves: FOUR_KNIGHTS,
         source: 'recent_game',
+        outcome: 'loss',
       },
     ],
     { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
@@ -412,7 +416,19 @@ test('buildRecentDynamicBrowseSummaries aggregates matching white and black game
   assert.equal(summaries[0].sourceCount, 2);
   assert.equal(summaries[0].linesWhite, 1);
   assert.equal(summaries[0].linesBlack, 1);
+  assert.equal(summaries[0].winCount, 1);
+  assert.equal(summaries[0].lossCount, 1);
+  assert.equal(summaries[0].drawCount, 0);
+  assert.equal(summaries[0].whiteWinCount, 1);
+  assert.equal(summaries[0].whiteLossCount, 0);
+  assert.equal(summaries[0].blackWinCount, 0);
+  assert.equal(summaries[0].blackLossCount, 1);
   assert.equal(summaries[0].presencePercent, 100);
+
+  const detailMatch =
+    findDynamicCatalogEntry(forest.graphs, summaries[0].id, 4) ??
+    findDynamicCatalogEntryById(forest.graphs, summaries[0].id);
+  assert.ok(detailMatch);
 });
 
 test('projectTreeFromFenKey projects the continuation tree from a played position', () => {

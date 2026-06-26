@@ -57,6 +57,7 @@ export function useLabLines(
   context: {
     playSound: (key: ChessSoundKey) => void;
     playSoundSequence: (keys: ChessSoundKey[]) => void;
+    cancelSoundSequence: () => void;
     playDeckReplayToIndex: (
       targetIndex: number,
       trainSide: OpeningSide,
@@ -78,6 +79,7 @@ export function useLabLines(
 ) {
   const {
     activeOpeningTree,
+    openingTrees,
     setOpeningTrees,
     setSelectedOpeningTreeId,
     setActiveOpeningTree,
@@ -143,6 +145,7 @@ export function useLabLines(
   }, [historyIndex, initialFen, moveHistory]);
 
   const {
+    cancelSoundSequence,
     playSound,
     playSoundSequence,
     playDeckReplayToIndex,
@@ -293,6 +296,7 @@ export function useLabLines(
         browsePly?: number;
         initialFen?: string | null;
         requestId?: number;
+        rootPrefix?: Pick<OpeningTreeSummary, 'rootFenKey' | 'rootSan' | 'rootUci'>;
       } = {},
     ) => {
       const requestId = options.requestId ?? null;
@@ -375,6 +379,18 @@ export function useLabLines(
         }
 
         if (displayTree) {
+          if (
+            options.rootPrefix &&
+            options.rootPrefix.rootFenKey === displayTree.rootFenKey &&
+            options.rootPrefix.rootUci.length >= displayTree.rootUci.length
+          ) {
+            displayTree = {
+              ...displayTree,
+              rootSan: options.rootPrefix.rootSan,
+              rootUci: options.rootPrefix.rootUci,
+            };
+          }
+
           displayTree = ensureOpeningTreeRootPrefix(displayTree);
         }
 
@@ -1253,6 +1269,7 @@ export function useLabLines(
   const previewOpeningTreeRoot = useCallback(
     (tree: OpeningTreeSummary) => {
       cancelDrillOpponentMove();
+      cancelSoundSequence();
       const requestId = ++deckPlaybackRequestIdRef.current;
       openingTreeDetailRequestIdRef.current += 1;
       setOpeningTreeActionLoading(false);
@@ -1307,6 +1324,7 @@ export function useLabLines(
           await delay(LINES_ROOT_PREVIEW_MOVE_DELAY_MS);
 
           if (deckPlaybackRequestIdRef.current !== requestId) {
+            cancelSoundSequence();
             return;
           }
 
@@ -1315,6 +1333,7 @@ export function useLabLines(
           try {
             appended = appendStoredMoveFromUci(previewMoves, previewFen, uci);
           } catch {
+            cancelSoundSequence();
             setDeckPlaybackBusy(false);
             return;
           }
@@ -1353,6 +1372,7 @@ export function useLabLines(
     },
     [
       cancelDrillOpponentMove,
+      cancelSoundSequence,
       clearSelection,
       clearVariation,
       deckPlaybackRequestIdRef,
@@ -1391,6 +1411,7 @@ export function useLabLines(
   const selectOpeningTree = useCallback(
     async (treeId: string) => {
       cancelDrillOpponentMove();
+      cancelSoundSequence();
       deckPlaybackRequestIdRef.current += 1;
       setDeckPlaybackBusy(false);
       const detailRequestId = ++openingTreeDetailRequestIdRef.current;
@@ -1426,6 +1447,7 @@ export function useLabLines(
       const keepBoard =
         !isRootPreviewPosition && boardContext.historyIndex > 0 && !isStandardStartFenKey(boardContext.fenKey);
       const effectiveBrowsePly = keepBoard ? Math.max(minForcedPlies, boardContext.historyIndex) : minForcedPlies;
+      const selectedSummary = openingTrees.find((tree) => tree.id === treeId);
       const tree = await loadOpeningTreeDetail(treeId, {
         syncBoard: !keepBoard,
         atFenKey: keepBoard ? boardContext.fenKey : undefined,
@@ -1434,6 +1456,13 @@ export function useLabLines(
         browsePly: effectiveBrowsePly,
         initialFen,
         requestId: detailRequestId,
+        rootPrefix: selectedSummary
+          ? {
+              rootFenKey: selectedSummary.rootFenKey,
+              rootSan: selectedSummary.rootSan,
+              rootUci: selectedSummary.rootUci,
+            }
+          : undefined,
       });
 
       if (openingTreeDetailRequestIdRef.current !== detailRequestId) {
@@ -1456,6 +1485,7 @@ export function useLabLines(
     },
     [
       cancelDrillOpponentMove,
+      cancelSoundSequence,
       clearSelection,
       clearVariation,
       deckPlaybackRequestIdRef,
@@ -1467,6 +1497,7 @@ export function useLabLines(
       loadOpeningTreeDetail,
       loadOpeningTreeRootOnBoard,
       moveHistory,
+      openingTrees,
       quitLinesSession,
       selectedOpeningTreeId,
       setActiveOpeningNodeId,

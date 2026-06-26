@@ -1651,6 +1651,7 @@ test('classifyBoardMoveAtHistoryIndex works without an active learn or review se
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, moveHistory, 5, 'white'), {
     moveUci: 'f1c4',
     category: 'best',
+    evalLossCp: 0,
   });
 });
 
@@ -1660,14 +1661,17 @@ test('classifyBoardMoveAtHistoryIndex classifies prefix train and opponent moves
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 1, 'white'), {
     moveUci: 'e2e4',
     category: 'book',
+    evalLossCp: null,
   });
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 2, 'white'), {
     moveUci: 'e7e5',
     category: 'book',
+    evalLossCp: null,
   });
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(rootPrefixTree, prefixHistory, 3, 'white'), {
     moveUci: 'g1f3',
     category: 'book',
+    evalLossCp: null,
   });
 
   const drillHistory = [...prefixHistory, { uci: 'f1c4' }, { uci: 'g8f6' }];
@@ -1675,14 +1679,70 @@ test('classifyBoardMoveAtHistoryIndex classifies prefix train and opponent moves
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 5, 'white'), {
     moveUci: 'f1c4',
     category: 'best',
+    evalLossCp: 0,
   });
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 6, 'white'), {
     moveUci: 'g8f6',
     category: 'book',
+    evalLossCp: null,
   });
   assert.deepEqual(classifyBoardMoveAtHistoryIndex(italianDrillTree, drillHistory, 5, 'white'), {
     moveUci: 'f1c4',
     category: 'best',
+    evalLossCp: 0,
+  });
+});
+
+test('classifyBoardMoveAtHistoryIndex handles black repertoire root offset', () => {
+  const tree = {
+    ...rootPrefixTree,
+    rootPly: 1,
+    rootSan: ['e4', 'd5'],
+    rootUci: ['e2e4', 'd7d5'],
+    rootFenKey: 'after-d5',
+    nodes: [
+      {
+        ...rootPrefixTree.nodes[1],
+        id: 'after-e4',
+        ply: 0,
+        fenKey: 'after-e4',
+        sideToMove: 'black',
+      },
+      {
+        ...rootPrefixTree.nodes[2],
+        id: 'after-d5',
+        ply: 1,
+        fenKey: 'after-d5',
+        sideToMove: 'white',
+      },
+    ],
+    edges: [
+      {
+        ...rootPrefixTree.edges[1],
+        id: 'edge-d5',
+        fromNodeId: 'after-e4',
+        toNodeId: 'after-d5',
+        uci: 'd7d5',
+        san: 'd5',
+        moveBy: 'black',
+      },
+    ],
+  };
+  const history = [{ uci: 'e2e4' }, { uci: 'd7d5' }];
+
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(tree, history, 1, 'black'), {
+    moveUci: 'e2e4',
+    category: 'book',
+    evalLossCp: null,
+  });
+  assert.deepEqual(classifyBoardMoveAtHistoryIndex(tree, history, 2, 'black'), {
+    moveUci: 'd7d5',
+    category: 'book',
+    evalLossCp: null,
+  });
+  assert.deepEqual(resolveOpeningNodeFromHistory(tree, history, 2), {
+    nodeId: 'after-d5',
+    plyInTree: 1,
   });
 });
 
@@ -1697,10 +1757,12 @@ test('classifyLinesMoveAtHistoryIndex delegates to board history classifier', ()
   assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 1, 'white'), {
     moveUci: 'e2e4',
     category: 'book',
+    evalLossCp: null,
   });
   assert.deepEqual(classifyLinesMoveAtHistoryIndex(rootPrefixTree, moveHistory, 3, 'white'), {
     moveUci: 'g1f3',
     category: 'book',
+    evalLossCp: null,
   });
 });
 
@@ -2176,6 +2238,81 @@ test('ensureOpeningTreeRootPrefix rebuilds a truncated rootUci from the graph', 
 
   assert.deepEqual(repaired.rootSan, ['e4', 'd5']);
   assert.deepEqual(repaired.rootUci, ['e2e4', 'd7d5']);
+});
+
+test('ensureOpeningTreeRootPrefix tolerates graph-relative black rootUci', () => {
+  const afterE4FenKey = normalizeOpeningFen('rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1');
+  const afterD5FenKey = normalizeOpeningFen('rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2');
+  const tree = {
+    id: 'black-relative-scandi',
+    name: 'd5',
+    library: 'black_vs_e4',
+    rootFenKey: afterD5FenKey,
+    rootPly: 1,
+    rootSan: ['d5'],
+    rootUci: ['d7d5'],
+    sourceCount: 1,
+    targetDepth: 12,
+    nodeCount: 2,
+    dueCount: 0,
+    masteryScore: 0,
+    updatedAt: null,
+    nodes: [
+      {
+        id: 'after-e4',
+        fen: 'rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1',
+        fenKey: afterE4FenKey,
+        ply: 0,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-d5',
+        fen: 'rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2',
+        fenKey: afterD5FenKey,
+        ply: 1,
+        sideToMove: 'white',
+        bestUci: 'e4d5',
+        bestSan: 'exd5',
+        evalCp: 20,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-d5',
+        fromNodeId: 'after-e4',
+        toNodeId: 'after-d5',
+        uci: 'd7d5',
+        san: 'd5',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+    ],
+  };
+
+  const repaired = ensureOpeningTreeRootPrefix(tree);
+
+  assert.deepEqual(repaired.rootSan, ['d5']);
+  assert.deepEqual(repaired.rootUci, ['d7d5']);
 });
 
 test('buildLearnDrillStartupUcis replays through d5 before the first white train move', () => {

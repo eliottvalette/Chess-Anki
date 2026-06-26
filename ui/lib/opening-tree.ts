@@ -23,6 +23,7 @@ export type OpeningTreeBuildInput = {
   moves: string[];
   source: 'recent_game' | 'card';
   count?: number;
+  outcome?: 'win' | 'loss' | 'draw' | 'unknown';
   scoreSwingCp?: number | null;
 };
 
@@ -66,6 +67,9 @@ export type OpeningNodeDraft = {
   evalCp?: number | null;
   recentGames: number;
   cardCount: number;
+  winCount?: number;
+  lossCount?: number;
+  drawCount?: number;
 };
 
 export type OpeningEdgeDraft = {
@@ -98,6 +102,15 @@ export type OpeningTreeSummary = {
   masteryScore: number;
   linesWhite?: number;
   linesBlack?: number;
+  winCount?: number;
+  lossCount?: number;
+  drawCount?: number;
+  whiteWinCount?: number;
+  whiteLossCount?: number;
+  whiteDrawCount?: number;
+  blackWinCount?: number;
+  blackLossCount?: number;
+  blackDrawCount?: number;
   presencePercent?: number;
   openingEvalCp?: number | null;
   updatedAt: string | null;
@@ -171,12 +184,16 @@ export function getOpeningTreeRootLength(tree: Pick<OpeningTreeDetail, 'rootPly'
   return tree.rootPly ?? (tree.rootSan.length > 0 ? tree.rootSan.length : 0);
 }
 
+function getOpeningTreeBoardRootLength(tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan' | 'rootUci'>): number {
+  return Math.max(getOpeningTreeRootLength(tree), tree.rootUci.length);
+}
+
 export function classifyRootPrefixMove(
   tree: Pick<OpeningTreeDetail, 'rootPly' | 'rootSan' | 'rootUci'>,
   moveIndex: number,
   playedUci: string,
 ): LinesMoveCategory | null {
-  const rootLength = getOpeningTreeRootLength(tree);
+  const rootLength = getOpeningTreeBoardRootLength(tree);
 
   if (moveIndex < 0 || moveIndex >= rootLength) {
     return null;
@@ -830,10 +847,12 @@ export function resolveOpeningNodeFromHistory(
   moveHistory: Array<{ uci: string }>,
   historyIndex: number,
 ): { nodeId: string | null; plyInTree: number } {
-  const rootLength = getOpeningTreeRootLength(tree);
+  const rootTreePly = getOpeningTreeRootLength(tree);
+  const rootMoveCount = getOpeningTreeBoardRootLength(tree);
+  const rootMoveOffset = Math.max(0, rootMoveCount - rootTreePly);
   const boundedIndex = Math.max(0, Math.min(historyIndex, moveHistory.length));
 
-  for (let index = 0; index < boundedIndex && index < rootLength; index += 1) {
+  for (let index = 0; index < boundedIndex && index < rootMoveCount; index += 1) {
     const move = moveHistory[index];
     const expectedUci = tree.rootUci[index];
 
@@ -846,25 +865,26 @@ export function resolveOpeningNodeFromHistory(
     }
   }
 
-  if (boundedIndex < rootLength) {
-    const nodeAtPly = tree.nodes.find((candidate) => candidate.ply === boundedIndex);
+  if (boundedIndex < rootMoveCount) {
+    const plyInTree = Math.max(0, boundedIndex - rootMoveOffset);
+    const nodeAtPly = tree.nodes.find((candidate) => candidate.ply === plyInTree);
 
     if (nodeAtPly) {
-      return { nodeId: nodeAtPly.id, plyInTree: boundedIndex };
+      return { nodeId: nodeAtPly.id, plyInTree };
     }
 
-    return { nodeId: null, plyInTree: boundedIndex };
+    return { nodeId: null, plyInTree };
   }
 
-  if (boundedIndex === rootLength) {
-    const rootNode = resolveCanonicalRootNode(tree, rootLength);
+  if (boundedIndex === rootMoveCount) {
+    const rootNode = resolveCanonicalRootNode(tree, rootTreePly);
 
-    return { nodeId: rootNode?.id ?? null, plyInTree: boundedIndex };
+    return { nodeId: rootNode?.id ?? null, plyInTree: rootTreePly };
   }
 
-  let currentNode = resolveCanonicalRootNode(tree, rootLength);
+  let currentNode = resolveCanonicalRootNode(tree, rootTreePly);
 
-  for (let index = rootLength; index < boundedIndex; index += 1) {
+  for (let index = rootMoveCount; index < boundedIndex; index += 1) {
     const move = moveHistory[index];
 
     if (!move || !currentNode) {
@@ -875,13 +895,13 @@ export function resolveOpeningNodeFromHistory(
     const nextNode = edge ? tree.nodes.find((candidate) => candidate.id === edge.toNodeId) : null;
 
     if (!nextNode) {
-      return { nodeId: currentNode.id, plyInTree: index };
+      return { nodeId: currentNode.id, plyInTree: Math.max(0, index - rootMoveOffset) };
     }
 
     currentNode = nextNode;
   }
 
-  return { nodeId: currentNode?.id ?? null, plyInTree: boundedIndex };
+  return { nodeId: currentNode?.id ?? null, plyInTree: Math.max(0, boundedIndex - rootMoveOffset) };
 }
 
 export function classifyBoardMoveAtHistoryIndex(
@@ -901,7 +921,7 @@ export function classifyBoardMoveAtHistoryIndex(
     return null;
   }
 
-  const rootLength = getOpeningTreeRootLength(tree);
+  const rootLength = getOpeningTreeBoardRootLength(tree);
 
   if (moveIndex < rootLength) {
     const prefixCategory = classifyRootPrefixMove(tree, moveIndex, move.uci);
@@ -1231,22 +1251,29 @@ export function ensureOpeningTreeRootPrefix(tree: OpeningTreeDetail): OpeningTre
   }
 
   const chess = new Chess();
+  let rootUciMatchesRootFen = true;
 
   for (const uci of tree.rootUci) {
-    const move = chess.move({
-      from: uci.slice(0, 2),
-      to: uci.slice(2, 4),
-      ...(uci[4] ? { promotion: uci[4] } : {}),
-    });
+    try {
+      const move = chess.move({
+        from: uci.slice(0, 2),
+        to: uci.slice(2, 4),
+        ...(uci[4] ? { promotion: uci[4] } : {}),
+      });
 
-    if (!move) {
+      if (!move) {
+        rootUciMatchesRootFen = false;
+        break;
+      }
+    } catch {
+      rootUciMatchesRootFen = false;
       break;
     }
   }
 
   const rootNodeFenKey = normalizeOpeningFen(rootNode.fen);
 
-  if (normalizeOpeningFen(chess.fen()) === rootNodeFenKey) {
+  if (rootUciMatchesRootFen && normalizeOpeningFen(chess.fen()) === rootNodeFenKey) {
     return tree;
   }
 

@@ -1,8 +1,9 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { CHESS_SOUND_URLS, type ChessSoundKey } from '@/lib/chess-sounds';
 
 export function useLabAudio() {
   const soundPlayersRef = useRef<Partial<Record<ChessSoundKey, HTMLAudioElement>>>({});
+  const sequenceTimersRef = useRef<number[]>([]);
 
   const ensureSoundPlayer = useCallback((soundKey: ChessSoundKey) => {
     const existing = soundPlayersRef.current[soundKey];
@@ -27,16 +28,32 @@ export function useLabAudio() {
     [ensureSoundPlayer],
   );
 
+  const cancelSoundSequence = useCallback(() => {
+    for (const timer of sequenceTimersRef.current) {
+      window.clearTimeout(timer);
+    }
+
+    sequenceTimersRef.current = [];
+  }, []);
+
   const playSoundSequence = useCallback(
     (soundKeys: ChessSoundKey[]) => {
       soundKeys.forEach((soundKey, index) => {
-        window.setTimeout(() => playSound(soundKey), index * 110);
+        const timer = window.setTimeout(() => {
+          sequenceTimersRef.current = sequenceTimersRef.current.filter((entry) => entry !== timer);
+          playSound(soundKey);
+        }, index * 110);
+
+        sequenceTimersRef.current.push(timer);
       });
     },
     [playSound],
   );
 
+  useEffect(() => cancelSoundSequence, [cancelSoundSequence]);
+
   return {
+    cancelSoundSequence,
     playSound,
     playSoundSequence,
   };

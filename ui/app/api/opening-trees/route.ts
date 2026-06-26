@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 import { buildReviewAnalyzeRequest } from '@/lib/analysis-profile';
 import { AsyncTtlCache } from '@/lib/async-ttl-cache';
-import { fetchArchives, fetchRecentGames, type RawChessComGame } from '@/lib/chesscom';
+import { extractTag, fetchArchives, fetchRecentGames, inferOutcome, type RawChessComGame } from '@/lib/chesscom';
 import { LINES_EARLY_OPENING_MAX_PLY } from '@/lib/lines-board-eval';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
@@ -766,6 +766,8 @@ function buildRecentGameOpeningInputs(
       return [];
     }
 
+    const player = trainSide === 'white' ? game.white : game.black;
+
     return [
       {
         id: `recent-lines-${timeClass}-${shortHash(`${game.url ?? ''}:${game.end_time ?? ''}:${index}`)}`,
@@ -774,6 +776,7 @@ function buildRecentGameOpeningInputs(
         moves,
         source: 'recent_game' as const,
         count: 1,
+        outcome: inferOutcome(player?.result ?? null, extractTag(game.pgn, 'Result')),
       },
     ];
   });

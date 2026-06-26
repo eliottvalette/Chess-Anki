@@ -318,6 +318,13 @@ export const LinesPanel = memo(function LinesPanel({
     () => (activeTree ? countReviewDueNodes(activeTree, trainSide) : 0),
     [activeTree, trainSide],
   );
+  const activeTreeSummary = useMemo(
+    () => trees.find((tree) => tree.id === activeTreeId) ?? null,
+    [activeTreeId, trees],
+  );
+  const activeOutcomeSource = activeTreeSummary ?? activeTree;
+  const whiteOutcomeBar = formatSideOutcomeBar(activeOutcomeSource, 'white');
+  const blackOutcomeBar = formatSideOutcomeBar(activeOutcomeSource, 'black');
   const showNextLearnBranch = hasNextLearnBranch && learnBranchComplete && !inSession;
   const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
 
@@ -443,6 +450,7 @@ export const LinesPanel = memo(function LinesPanel({
                       : 'bg-[rgba(168,216,160,0.025)] hover:bg-[rgba(168,216,160,0.045)]';
                     const evalFillPercent =
                       tree.openingEvalCp == null ? null : formatOpeningEvalFillPercent(tree.openingEvalCp);
+                    const outcomeBar = formatLineOutcomeBar(tree);
 
                     return (
                       <button
@@ -453,8 +461,24 @@ export const LinesPanel = memo(function LinesPanel({
                           event.preventDefault();
                           onPreviewTreeRoot(tree);
                         }}
+                        title={outcomeBar?.title}
                         type="button"
                       >
+                        {outcomeBar ? (
+                          <span
+                            aria-hidden="true"
+                            className="pointer-events-none absolute inset-x-0 top-0 h-px bg-[rgba(0,0,0,0.82)]"
+                          >
+                            <span
+                              className="absolute left-0 top-0 block h-full bg-[rgba(88,188,121,0.92)]"
+                              style={{ width: `${outcomeBar.winPercent}%` }}
+                            />
+                            <span
+                              className="absolute right-0 top-0 block h-full bg-[rgba(225,82,92,0.92)]"
+                              style={{ width: `${outcomeBar.lossPercent}%` }}
+                            />
+                          </span>
+                        ) : null}
                         <span className="flex min-w-0 items-start justify-between gap-2.5 w-full">
                           <strong className="min-w-0 text-[14px] font-normal leading-[1.25] text-[rgba(241,245,234,0.88)] wrap-anywhere">
                             {formatLinesTreeTitle(tree)}
@@ -510,20 +534,28 @@ export const LinesPanel = memo(function LinesPanel({
                   Your color
                 </p>
                 <div className="flex w-full items-stretch gap-2 bg-[rgba(2,8,5,0.42)] border border-[rgba(226,238,220,0.10)] focus:border-[rgba(168,216,160,0.48)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] rounded-[6px] p-1">
-                  <button
-                    className={`${trainSide === 'white' ? 'flex-1 box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(152,184,255,0.1)] px-2 text-[13px] font-medium text-[#A8D8A0] transition-[background-color,color] duration-150 w-full' : 'flex-1 box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(168,216,160,0.025)] px-2 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.045)] hover:text-[rgba(241,245,234,0.85)] w-full'}`}
-                    onClick={() => onChangeTrainSide('white')}
-                    type="button"
-                  >
-                    White
-                  </button>
-                  <button
-                    className={`${trainSide === 'black' ? 'flex-1 box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(152,184,255,0.1)] px-2 text-[13px] font-medium text-[#A8D8A0] transition-[background-color,color] duration-150 w-full' : 'flex-1 box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(168,216,160,0.025)] px-2 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.045)] hover:text-[rgba(241,245,234,0.85)] w-full'}`}
-                    onClick={() => onChangeTrainSide('black')}
-                    type="button"
-                  >
-                    Black
-                  </button>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <button
+                      className={`${trainSide === 'white' ? 'box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(152,184,255,0.1)] px-2 text-[13px] font-medium text-[#A8D8A0] transition-[background-color,color] duration-150 w-full' : 'box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(168,216,160,0.025)] px-2 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.045)] hover:text-[rgba(241,245,234,0.85)] w-full'}`}
+                      onClick={() => onChangeTrainSide('white')}
+                      title={whiteOutcomeBar.title}
+                      type="button"
+                    >
+                      White
+                    </button>
+                    <OutcomeBar bar={whiteOutcomeBar} />
+                  </div>
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <button
+                      className={`${trainSide === 'black' ? 'box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(152,184,255,0.1)] px-2 text-[13px] font-medium text-[#A8D8A0] transition-[background-color,color] duration-150 w-full' : 'box-border flex min-h-[32px] items-center justify-center rounded-[4px] border-0 bg-[rgba(168,216,160,0.025)] px-2 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(168,216,160,0.045)] hover:text-[rgba(241,245,234,0.85)] w-full'}`}
+                      onClick={() => onChangeTrainSide('black')}
+                      title={blackOutcomeBar.title}
+                      type="button"
+                    >
+                      Black
+                    </button>
+                    <OutcomeBar bar={blackOutcomeBar} />
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-0.5 mt-2">
@@ -663,6 +695,36 @@ export const LinesPanel = memo(function LinesPanel({
   );
 });
 
+type OutcomeBarModel = {
+  hasPresence: boolean;
+  winPercent: number;
+  lossPercent: number;
+  title: string;
+};
+
+function OutcomeBar({ bar }: { bar: OutcomeBarModel }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="relative block h-px w-full overflow-hidden rounded-full bg-[rgba(241,245,234,0.22)]"
+      title={bar.title}
+    >
+      {bar.hasPresence ? (
+        <>
+          <span
+            className="absolute left-0 top-0 block h-full bg-[rgba(88,188,121,0.92)]"
+            style={{ width: `${bar.winPercent}%` }}
+          />
+          <span
+            className="absolute right-0 top-0 block h-full bg-[rgba(225,82,92,0.92)]"
+            style={{ width: `${bar.lossPercent}%` }}
+          />
+        </>
+      ) : null}
+    </span>
+  );
+}
+
 function formatLinesTreeTitle(tree: OpeningTreeSummary) {
   const rootLine = tree.rootSan.join(' ').trim();
   const displayName = formatOpeningTreeDisplayName(tree.name);
@@ -683,6 +745,61 @@ function formatPresenceLabel(value: number | undefined) {
 
 function formatLineCount(count: number, side: 'white' | 'black') {
   return `${count} ${count === 1 ? 'line' : 'lines'} ${side}`;
+}
+
+function formatLineOutcomeBar(tree: OpeningTreeSummary) {
+  const wins = Math.max(0, tree.winCount ?? 0);
+  const losses = Math.max(0, tree.lossCount ?? 0);
+  const draws = Math.max(0, tree.drawCount ?? 0);
+  const decisiveTotal = wins + losses;
+
+  if (decisiveTotal <= 0) {
+    return null;
+  }
+
+  const winPercent = Math.round((wins / decisiveTotal) * 10000) / 100;
+  const lossPercent = Math.round((100 - winPercent) * 100) / 100;
+
+  return {
+    winPercent,
+    lossPercent,
+    title: `${wins} win${wins === 1 ? '' : 's'} · ${losses} loss${losses === 1 ? '' : 'es'}${
+      draws > 0 ? ` · ${draws} draw${draws === 1 ? '' : 's'}` : ''
+    }`,
+  };
+}
+
+function formatSideOutcomeBar(tree: OpeningTreeSummary | null, side: 'white' | 'black'): OutcomeBarModel {
+  const presence = Math.max(0, side === 'white' ? (tree?.linesWhite ?? 0) : (tree?.linesBlack ?? 0));
+  const wins = Math.max(0, side === 'white' ? (tree?.whiteWinCount ?? 0) : (tree?.blackWinCount ?? 0));
+  const losses = Math.max(0, side === 'white' ? (tree?.whiteLossCount ?? 0) : (tree?.blackLossCount ?? 0));
+  const draws = Math.max(0, side === 'white' ? (tree?.whiteDrawCount ?? 0) : (tree?.blackDrawCount ?? 0));
+  const decisiveTotal = wins + losses;
+  const sideLabel = side === 'white' ? 'White' : 'Black';
+
+  if (presence <= 0 || decisiveTotal <= 0) {
+    return {
+      hasPresence: false,
+      winPercent: 0,
+      lossPercent: 0,
+      title:
+        presence <= 0
+          ? `${sideLabel}: 0 games`
+          : `${sideLabel}: ${presence} game${presence === 1 ? '' : 's'} · ${draws} draw${draws === 1 ? '' : 's'}`,
+    };
+  }
+
+  const winPercent = Math.round((wins / decisiveTotal) * 10000) / 100;
+  const lossPercent = Math.round((100 - winPercent) * 100) / 100;
+
+  return {
+    hasPresence: true,
+    winPercent,
+    lossPercent,
+    title: `${sideLabel}: ${wins} win${wins === 1 ? '' : 's'} · ${losses} loss${losses === 1 ? '' : 'es'}${
+      draws > 0 ? ` · ${draws} draw${draws === 1 ? '' : 's'}` : ''
+    }`,
+  };
 }
 
 const OPENING_EVAL_MIN_CP = -60;

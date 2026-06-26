@@ -333,7 +333,10 @@ function countMovesFromPgn(pgn: string | undefined) {
   }
 }
 
-function inferOutcome(playerResult: string | null, resultTag: string | null): ChessComRecentGameSummary['outcome'] {
+export function inferOutcome(
+  playerResult: string | null,
+  resultTag: string | null,
+): ChessComRecentGameSummary['outcome'] {
   switch (playerResult) {
     case 'win':
       return 'win';

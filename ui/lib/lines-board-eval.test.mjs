@@ -70,6 +70,13 @@ test('resolveLinesBoardEvalCp ignores active node when board fen does not match'
   assert.equal(resolveLinesBoardEvalCp(tree, moveHistory, 1, tree.nodes[1].fen, 'stale-node'), null);
 });
 
+test('resolveLinesBoardEvalCp ignores history node when board fen does not match', () => {
+  const tree = buildItalianEvalTree();
+  const moveHistory = [{ uci: 'e2e4' }, { uci: 'e7e5' }, { uci: 'g1f3' }, { uci: 'b8c6' }, { uci: 'd2d4' }];
+
+  assert.equal(resolveLinesBoardEvalCp(tree, moveHistory, 5, START_FEN, null), null);
+});
+
 test('resolveLinesBoardEvalCp uses active node only when fen matches current board', () => {
   const tree = buildItalianEvalTree();
 

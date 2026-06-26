@@ -57,6 +57,9 @@ export type OpeningCatalogDraft = {
   displayUci: string[];
   sourceCount: number;
   subgraphNodeCount: number;
+  winCount?: number;
+  lossCount?: number;
+  drawCount?: number;
 };
 
 export type OpeningGraphForest = {
@@ -337,6 +340,9 @@ export function buildDynamicCatalogEntryForNode(
     displayUci: path.uci,
     sourceCount,
     subgraphNodeCount: reachableNodeCount,
+    winCount: node.winCount ?? 0,
+    lossCount: node.lossCount ?? 0,
+    drawCount: node.drawCount ?? 0,
   };
 }
 
@@ -431,6 +437,15 @@ export function buildRecentDynamicBrowseSummaries(
       sourceCount: number;
       linesWhite: number;
       linesBlack: number;
+      winCount: number;
+      lossCount: number;
+      drawCount: number;
+      whiteWinCount: number;
+      whiteLossCount: number;
+      whiteDrawCount: number;
+      blackWinCount: number;
+      blackLossCount: number;
+      blackDrawCount: number;
       weightedMasteryTotal: number;
       weightedMasteryCount: number;
       rootSan: string[];
@@ -462,6 +477,15 @@ export function buildRecentDynamicBrowseSummaries(
           sourceCount: 0,
           linesWhite: 0,
           linesBlack: 0,
+          winCount: 0,
+          lossCount: 0,
+          drawCount: 0,
+          whiteWinCount: 0,
+          whiteLossCount: 0,
+          whiteDrawCount: 0,
+          blackWinCount: 0,
+          blackLossCount: 0,
+          blackDrawCount: 0,
           weightedMasteryTotal: 0,
           weightedMasteryCount: 0,
           rootSan,
@@ -471,6 +495,15 @@ export function buildRecentDynamicBrowseSummaries(
           sourceCount: number;
           linesWhite: number;
           linesBlack: number;
+          winCount: number;
+          lossCount: number;
+          drawCount: number;
+          whiteWinCount: number;
+          whiteLossCount: number;
+          whiteDrawCount: number;
+          blackWinCount: number;
+          blackLossCount: number;
+          blackDrawCount: number;
           weightedMasteryTotal: number;
           weightedMasteryCount: number;
           rootSan: string[];
@@ -482,9 +515,19 @@ export function buildRecentDynamicBrowseSummaries(
 
       if (graph.trainSide === 'white') {
         current.linesWhite += summary.sourceCount;
+        current.whiteWinCount += summary.winCount ?? 0;
+        current.whiteLossCount += summary.lossCount ?? 0;
+        current.whiteDrawCount += summary.drawCount ?? 0;
       } else {
         current.linesBlack += summary.sourceCount;
+        current.blackWinCount += summary.winCount ?? 0;
+        current.blackLossCount += summary.lossCount ?? 0;
+        current.blackDrawCount += summary.drawCount ?? 0;
       }
+
+      current.winCount += summary.winCount ?? 0;
+      current.lossCount += summary.lossCount ?? 0;
+      current.drawCount += summary.drawCount ?? 0;
 
       if (summary.sourceCount > 0) {
         current.weightedMasteryTotal += summary.masteryScore * summary.sourceCount;
@@ -515,6 +558,15 @@ export function buildRecentDynamicBrowseSummaries(
         sourceCount: entry.sourceCount,
         linesWhite: entry.linesWhite,
         linesBlack: entry.linesBlack,
+        winCount: entry.winCount,
+        lossCount: entry.lossCount,
+        drawCount: entry.drawCount,
+        whiteWinCount: entry.whiteWinCount,
+        whiteLossCount: entry.whiteLossCount,
+        whiteDrawCount: entry.whiteDrawCount,
+        blackWinCount: entry.blackWinCount,
+        blackLossCount: entry.blackLossCount,
+        blackDrawCount: entry.blackDrawCount,
         masteryScore,
         presencePercent,
       };
@@ -700,6 +752,9 @@ function buildGraphForScope(
     trainSide: items[0]?.input.trainSide ?? scope.trainSide,
     recentGames: 0,
     cardCount: 0,
+    winCount: 0,
+    lossCount: 0,
+    drawCount: 0,
   });
   pathByFenKey.set(scope.graphRootFenKey, { san: [], uci: [] });
 
@@ -731,10 +786,14 @@ function buildGraphForScope(
         trainSide: item.input.trainSide,
         recentGames: 0,
         cardCount: 0,
+        winCount: 0,
+        lossCount: 0,
+        drawCount: 0,
       };
 
       if (item.input.source === 'recent_game') {
         node.recentGames += count;
+        applyOutcomeCount(node, item.input.outcome, count);
       } else {
         node.cardCount += count;
       }
@@ -890,6 +949,9 @@ export function buildCatalogEntries(
       displayUci: path.uci,
       sourceCount,
       subgraphNodeCount: countReachableNodes(node.id, graph.nodes, graph.edges),
+      winCount: node.winCount ?? 0,
+      lossCount: node.lossCount ?? 0,
+      drawCount: node.drawCount ?? 0,
     });
   }
 
@@ -1140,6 +1202,9 @@ export function projectCatalogSubgraph(
     nodeCount: nodes.length,
     dueCount: 0,
     masteryScore: 0,
+    winCount: catalog.winCount,
+    lossCount: catalog.lossCount,
+    drawCount: catalog.drawCount,
     updatedAt: null,
     nodes,
     edges,
@@ -1189,8 +1254,25 @@ export function catalogToSummary(
     nodeCount: catalog.subgraphNodeCount,
     dueCount: subgraph.dueCount,
     masteryScore: subgraph.masteryScore,
+    winCount: catalog.winCount,
+    lossCount: catalog.lossCount,
+    drawCount: catalog.drawCount,
     updatedAt: new Date().toISOString(),
   };
+}
+
+function applyOutcomeCount(node: OpeningNodeDraft, outcome: OpeningTreeBuildInput['outcome'], count: number) {
+  switch (outcome) {
+    case 'win':
+      node.winCount = (node.winCount ?? 0) + count;
+      break;
+    case 'loss':
+      node.lossCount = (node.lossCount ?? 0) + count;
+      break;
+    case 'draw':
+      node.drawCount = (node.drawCount ?? 0) + count;
+      break;
+  }
 }
 
 function getSideToMove(fen: string): OpeningSide {
