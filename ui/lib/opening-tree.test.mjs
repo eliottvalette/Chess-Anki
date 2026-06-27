@@ -35,6 +35,7 @@ import {
   mergeOpeningTreeDelta,
   normalizeOpeningFen,
   OPENING_TARGET_DEPTH_NORMAL,
+  openingTreeDetailToSummary,
   parseSanMoves,
   pickLearnBranch,
   pickNextUnplayedOpponentEdge,
@@ -44,9 +45,42 @@ import {
   resolveLinesBoardContext,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
+  resolveOpeningTreeSelectionId,
   STANDARD_START_FEN_KEY,
   sliceOpeningForest,
 } from './opening-tree.ts';
+
+test('resolveOpeningTreeSelectionId replaces an aggregated browse id with the loaded canonical id', () => {
+  assert.equal(
+    resolveOpeningTreeSelectionId('aggregate-line-id', { id: 'white-canonical-line-id' }),
+    'white-canonical-line-id',
+  );
+  assert.equal(resolveOpeningTreeSelectionId('aggregate-line-id', null), 'aggregate-line-id');
+});
+
+test('openingTreeDetailToSummary preserves outcome rates and precomputed eval', () => {
+  const tree = buildOpeningTrees(
+    [
+      {
+        id: 'game-1',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'],
+        source: 'recent_game',
+        outcome: 'win',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 8, rootPly: 4 },
+  )[0];
+  tree.openingEvalCp = 31;
+
+  const summary = openingTreeDetailToSummary(tree);
+
+  assert.equal(summary.winCount, tree.winCount);
+  assert.equal(summary.lossCount, tree.lossCount);
+  assert.equal(summary.drawCount, tree.drawCount);
+  assert.equal(summary.openingEvalCp, 31);
+});
 
 test('formatOpeningTreeDisplayName strips move suffixes and eco prefixes', () => {
   assert.equal(
@@ -178,20 +212,58 @@ test('buildLearnDrillExpectedFromStep accepts only the drill line move', () => {
   });
 });
 
-test('buildLearnDrillExpectedFromStep does not fall back to the drill path continuation when bestUci is missing', () => {
+test('buildLearnDrillExpectedFromStep falls back to the repertoire primary move when bestUci is missing', () => {
+  const tree = {
+    nodes: [
+      {
+        id: 'after-qe5',
+        fen: 'rnbakb1r/pppp1ppp/5n2/4q3/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 4 4',
+        fenKey: 'after-qe5',
+        ply: 7,
+        sideToMove: 'white',
+        bestUci: null,
+        bestSan: null,
+        evalCp: 0,
+        recentGames: 0,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'edge-be2',
+        fromNodeId: 'after-qe5',
+        toNodeId: 'after-be2',
+        uci: 'f1e2',
+        san: 'Be2',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 0,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 40,
+        isEngineBest: true,
+      },
+    ],
+  };
   const expected = buildLearnDrillExpectedFromStep(
     {
       nodeId: 'after-qe5',
       bestUci: null,
       bestSan: null,
     },
-    {
-      edgeSanFromParent: 'Be2',
-      edgeUciFromParent: 'f1e2',
-    },
+    tree,
   );
 
-  assert.equal(expected, null);
+  assert.deepEqual(expected, {
+    nodeId: 'after-qe5',
+    uci: 'f1e2',
+    san: 'Be2',
+    acceptedUcis: ['f1e2'],
+  });
 });
 
 test('learn drill classification rejects repertoire alternatives at the same node', () => {

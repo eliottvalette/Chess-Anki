@@ -64,6 +64,7 @@ import {
   openingTreeDetailToSummary,
   resolveLinesStudyOpeningTree,
 } from '@/lib/opening-tree';
+import { requestOpeningTreesJson } from '@/lib/opening-trees-client';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
 import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
@@ -445,29 +446,19 @@ export function useLabOrchestrator() {
 
     let cancelled = false;
     let debounceTimer: number | null = null;
-    let fetchController: AbortController | null = null;
     labState.setLinesPositionFilterLoading(true);
+    labState.setOpeningTreeActionError('');
 
     debounceTimer = window.setTimeout(() => {
-      fetchController = new AbortController();
-
       void (async () => {
         try {
-          const response = await fetch(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`, {
-            credentials: 'same-origin',
-            signal: fetchController?.signal,
-          });
-          const payload = (await response.json().catch(() => ({}))) as {
+          const payload = await requestOpeningTreesJson<{
             error?: string;
             tree?: OpeningTreeDetail | null;
-          };
+          }>(`/api/opening-trees?atFenKey=${encodeURIComponent(fenKey)}`);
 
           if (cancelled) {
             return;
-          }
-
-          if (!response.ok) {
-            throw new Error(payload.error ?? `Opening trees request failed: HTTP ${response.status}`);
           }
 
           if (payload.tree) {
@@ -476,11 +467,12 @@ export function useLabOrchestrator() {
             labState.setLinesBrowseOverrideTrees([]);
           }
         } catch (error) {
-          if (cancelled || (error instanceof DOMException && error.name === 'AbortError')) {
+          if (cancelled) {
             return;
           }
 
           labState.setLinesBrowseOverrideTrees([]);
+          labState.setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to filter lines.');
         } finally {
           if (!cancelled) {
             labState.setLinesPositionFilterLoading(false);
@@ -495,8 +487,6 @@ export function useLabOrchestrator() {
       if (debounceTimer != null) {
         window.clearTimeout(debounceTimer);
       }
-
-      fetchController?.abort();
     };
   }, [
     currentFen,
@@ -508,6 +498,7 @@ export function useLabOrchestrator() {
     labState.activeOpeningTree,
     labState.setLinesBrowseOverrideTrees,
     labState.setLinesPositionFilterLoading,
+    labState.setOpeningTreeActionError,
   ]);
 
   const hasLoadedGame = moveHistory.length > 0 && metadata !== null;

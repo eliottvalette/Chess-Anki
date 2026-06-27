@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
 import { buildLichessExplorerHeaders } from '../../lib/lichess-explorer.ts';
 import {
+  backfillTrainNodeBestUciFromRepertoire,
   listOpponentNodesForLichessEnrichment,
   listOpponentNodesNeedingBookEnrichment,
   pruneOpeningTreeDraft,
@@ -489,6 +490,9 @@ export async function buildAndUpsertOpeningTrees({
   });
 
   const inputs = [...lineInputs, ...cardInputs].filter((input) => input.moves.length > 0);
+  const whiteInputs = inputs.filter((input) => input.trainSide === 'white').length;
+  const blackInputs = inputs.filter((input) => input.trainSide === 'black').length;
+  logProgress(`inputs: ${inputs.length} total · white ${whiteInputs} · black ${blackInputs}`);
   const forest = buildFreshOpeningForest(inputs, {
     ownerProfileId,
     targetDepth: DEFAULT_OPENING_TARGET_DEPTH,
@@ -505,6 +509,10 @@ export async function buildAndUpsertOpeningTrees({
     await enrichLichessOpponentMoves(draft, ownerProfileId, lichessApiToken);
     await enrichEngineBestMoves(draft, analyzeBaseUrl, ownerProfileId);
     await extendForcedTrainingContinuations(draft, analyzeBaseUrl, ownerProfileId, lichessApiToken);
+    const backfilledBestUci = backfillTrainNodeBestUciFromRepertoire(draft);
+    if (backfilledBestUci > 0) {
+      logProgress(`  backfilled best_uci from repertoire on ${backfilledBestUci} train nodes`);
+    }
     assertTrainingContinuationsComplete(draft);
     pruneOpeningTreeDraft({
       id: graph.id,
@@ -567,10 +575,10 @@ async function main() {
   }
 
   const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
-    supabase.from('opening_lines').select('id,name,moves').in('deck_id', deckIds),
+    supabase.from('opening_lines').select('id,name,side,moves,outcome').in('deck_id', deckIds),
     supabase
       .from('deck_cards')
-      .select('id,line_name,answer_san,setup_moves,score_swing_cp')
+      .select('id,line_name,side,answer_san,setup_moves,score_swing_cp')
       .in('deck_id', deckIds)
       .eq('source_type', 'recent_game'),
   ]);

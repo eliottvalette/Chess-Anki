@@ -345,21 +345,71 @@ export function buildLearnDrillExpectedFromStep(
     bestUci: string | null;
     bestSan: string | null;
   },
-  _nextStep?: {
-    edgeSanFromParent: string | null;
-    edgeUciFromParent: string | null;
-  } | null,
+  tree?: Pick<OpeningTreeDetail, 'nodes' | 'edges'> | null,
 ): OpeningDrillExpectedMove | null {
-  if (!step.bestUci) {
+  if (step.bestUci) {
+    return {
+      nodeId: step.nodeId,
+      uci: step.bestUci,
+      san: step.bestSan,
+      acceptedUcis: [step.bestUci],
+    };
+  }
+
+  if (!tree) {
+    return null;
+  }
+
+  const accepted = resolveAcceptedTrainMoveUcis(tree, step.nodeId);
+
+  if (!accepted.primaryUci) {
     return null;
   }
 
   return {
     nodeId: step.nodeId,
-    uci: step.bestUci,
-    san: step.bestSan,
-    acceptedUcis: [step.bestUci],
+    uci: accepted.primaryUci,
+    san: accepted.primarySan,
+    acceptedUcis: [accepted.primaryUci],
   };
+}
+
+export function backfillTrainNodeBestUciFromRepertoire(
+  tree: Pick<OpeningTreeDetail, 'nodes' | 'edges'> & { trainSide: OpeningSide },
+): number {
+  let updated = 0;
+
+  for (const node of tree.nodes) {
+    if (node.sideToMove !== tree.trainSide || node.bestUci) {
+      continue;
+    }
+
+    const outgoing = tree.edges.filter((edge) => edge.fromNodeId === node.id && isRepertoireEdge(edge));
+
+    if (outgoing.length === 0) {
+      continue;
+    }
+
+    const ranked = [...outgoing].sort(
+      (left, right) =>
+        Number(right.isEngineBest) - Number(left.isEngineBest) ||
+        right.recentCount - left.recentCount ||
+        right.mastersGames - left.mastersGames ||
+        right.cardCount - left.cardCount ||
+        right.priority - left.priority,
+    );
+    const bestEdge = ranked[0];
+
+    if (!bestEdge) {
+      continue;
+    }
+
+    node.bestUci = bestEdge.uci;
+    node.bestSan = bestEdge.san;
+    updated += 1;
+  }
+
+  return updated;
 }
 
 export function isAcceptedOpeningDrillMove(_fenBefore: string, playedUci: string, acceptedUcis: string[]) {
@@ -2248,22 +2298,16 @@ export function prepareOpeningTreeForLines(tree: OpeningTreeDetail): OpeningTree
   return filterOpeningTreeForDisplay(tree, rootPly);
 }
 
+export function resolveOpeningTreeSelectionId(
+  requestedTreeId: string,
+  loadedTree: Pick<OpeningTreeDetail, 'id'> | null,
+) {
+  return loadedTree?.id ?? requestedTreeId;
+}
+
 export function openingTreeDetailToSummary(tree: OpeningTreeDetail): OpeningTreeSummary {
-  return {
-    id: tree.id,
-    name: tree.name,
-    library: tree.library,
-    rootFenKey: tree.rootFenKey,
-    rootPly: tree.rootPly,
-    rootSan: tree.rootSan,
-    rootUci: tree.rootUci,
-    sourceCount: tree.sourceCount,
-    targetDepth: tree.targetDepth,
-    nodeCount: tree.nodeCount,
-    dueCount: tree.dueCount,
-    masteryScore: tree.masteryScore,
-    updatedAt: tree.updatedAt,
-  };
+  const { edges: _edges, nodes: _nodes, ...summary } = tree;
+  return summary;
 }
 
 export function applyLearnMaxPlyToOpeningTree(tree: OpeningTreeDetail, maxPly: number): OpeningTreeDetail {

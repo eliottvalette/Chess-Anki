@@ -4,21 +4,28 @@ import { Chess } from 'chess.js';
 
 import { buildDynamicCatalogEntries, graphDraftFromRows } from '../../lib/opening-graph.ts';
 import {
+  backfillTrainNodeBestUciFromRepertoire,
   ensureDraftEdge,
-  isRepertoireEdge,
   listOpponentNodesNeedingBookEnrichment,
   normalizeOpeningFen,
   pruneOpeningTreeDraft,
 } from '../../lib/opening-tree.ts';
 import { forestToUpsertRows } from '../../lib/opening-tree-import.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from './env.mjs';
+import {
+  fetchAllOpeningGraphRows,
+  fetchOpeningGraphTableCount,
+  resolveGraphBundleLoadRefusal,
+  resolveStaleSyncRefusal,
+} from './fix-opening-graph-lib.mjs';
 
 const LICHESS_EXPLORER_URL = 'https://explorer.lichess.org/masters';
 const LICHESS_BATCH_SIZE = 80;
 const LICHESS_MAX_ROUNDS = 40;
-const LICHESS_DELAY_MS = 120;
+const DEFAULT_LICHESS_CONCURRENCY = 6;
 const ENGINE_BATCH_SIZE = 120;
 const ENGINE_MAX_ROUNDS = 30;
+const DEFAULT_ENGINE_CONCURRENCY = 4;
 const CATALOG_BROWSE_PLIES = [2, 4, 6, 8];
 
 function parseArgs(argv) {
@@ -29,6 +36,8 @@ function parseArgs(argv) {
     skipEngine: false,
     skipLichess: false,
     prune: false,
+    lichessConcurrency: DEFAULT_LICHESS_CONCURRENCY,
+    engineConcurrency: DEFAULT_ENGINE_CONCURRENCY,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -63,16 +72,44 @@ function parseArgs(argv) {
     if (token === '--graph') {
       options.graphId = argv[index + 1] ?? '';
       index += 1;
+      continue;
+    }
+
+    if (token === '--lichess-concurrency') {
+      options.lichessConcurrency = Math.max(1, Number(argv[index + 1]) || DEFAULT_LICHESS_CONCURRENCY);
+      index += 1;
+      continue;
+    }
+
+    if (token === '--engine-concurrency') {
+      options.engineConcurrency = Math.max(1, Number(argv[index + 1]) || DEFAULT_ENGINE_CONCURRENCY);
+      index += 1;
     }
   }
 
   return options;
 }
 
-function sleep(milliseconds) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+async function runWithConcurrency(items, concurrency, task) {
+  if (items.length === 0) {
+    return [];
+  }
+
+  const results = Array.from({ length: items.length });
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < items.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await task(items[currentIndex], currentIndex);
+    }
+  }
+
+  const workerCount = Math.min(concurrency, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+
+  return results;
 }
 
 async function fetchLichessOpeningExplorer(fen) {
@@ -125,23 +162,6 @@ function graphAsTreeDraft(graph) {
   };
 }
 
-function repertoireOutgoing(graph, nodeId) {
-  return graph.edges.filter((edge) => edge.fromNodeId === nodeId && isRepertoireEdge(edge));
-}
-
-function pickBestRepertoireEdge(graph, node, outgoing) {
-  const ranked = [...outgoing].sort(
-    (left, right) =>
-      Number(right.isEngineBest) - Number(left.isEngineBest) ||
-      right.recentCount - left.recentCount ||
-      right.mastersGames - left.mastersGames ||
-      right.cardCount - left.cardCount ||
-      right.priority - left.priority,
-  );
-
-  return ranked[0] ?? null;
-}
-
 function removeOrphanEdges(graph) {
   const nodeIds = new Set(graph.nodes.map((node) => node.id));
   const before = graph.edges.length;
@@ -150,32 +170,29 @@ function removeOrphanEdges(graph) {
   return before - graph.edges.length;
 }
 
-function backfillBestUciFromRepertoire(graph) {
-  let updated = 0;
+async function enrichLichessNode(draft, node) {
+  const explorer = await fetchLichessOpeningExplorer(node.fen);
+  const moves = (explorer.moves ?? [])
+    .map((move) => ({
+      uci: move.uci,
+      games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0),
+    }))
+    .filter((move) => move.games > 0)
+    .sort((left, right) => right.games - left.games)
+    .slice(0, 4);
 
-  for (const node of graph.nodes) {
-    if (node.sideToMove !== graph.trainSide || node.bestUci) {
-      continue;
-    }
-
-    const outgoing = repertoireOutgoing(graph, node.id);
-    const bestEdge = pickBestRepertoireEdge(graph, node, outgoing);
-
-    if (!bestEdge) {
-      continue;
-    }
-
-    node.bestUci = bestEdge.uci;
-    node.bestSan = bestEdge.san;
-    updated += 1;
+  for (const move of moves) {
+    ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
+      mastersGames: move.games,
+      priority: Math.log10(move.games + 1) * 4,
+    });
   }
-
-  return updated;
 }
 
-async function enrichLichessBatch(graph, batchSize) {
+async function enrichLichessBatch(graph, batchSize, attemptedNodeIds, concurrency) {
   const draft = graphAsTreeDraft(graph);
   const opponentNodes = listOpponentNodesNeedingBookEnrichment(draft)
+    .filter((node) => !attemptedNodeIds.has(node.id))
     .sort((left, right) => left.ply - right.ply)
     .slice(0, batchSize);
 
@@ -183,40 +200,74 @@ async function enrichLichessBatch(graph, batchSize) {
     return { processed: 0, newEdges: 0 };
   }
 
-  const beforeEdgeCount = graph.edges.length;
+  const beforeEdgeCount = draft.edges.length;
 
-  for (const node of opponentNodes) {
+  await runWithConcurrency(opponentNodes, concurrency, async (node) => {
     try {
-      const explorer = await fetchLichessOpeningExplorer(node.fen);
-      const moves = (explorer.moves ?? [])
-        .map((move) => ({
-          uci: move.uci,
-          games: Number(move.white ?? 0) + Number(move.draws ?? 0) + Number(move.black ?? 0),
-        }))
-        .filter((move) => move.games > 0)
-        .sort((left, right) => right.games - left.games)
-        .slice(0, 4);
-
-      for (const move of moves) {
-        ensureDraftEdge(draft, node, move.uci, 'lichess_masters', {
-          mastersGames: move.games,
-          priority: Math.log10(move.games + 1) * 4,
-        });
-      }
+      await enrichLichessNode(draft, node);
     } catch {
       // Lichess is opportunistic.
+    } finally {
+      attemptedNodeIds.add(node.id);
     }
-
-    await sleep(LICHESS_DELAY_MS);
-  }
+  });
 
   return {
     processed: opponentNodes.length,
-    newEdges: graph.edges.length - beforeEdgeCount,
+    newEdges: draft.edges.length - beforeEdgeCount,
   };
 }
 
-async function enrichEngineBatch(graph, batchSize, analyzeBaseUrl) {
+async function enrichEngineNode(graph, draft, node, analyzeBaseUrl) {
+  const response = await fetch(`${analyzeBaseUrl}/api/analyze-position`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ fen: node.fen, depth: 14, multipv: 1 }),
+  });
+
+  if (!response.ok) {
+    return false;
+  }
+
+  const analysis = await response.json();
+
+  if (!analysis?.bestMove) {
+    return false;
+  }
+
+  node.bestUci = analysis.bestMove;
+  node.bestSan = moveSanFromFen(node.fen, analysis.bestMove) ?? analysis.bestMove;
+  node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
+
+  ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
+    isEngineBest: true,
+    priority: 40,
+  });
+
+  const targetNode = graph.nodes.find((candidate) => {
+    const chess = new Chess(node.fen);
+
+    try {
+      chess.move({
+        from: analysis.bestMove.slice(0, 2),
+        to: analysis.bestMove.slice(2, 4),
+        ...(analysis.bestMove[4] ? { promotion: analysis.bestMove[4] } : {}),
+      });
+    } catch {
+      return false;
+    }
+
+    return candidate.fenKey === normalizeOpeningFen(chess.fen());
+  });
+
+  if (targetNode && targetNode.evalCp == null && analysis.lines?.[0]?.whitePerspective?.type === 'cp') {
+    targetNode.evalCp = analysis.lines[0].whitePerspective.value;
+  }
+
+  return true;
+}
+
+async function enrichEngineBatch(graph, batchSize, analyzeBaseUrl, concurrency) {
   const candidates = graph.nodes
     .filter((node) => node.sideToMove === graph.trainSide && !node.bestUci)
     .sort((left, right) => left.ply - right.ply)
@@ -227,62 +278,15 @@ async function enrichEngineBatch(graph, batchSize, analyzeBaseUrl) {
   }
 
   const draft = graphAsTreeDraft(graph);
-  let updated = 0;
-
-  for (const node of candidates) {
+  const results = await runWithConcurrency(candidates, concurrency, async (node) => {
     try {
-      const response = await fetch(`${analyzeBaseUrl}/api/analyze-position`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ fen: node.fen, depth: 14, multipv: 1 }),
-      });
-
-      if (!response.ok) {
-        continue;
-      }
-
-      const analysis = await response.json();
-
-      if (!analysis?.bestMove) {
-        continue;
-      }
-
-      node.bestUci = analysis.bestMove;
-      node.bestSan = moveSanFromFen(node.fen, analysis.bestMove) ?? analysis.bestMove;
-      node.evalCp = analysis.whitePerspective?.type === 'cp' ? analysis.whitePerspective.value : null;
-
-      ensureDraftEdge(draft, node, analysis.bestMove, 'engine_best', {
-        isEngineBest: true,
-        priority: 40,
-      });
-
-      const targetNode = graph.nodes.find((candidate) => {
-        const chess = new Chess(node.fen);
-
-        try {
-          chess.move({
-            from: analysis.bestMove.slice(0, 2),
-            to: analysis.bestMove.slice(2, 4),
-            ...(analysis.bestMove[4] ? { promotion: analysis.bestMove[4] } : {}),
-          });
-        } catch {
-          return false;
-        }
-
-        return candidate.fenKey === normalizeOpeningFen(chess.fen());
-      });
-
-      if (targetNode && targetNode.evalCp == null && analysis.lines?.[0]?.whitePerspective?.type === 'cp') {
-        targetNode.evalCp = analysis.lines[0].whitePerspective.value;
-      }
-
-      updated += 1;
+      return await enrichEngineNode(graph, draft, node, analyzeBaseUrl);
     } catch {
-      // Keep going on single-position failures.
+      return false;
     }
-  }
+  });
 
-  return updated;
+  return results.filter(Boolean).length;
 }
 
 function rebuildCatalogs(graph) {
@@ -311,17 +315,20 @@ function pruneGraph(graph) {
   };
 }
 
-async function deleteStaleRows(supabase, graphId, nodeIds, edgeIds) {
-  const { data: edgeRows, error: edgeReadError } = await supabase
-    .from('opening_edges')
-    .select('id')
-    .eq('graph_id', graphId);
+async function deleteStaleRows(supabase, graphId, nodeIds, edgeIds, loadedCounts) {
+  const databaseNodeCount = await fetchOpeningGraphTableCount(supabase, 'opening_nodes', graphId);
+  const databaseEdgeCount = await fetchOpeningGraphTableCount(supabase, 'opening_edges', graphId);
+  const refusal = resolveStaleSyncRefusal(graphId, loadedCounts, {
+    nodes: databaseNodeCount,
+    edges: databaseEdgeCount,
+  });
 
-  if (edgeReadError) {
-    throw new Error(edgeReadError.message);
+  if (refusal) {
+    throw new Error(refusal);
   }
 
-  const staleEdgeIds = (edgeRows ?? []).map((row) => String(row.id)).filter((edgeId) => !edgeIds.has(edgeId));
+  const edgeRows = await fetchAllOpeningGraphRows(supabase, 'opening_edges', [graphId]);
+  const staleEdgeIds = edgeRows.map((row) => String(row.id)).filter((edgeId) => !edgeIds.has(edgeId));
 
   if (staleEdgeIds.length > 0) {
     const { error } = await supabase.from('opening_edges').delete().in('id', staleEdgeIds);
@@ -331,16 +338,8 @@ async function deleteStaleRows(supabase, graphId, nodeIds, edgeIds) {
     }
   }
 
-  const { data: nodeRows, error: nodeReadError } = await supabase
-    .from('opening_nodes')
-    .select('id')
-    .eq('graph_id', graphId);
-
-  if (nodeReadError) {
-    throw new Error(nodeReadError.message);
-  }
-
-  const staleNodeIds = (nodeRows ?? []).map((row) => String(row.id)).filter((nodeId) => !nodeIds.has(nodeId));
+  const nodeRows = await fetchAllOpeningGraphRows(supabase, 'opening_nodes', [graphId]);
+  const staleNodeIds = nodeRows.map((row) => String(row.id)).filter((nodeId) => !nodeIds.has(nodeId));
 
   if (staleNodeIds.length > 0) {
     const { error } = await supabase.from('opening_nodes').delete().in('id', staleNodeIds);
@@ -439,23 +438,11 @@ async function loadBundles(supabase, profileId, graphId) {
     return [];
   }
 
-  const [
-    { data: nodeRows, error: nodeError },
-    { data: edgeRows, error: edgeError },
-    { data: catalogRows, error: catalogError },
-  ] = await Promise.all([
-    supabase.from('opening_nodes').select('*').in('graph_id', graphIds),
-    supabase.from('opening_edges').select('*').in('graph_id', graphIds),
+  const [nodeRows, edgeRows, { data: catalogRows, error: catalogError }] = await Promise.all([
+    fetchAllOpeningGraphRows(supabase, 'opening_nodes', graphIds),
+    fetchAllOpeningGraphRows(supabase, 'opening_edges', graphIds),
     supabase.from('opening_catalog').select('*').eq('owner_profile_id', profileId),
   ]);
-
-  if (nodeError) {
-    throw new Error(nodeError.message);
-  }
-
-  if (edgeError) {
-    throw new Error(edgeError.message);
-  }
 
   if (catalogError) {
     throw new Error(catalogError.message);
@@ -463,14 +450,17 @@ async function loadBundles(supabase, profileId, graphId) {
 
   return graphs.map((graphRow) => {
     const currentGraphId = String(graphRow.id);
+    const graphNodes = nodeRows.filter((row) => String(row.graph_id) === currentGraphId);
+    const graphEdges = edgeRows.filter((row) => String(row.graph_id) === currentGraphId);
+    const loadRefusal = resolveGraphBundleLoadRefusal(graphRow, graphNodes.length, graphEdges.length);
+
+    if (loadRefusal) {
+      throw new Error(loadRefusal);
+    }
 
     return {
       graphRow,
-      graph: graphDraftFromRows(
-        graphRow,
-        (nodeRows ?? []).filter((row) => String(row.graph_id) === currentGraphId),
-        (edgeRows ?? []).filter((row) => String(row.graph_id) === currentGraphId),
-      ),
+      graph: graphDraftFromRows(graphRow, graphNodes, graphEdges),
       catalogRows: (catalogRows ?? []).filter((row) => String(row.graph_id) === currentGraphId),
     };
   });
@@ -500,13 +490,20 @@ async function fixGraph(graph, options, analyzeBaseUrl) {
   );
 
   stats.orphanEdgesRemoved = removeOrphanEdges(graph);
-  stats.bestUciBackfilled = backfillBestUciFromRepertoire(graph);
+  stats.bestUciBackfilled = backfillTrainNodeBestUciFromRepertoire(graph);
   console.log(`  orphan edges removed: ${stats.orphanEdgesRemoved}`);
   console.log(`  best_uci backfill (repertoire): ${stats.bestUciBackfilled}`);
 
   if (!options.skipLichess) {
+    const attemptedLichessNodeIds = new Set();
+
     for (let round = 0; round < LICHESS_MAX_ROUNDS; round += 1) {
-      const batch = await enrichLichessBatch(graph, LICHESS_BATCH_SIZE);
+      const batch = await enrichLichessBatch(
+        graph,
+        LICHESS_BATCH_SIZE,
+        attemptedLichessNodeIds,
+        options.lichessConcurrency,
+      );
 
       if (batch.processed === 0) {
         break;
@@ -515,16 +512,20 @@ async function fixGraph(graph, options, analyzeBaseUrl) {
       stats.lichessRounds += 1;
       stats.lichessNodes += batch.processed;
       stats.lichessNewEdges += batch.newEdges;
-      stats.bestUciBackfilled += backfillBestUciFromRepertoire(graph);
+      stats.bestUciBackfilled += backfillTrainNodeBestUciFromRepertoire(graph);
       console.log(
         `  lichess round ${round + 1}: nodes ${batch.processed} · new edges ${batch.newEdges} · total edges ${graph.edges.length}`,
       );
+
+      if (batch.newEdges === 0) {
+        break;
+      }
     }
   }
 
   if (!options.skipEngine) {
     for (let round = 0; round < ENGINE_MAX_ROUNDS; round += 1) {
-      const updated = await enrichEngineBatch(graph, ENGINE_BATCH_SIZE, analyzeBaseUrl);
+      const updated = await enrichEngineBatch(graph, ENGINE_BATCH_SIZE, analyzeBaseUrl, options.engineConcurrency);
 
       if (updated === 0) {
         break;
@@ -532,7 +533,7 @@ async function fixGraph(graph, options, analyzeBaseUrl) {
 
       stats.engineRounds += 1;
       stats.engineNodes += updated;
-      stats.bestUciBackfilled += backfillBestUciFromRepertoire(graph);
+      stats.bestUciBackfilled += backfillTrainNodeBestUciFromRepertoire(graph);
       console.log(`  engine round ${round + 1}: best_uci set on ${updated} nodes`);
     }
   }
@@ -540,7 +541,7 @@ async function fixGraph(graph, options, analyzeBaseUrl) {
   const pruneStats = options.prune ? pruneGraph(graph) : { removedNodes: 0, removedEdges: 0 };
   stats.prunedNodes = pruneStats.removedNodes;
   stats.prunedEdges = pruneStats.removedEdges;
-  stats.bestUciBackfilled += backfillBestUciFromRepertoire(graph);
+  stats.bestUciBackfilled += backfillTrainNodeBestUciFromRepertoire(graph);
   stats.nodes = graph.nodes.length;
   stats.edges = graph.edges.length;
 
@@ -587,6 +588,7 @@ export async function runOpeningGraphFix(options = {}) {
   const graphStats = [];
 
   console.log(`analyze API: ${analyzeBaseUrl}`);
+  console.log(`concurrency: lichess ${options.lichessConcurrency} · engine ${options.engineConcurrency}`);
 
   for (const bundle of bundles) {
     const stats = await fixGraph(bundle.graph, options, analyzeBaseUrl);
@@ -608,7 +610,10 @@ export async function runOpeningGraphFix(options = {}) {
   for (const graph of graphs) {
     const nodeIds = new Set(graph.nodes.map((node) => node.id));
     const edgeIds = new Set(graph.edges.map((edge) => edge.id));
-    const deleted = await deleteStaleRows(supabase, graph.id, nodeIds, edgeIds);
+    const deleted = await deleteStaleRows(supabase, graph.id, nodeIds, edgeIds, {
+      nodes: graph.nodes.length,
+      edges: graph.edges.length,
+    });
     console.log(
       `  synced ${graph.id}: deleted ${deleted.deletedEdges} stale edges · ${deleted.deletedNodes} stale nodes`,
     );

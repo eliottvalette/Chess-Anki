@@ -8,7 +8,7 @@ const OPENING_TREES_REQUEST_TIMEOUT_MS = 12_000;
 export async function requestOpeningTreesJson<Payload>(url: string): Promise<Payload> {
   const result = await openingTreesRequestCache.get(url, async () => {
     const controller = new AbortController();
-    const timer = window.setTimeout(() => controller.abort(), OPENING_TREES_REQUEST_TIMEOUT_MS);
+    const timer = globalThis.setTimeout(() => controller.abort(), OPENING_TREES_REQUEST_TIMEOUT_MS);
 
     let response: Response;
 
@@ -21,7 +21,7 @@ export async function requestOpeningTreesJson<Payload>(url: string): Promise<Pay
 
       throw error;
     } finally {
-      window.clearTimeout(timer);
+      globalThis.clearTimeout(timer);
     }
 
     const payload = (await response.json().catch(() => ({}))) as { error?: string };

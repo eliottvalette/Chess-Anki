@@ -8,12 +8,14 @@ import { extractTag, fetchArchives, fetchRecentGames, inferOutcome, type RawChes
 import { LINES_EARLY_OPENING_MAX_PLY } from '@/lib/lines-board-eval';
 import { fetchLichessOpeningExplorer } from '@/lib/opening-book';
 import {
+  attachPrecomputedOpeningEvals,
   buildDynamicCatalogEntries,
   buildRecentDynamicBrowseSummaries,
   catalogDraftFromRow,
   findDynamicCatalogEntry,
   findDynamicCatalogEntryById,
   graphDraftFromRows,
+  hasOpeningGraphOutcomeCoverage,
   type OpeningGraphDraft,
   projectCatalogSubgraph,
   projectTreeFromFenKey,
@@ -330,7 +332,7 @@ async function loadDeltaInputs(
   }
 
   const [{ data: lines, error: linesError }, { data: cards, error: cardsError }] = await Promise.all([
-    supabase.from('opening_lines').select('id,name,side,moves').in('deck_id', deckIds),
+    supabase.from('opening_lines').select('id,name,side,moves,outcome').in('deck_id', deckIds),
     supabase
       .from('deck_cards')
       .select('id,line_name,eco,side,answer_san,context,setup_moves,source_type,score_swing_cp')
@@ -858,7 +860,7 @@ async function fetchRecentDynamicTreeSummaries(
 ): Promise<OpeningTreeSummary[]> {
   const persisted = await loadOwnerGraphForest(supabase, profile.id);
 
-  if (persisted.graphs.length > 0) {
+  if (persisted.graphs.length > 0 && hasOpeningGraphOutcomeCoverage(persisted.graphs)) {
     const progressMap = new Map(
       [...persisted.progress.entries()].map(([nodeId, entry]) => [
         nodeId,
@@ -875,9 +877,7 @@ async function fetchRecentDynamicTreeSummaries(
       return total + (rootNode?.recentGames ?? 0) + (rootNode?.cardCount ?? 0);
     }, 0);
 
-    return attachRecentLineEvals(
-      buildRecentDynamicBrowseSummaries(persisted.graphs, browsePly, progressMap, totalGames),
-    );
+    return buildRecentDynamicBrowseSummaries(persisted.graphs, browsePly, progressMap, totalGames);
   }
 
   const [{ graphs, totalGames }, progress] = await Promise.all([
@@ -896,7 +896,13 @@ async function fetchRecentDynamicTreeSummaries(
     ]),
   );
 
-  return attachRecentLineEvals(buildRecentDynamicBrowseSummaries(graphs, browsePly, progressMap, totalGames));
+  const summaries = buildRecentDynamicBrowseSummaries(graphs, browsePly, progressMap, totalGames);
+
+  if (persisted.graphs.length > 0) {
+    return attachPrecomputedOpeningEvals(summaries, persisted.graphs);
+  }
+
+  return attachRecentLineEvals(summaries);
 }
 
 async function attachRecentLineEvals(summaries: OpeningTreeSummary[]): Promise<OpeningTreeSummary[]> {

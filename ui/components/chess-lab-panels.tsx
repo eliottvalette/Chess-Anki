@@ -111,6 +111,7 @@ import {
   getMasteryGrade,
   type MasteryGrade,
 } from '@/lib/deck-progress';
+import { formatLinesLoadingStatus, type LinesLoadingKind } from '@/lib/lines-loading';
 import {
   countReviewDueNodes,
   filterOpeningTreeSummaries,
@@ -202,6 +203,34 @@ export function DrillFeedbackBlock({ deckFeedback }: { deckFeedback: DeckFeedbac
         {deckFeedback.evalLossCp != null ? ` · loss ${formatCpSwing(deckFeedback.evalLossCp)}` : ''}
       </span>
       {!deckFeedback.pending && !deckFeedback.correct ? <span>← undo to retry</span> : null}
+    </div>
+  );
+}
+
+function LinesLoadingIndicator({ browsePly, kind }: { browsePly: number; kind: LinesLoadingKind }) {
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [browsePly, kind]);
+
+  return (
+    <div
+      aria-live="polite"
+      className="relative flex min-h-[38px] items-center gap-2.5 overflow-hidden rounded-md border border-[rgba(168,216,160,0.16)] bg-[rgba(168,216,160,0.055)] px-3 text-[12px] text-(--text-soft)"
+      role="status"
+    >
+      <span
+        aria-hidden="true"
+        className="size-3.5 shrink-0 animate-spin rounded-full border-2 border-[rgba(168,216,160,0.22)] border-t-[#A8D8A0]"
+      />
+      <span>{formatLinesLoadingStatus({ kind, browsePly, elapsedSeconds })}</span>
+      <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px animate-pulse bg-[rgba(168,216,160,0.72)]" />
     </div>
   );
 }
@@ -326,6 +355,13 @@ export const LinesPanel = memo(function LinesPanel({
   const whiteOutcomeBar = formatSideOutcomeBar(activeOutcomeSource, 'white');
   const blackOutcomeBar = formatSideOutcomeBar(activeOutcomeSource, 'black');
   const showNextLearnBranch = hasNextLearnBranch && learnBranchComplete && !inSession;
+  const loadingKind: LinesLoadingKind | null = positionFilterLoading
+    ? 'position'
+    : actionLoading
+      ? 'detail'
+      : loading
+        ? 'catalog'
+        : null;
   const [copyDebugLabel, setCopyDebugLabel] = useState('Copy');
 
   const handleCopyStudyDebug = async () => {
@@ -415,15 +451,21 @@ export const LinesPanel = memo(function LinesPanel({
             <h2 className="m-0 min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[19px] font-normal leading-[1.15] tracking-normal text-(--text)">
               Lines
             </h2>
-            {loading || positionFilterLoading || actionLoading ? (
-              <span className="text-sm leading-[1.45] text-(--text-muted)">loading</span>
-            ) : null}
           </div>
+          {loadingKind ? (
+            <LinesLoadingIndicator
+              browsePly={minForcedPlies}
+              key={`${loadingKind}:${minForcedPlies}`}
+              kind={loadingKind}
+            />
+          ) : null}
           {actionError ? <p className="m-0 text-sm leading-[1.45] text-[#E17878]">{actionError}</p> : null}
           {catalogTrees.length === 0 ? (
-            <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
-              Import your recent games to build opening graphs, then browse them at any ply depth.
-            </p>
+            loadingKind ? null : (
+              <p className="m-0 text-sm leading-[1.45] text-(--text-muted)">
+                Import your recent games to build opening graphs, then browse them at any ply depth.
+              </p>
+            )
           ) : (
             <div className="flex min-h-0 flex-col gap-3.5 overflow-y-auto overflow-x-hidden pr-[3px] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {browseFilters}

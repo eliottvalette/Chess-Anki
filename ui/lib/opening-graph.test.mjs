@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  attachPrecomputedOpeningEvals,
   buildCatalogEntries,
   buildDynamicCatalogEntries,
   buildOpeningGraphForest,
@@ -10,6 +11,7 @@ import {
   buildRecentDynamicBrowseSummaries,
   findDynamicCatalogEntry,
   findDynamicCatalogEntryById,
+  hasOpeningGraphOutcomeCoverage,
   mergeOpeningGraphDraft,
   OPENING_CATALOG_PLY,
   projectCatalogSubgraph,
@@ -450,6 +452,86 @@ test('buildRecentDynamicBrowseSummaries aggregates matching white and black game
     findDynamicCatalogEntry(forest.graphs, summaries[0].id, 4) ??
     findDynamicCatalogEntryById(forest.graphs, summaries[0].id);
   assert.ok(detailMatch);
+});
+
+test('buildRecentDynamicBrowseSummaries exposes the precomputed eval at the requested ply', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'white-game',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+        outcome: 'win',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  const graph = forest.graphs[0];
+  assert.ok(graph);
+  const browseNode = graph.nodes.find((node) => node.ply === 4);
+  assert.ok(browseNode);
+  browseNode.evalCp = 37;
+
+  const summaries = buildRecentDynamicBrowseSummaries(forest.graphs, 4, new Map(), 1);
+
+  assert.equal(summaries.length, 1);
+  assert.equal(summaries[0].openingEvalCp, 37);
+});
+
+test('hasOpeningGraphOutcomeCoverage rejects legacy graphs without root outcomes', () => {
+  const forest = buildOpeningGraphForest(
+    [
+      {
+        id: 'white-game',
+        name: 'Italian',
+        trainSide: 'white',
+        moves: FOUR_KNIGHTS,
+        source: 'recent_game',
+        outcome: 'win',
+      },
+    ],
+    { ownerProfileId: 'profile-1', targetDepth: 12, catalogPly: 4 },
+  );
+  assert.equal(hasOpeningGraphOutcomeCoverage(forest.graphs), true);
+
+  const root = forest.graphs[0].nodes.find((node) => node.ply === 0);
+  assert.ok(root);
+  root.winCount = 0;
+  root.lossCount = 0;
+  root.drawCount = 0;
+
+  assert.equal(hasOpeningGraphOutcomeCoverage(forest.graphs), false);
+});
+
+test('attachPrecomputedOpeningEvals keeps fallback win rates and restores persisted evals', () => {
+  const summaries = [
+    {
+      id: 'dynamic-line',
+      name: 'Italian',
+      library: 'e4',
+      rootFenKey: 'shared-fen',
+      rootPly: 4,
+      rootSan: ['e4', 'e5', 'Nf3', 'Nc6'],
+      rootUci: ['e2e4', 'e7e5', 'g1f3', 'b8c6'],
+      sourceCount: 2,
+      targetDepth: 22,
+      nodeCount: 3,
+      dueCount: 0,
+      masteryScore: 0,
+      winCount: 1,
+      lossCount: 1,
+      drawCount: 0,
+    },
+  ];
+  const graphs = [{ nodes: [{ fenKey: 'shared-fen', evalCp: 42 }] }];
+
+  const decorated = attachPrecomputedOpeningEvals(summaries, graphs);
+
+  assert.equal(decorated[0].winCount, 1);
+  assert.equal(decorated[0].lossCount, 1);
+  assert.equal(decorated[0].openingEvalCp, 42);
 });
 
 test('projectTreeFromFenKey projects the continuation tree from a played position', () => {

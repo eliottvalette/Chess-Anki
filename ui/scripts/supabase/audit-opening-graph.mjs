@@ -19,6 +19,7 @@ import {
   pickLearnBranch,
 } from '../../lib/opening-tree.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from './env.mjs';
+import { fetchAllOpeningGraphRows } from './fix-opening-graph-lib.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 
@@ -209,7 +210,7 @@ function auditLearnPath(tree, trainSide) {
         continue;
       }
 
-      const expected = buildLearnDrillExpectedFromStep(step, nextStep);
+      const expected = buildLearnDrillExpectedFromStep(step, tree);
 
       if (!expected) {
         blockers.push({
@@ -418,23 +419,11 @@ export async function runOpeningGraphAudit(options = {}) {
     throw new Error('No opening graphs found for audit.');
   }
 
-  const [
-    { data: nodeRows, error: nodeError },
-    { data: edgeRows, error: edgeError },
-    { data: catalogRows, error: catalogError },
-  ] = await Promise.all([
-    supabase.from('opening_nodes').select('*').in('graph_id', graphIds),
-    supabase.from('opening_edges').select('*').in('graph_id', graphIds),
+  const [nodeRows, edgeRows, { data: catalogRows, error: catalogError }] = await Promise.all([
+    fetchAllOpeningGraphRows(supabase, 'opening_nodes', graphIds),
+    fetchAllOpeningGraphRows(supabase, 'opening_edges', graphIds),
     supabase.from('opening_catalog').select('*').in('graph_id', graphIds),
   ]);
-
-  if (nodeError) {
-    throw new Error(nodeError.message);
-  }
-
-  if (edgeError) {
-    throw new Error(edgeError.message);
-  }
 
   if (catalogError) {
     throw new Error(catalogError.message);
@@ -442,7 +431,7 @@ export async function runOpeningGraphAudit(options = {}) {
 
   const nodesByGraph = new Map();
 
-  for (const row of nodeRows ?? []) {
+  for (const row of nodeRows) {
     const graphId = String(row.graph_id);
     const bucket = nodesByGraph.get(graphId) ?? [];
     bucket.push(row);
@@ -451,7 +440,7 @@ export async function runOpeningGraphAudit(options = {}) {
 
   const edgesByGraph = new Map();
 
-  for (const row of edgeRows ?? []) {
+  for (const row of edgeRows) {
     const graphId = String(row.graph_id);
     const bucket = edgesByGraph.get(graphId) ?? [];
     bucket.push(row);

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { Chess } from 'chess.js';
 import { DETERMINISTIC_ANALYSIS_PROFILE } from '../../lib/analysis-profile.ts';
+import { inferOutcome } from '../../lib/chesscom.ts';
 import { loadLocalEnv, requireAdminKey, requireEnv } from '../supabase/env.mjs';
 import { extractTag, fetchArchives, fetchRecentGames } from './api.mjs';
 import { dedupeTrainingCards, isMoveInOpeningBook, qualifiesAsLineRootMistake } from './deck-mistake-filter.mjs';

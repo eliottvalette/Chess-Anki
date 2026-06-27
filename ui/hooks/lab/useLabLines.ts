@@ -44,6 +44,7 @@ import {
   resolveCanonicalRootNode,
   resolveLinesBoardContext,
   resolveLinesStudyOpeningTree,
+  resolveOpeningTreeSelectionId,
   resolveReviewAdvance,
 } from '@/lib/opening-tree';
 import { invalidateOpeningTreesClientCache, requestOpeningTreesJson } from '@/lib/opening-trees-client';
@@ -166,6 +167,7 @@ export function useLabLines(
 
   const drillTimeoutRef = useRef<number | null>(null);
   const learnSourceTreeRef = useRef<OpeningTreeDetail | null>(null);
+  const openingTreesRequestIdRef = useRef(0);
   const openingTreeDetailRequestIdRef = useRef(0);
 
   const cancelDrillOpponentMove = useCallback(() => {
@@ -407,6 +409,9 @@ export function useLabLines(
           return null;
         }
 
+        if (displayTree) {
+          setSelectedOpeningTreeId(resolveOpeningTreeSelectionId(treeId, displayTree));
+        }
         setActiveOpeningTree(displayTree);
 
         if (displayTree && options.syncBoard) {
@@ -447,10 +452,12 @@ export function useLabLines(
       setOpeningDrillExpected,
       setOpeningTreeActionError,
       setOpeningTreeActionLoading,
+      setSelectedOpeningTreeId,
     ],
   );
 
   const loadOpeningTrees = useCallback(async () => {
+    const requestId = ++openingTreesRequestIdRef.current;
     setOpeningTreesLoading(true);
     setOpeningTreeActionError('');
 
@@ -464,13 +471,20 @@ export function useLabLines(
 
       const payload = await requestOpeningTreesJson<OpeningTreesPayload>(`/api/opening-trees?${params.toString()}`);
 
+      if (openingTreesRequestIdRef.current !== requestId) {
+        return;
+      }
+
       const nextTrees = payload.trees ?? [];
       setOpeningTrees(nextTrees);
     } catch (error) {
-      setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
-      setOpeningTrees([]);
+      if (openingTreesRequestIdRef.current === requestId) {
+        setOpeningTreeActionError(error instanceof Error ? error.message : 'Unable to load opening trees.');
+      }
     } finally {
-      setOpeningTreesLoading(false);
+      if (openingTreesRequestIdRef.current === requestId) {
+        setOpeningTreesLoading(false);
+      }
     }
   }, [chesscomUsername, minForcedPlies, setOpeningTreeActionError, setOpeningTrees, setOpeningTreesLoading]);
 
@@ -698,7 +712,7 @@ export function useLabLines(
       if (step.isTrainTurn) {
         const drillExpected =
           linesStudyMode === 'learn'
-            ? buildLearnDrillExpectedFromStep(step, path[stepIndex + 1] ?? null)
+            ? buildLearnDrillExpectedFromStep(step, activeOpeningTree)
             : activeOpeningTree
               ? buildOpeningDrillExpected(activeOpeningTree, step.nodeId)
               : step.bestUci
@@ -1518,10 +1532,6 @@ export function useLabLines(
       if (keepBoard && boardContext.historyIndex !== historyIndex) {
         setHistoryIndex(boardContext.historyIndex);
       }
-
-      if (!keepBoard) {
-        loadOpeningTreeRootOnBoard(tree);
-      }
     },
     [
       cancelDrillOpponentMove,
@@ -1535,7 +1545,6 @@ export function useLabLines(
       linesBoardFilterPreviewKeyRef,
       minForcedPlies,
       loadOpeningTreeDetail,
-      loadOpeningTreeRootOnBoard,
       moveHistory,
       openingTrees,
       quitLinesSession,

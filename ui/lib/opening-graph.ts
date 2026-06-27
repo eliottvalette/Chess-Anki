@@ -574,6 +574,42 @@ export function buildRecentDynamicBrowseSummaries(
     .sort((left, right) => right.sourceCount - left.sourceCount || left.name.localeCompare(right.name));
 }
 
+export function hasOpeningGraphOutcomeCoverage(
+  graphs: ReadonlyArray<{
+    nodes: ReadonlyArray<Pick<OpeningNodeDraft, 'drawCount' | 'lossCount' | 'ply' | 'recentGames' | 'winCount'>>;
+  }>,
+) {
+  return graphs.every((graph) => {
+    const root = graph.nodes.find((node) => node.ply === 0);
+
+    if (!root || root.recentGames <= 0) {
+      return true;
+    }
+
+    return (root.winCount ?? 0) + (root.lossCount ?? 0) + (root.drawCount ?? 0) > 0;
+  });
+}
+
+export function attachPrecomputedOpeningEvals(
+  summaries: OpeningTreeSummary[],
+  graphs: ReadonlyArray<{ nodes: ReadonlyArray<Pick<OpeningNodeDraft, 'evalCp' | 'fenKey'>> }>,
+) {
+  const evalByFenKey = new Map<string, number>();
+
+  for (const graph of graphs) {
+    for (const node of graph.nodes) {
+      if (node.evalCp != null && !evalByFenKey.has(node.fenKey)) {
+        evalByFenKey.set(node.fenKey, node.evalCp);
+      }
+    }
+  }
+
+  return summaries.map((summary) => ({
+    ...summary,
+    openingEvalCp: evalByFenKey.get(summary.rootFenKey) ?? summary.openingEvalCp ?? null,
+  }));
+}
+
 export function findDynamicCatalogEntry(
   graphs: OpeningGraphDraft[],
   treeId: string,
@@ -1255,6 +1291,7 @@ export function catalogToSummary(
   graphEdges: OpeningEdgeDraft[] | OpeningTreeEdge[],
 ): OpeningTreeSummary {
   const subgraph = projectCatalogSubgraph(graph, graphNodes, graphEdges, catalog, progress);
+  const entryNode = graphNodes.find((node) => node.id === catalog.entryNodeId);
 
   return {
     id: catalog.id,
@@ -1272,6 +1309,7 @@ export function catalogToSummary(
     winCount: catalog.winCount,
     lossCount: catalog.lossCount,
     drawCount: catalog.drawCount,
+    openingEvalCp: entryNode?.evalCp ?? null,
     updatedAt: new Date().toISOString(),
   };
 }

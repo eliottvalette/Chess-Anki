@@ -42,6 +42,12 @@ export function buildInputsFromRows(
       return [];
     }
 
+    const rawOutcome = line.outcome;
+    const outcome: OpeningTreeBuildInput['outcome'] =
+      rawOutcome === 'win' || rawOutcome === 'loss' || rawOutcome === 'draw' || rawOutcome === 'unknown'
+        ? rawOutcome
+        : 'unknown';
+
     return [
       {
         id: String(line.id),
@@ -50,6 +56,7 @@ export function buildInputsFromRows(
         moves,
         source: 'recent_game' as const,
         count: 1,
+        outcome,
       },
     ];
   });

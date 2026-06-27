@@ -39,6 +39,10 @@
     "supabase:smoke": "node scripts/supabase/smoke.mjs",
     "supabase:audit:opening": "node scripts/supabase/audit-opening-graph.mjs",
     "supabase:fix:opening": "node scripts/supabase/fix-opening-graph.mjs",
+    "supabase:fix:opening-train": "node scripts/supabase/fix-opening-train-nodes.mjs",
+    "supabase:test:fix-opening-train": "node --test scripts/supabase/fix-opening-train-nodes.test.mjs",
+    "supabase:test:fix-opening": "node --test scripts/supabase/fix-opening-graph-lib.test.mjs",
+    "opening:smoke-fix-safety": "node scripts/smoke/fix-opening-graph-safety.mjs",
     "chesscom:build:recent-trees": "node scripts/chesscom/build-recent-trees.mjs"
   },
   "dependencies": {
