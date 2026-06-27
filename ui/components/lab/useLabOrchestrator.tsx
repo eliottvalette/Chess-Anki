@@ -1073,6 +1073,9 @@ export function useLabOrchestrator() {
   const cancelDrillOpponentMoveRef = useRef<() => void>(() => {});
   const linesGameTimeoutRef = useRef<number | null>(null);
   const learnBranchForkConfirmedRef = useRef(false);
+  const updateLinesNodeProgressRef = useRef<
+    (update: { attemptId: string; nodeId: string; correct: boolean; masteryScore?: number }) => void
+  >(() => {});
   const playDeckReplayToIndexRef = useRef<
     ((targetIndex: number, trainSide: 'white' | 'black', startIndex?: number) => Promise<boolean | undefined>) | null
   >(null);
@@ -1097,6 +1100,7 @@ export function useLabOrchestrator() {
       deckPlaybackRequestIdRef,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
+      updateLinesNodeProgressRef,
     }),
     [
       playSoundSequence,
@@ -1106,6 +1110,7 @@ export function useLabOrchestrator() {
       deckPlaybackRequestIdRef,
       deckReplayInitialFenRef,
       deckReplayMovesRef,
+      updateLinesNodeProgressRef,
       drillPathRef,
       drillPathIndexRef,
       linesSession,
@@ -1338,6 +1343,7 @@ export function useLabOrchestrator() {
       linesSession,
       learnBranchForkConfirmedRef,
       linesBoardFilterPreviewKeyRef,
+      updateLinesNodeProgressRef,
     }),
     [
       clearSelection,
@@ -1352,6 +1358,7 @@ export function useLabOrchestrator() {
       deckReplayInitialFenRef,
       deckPlaybackRequestIdRef,
       linesSession,
+      updateLinesNodeProgressRef,
     ],
   );
 
@@ -2514,7 +2521,10 @@ export function useLabOrchestrator() {
     [labState, resolvedActiveOpeningTree],
   );
 
-  const handleSelectOpeningTree = useCallback((treeId: string) => selectOpeningTree(treeId), [selectOpeningTree]);
+  const handleSelectOpeningTree = useCallback(
+    (treeId: string, trainSide?: 'white' | 'black') => selectOpeningTree(treeId, trainSide),
+    [selectOpeningTree],
+  );
 
   const linesForkCoverage = useMemo(() => {
     void linesSession.forkCoverageRevision;

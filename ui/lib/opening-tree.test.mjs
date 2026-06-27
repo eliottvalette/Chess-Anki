@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   alignOpeningTreeWithBoardPosition,
   applyLearnMaxPlyToOpeningTree,
+  applyOpeningTreeNodeAttempt,
   buildDrillPath,
   buildForkCoverage,
   buildLearnDrillExpectedFromStep,
@@ -43,10 +44,12 @@ import {
   replayToNodeUcis,
   resolveAcceptedTrainMoveUcis,
   resolveLinesBoardContext,
+  resolveLinesStudyActiveTree,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
   resolveOpeningTreeOutcomeSummary,
   resolveOpeningTreeSelectionId,
+  resolveRequestedOpeningTrainSide,
   STANDARD_START_FEN_KEY,
   sliceOpeningForest,
 } from './opening-tree.ts';
@@ -102,6 +105,19 @@ test('resolveOpeningTreeOutcomeSummary keeps aggregated side rates after canonic
   });
 
   assert.equal(resolved, aggregate);
+});
+
+test('resolveRequestedOpeningTrainSide prioritizes an explicit side change', () => {
+  assert.equal(resolveRequestedOpeningTrainSide('white', 'black'), 'black');
+  assert.equal(resolveRequestedOpeningTrainSide('black'), 'black');
+});
+
+test('resolveLinesStudyActiveTree keeps the session source authoritative during learn undo', () => {
+  const whiteTree = { id: 'white-tree' };
+  const blackSessionTree = { id: 'black-tree' };
+
+  assert.equal(resolveLinesStudyActiveTree(whiteTree, blackSessionTree, 'learn'), blackSessionTree);
+  assert.equal(resolveLinesStudyActiveTree(whiteTree, blackSessionTree, 'idle'), whiteTree);
 });
 
 test('formatOpeningTreeDisplayName strips move suffixes and eco prefixes', () => {
@@ -521,6 +537,67 @@ function buildOpponentForkLearnTree() {
   };
 }
 
+function buildDeepOffMainForkLearnTree() {
+  const node = (id, ply, sideToMove, bestUci = null, masteryScore = 0) => ({
+    id,
+    fen: `fen-${id}`,
+    fenKey: id,
+    ply,
+    sideToMove,
+    bestUci,
+    bestSan: bestUci,
+    evalCp: 0,
+    recentGames: 1,
+    cardCount: 0,
+    masteryScore,
+    seenCount: 0,
+    correctCount: 0,
+    missCount: 0,
+  });
+  const edge = (id, fromNodeId, toNodeId, uci, moveBy, recentCount = 1) => ({
+    id,
+    fromNodeId,
+    toNodeId,
+    uci,
+    san: uci,
+    moveBy,
+    source: 'recent_game',
+    recentCount,
+    cardCount: 0,
+    mastersGames: 0,
+    priority: 1,
+    isEngineBest: false,
+  });
+
+  return {
+    rootSan: [],
+    rootPly: 0,
+    rootFenKey: 'root',
+    targetDepth: 8,
+    nodes: [
+      node('root', 0, 'white'),
+      node('main-train', 1, 'black', 'main-best', 90),
+      node('side-train', 1, 'black', 'side-best', 10),
+      node('main-fork', 2, 'white'),
+      node('side-fork', 2, 'white'),
+      node('main-a', 3, 'black', null, 90),
+      node('main-b', 3, 'black', null, 90),
+      node('side-a', 3, 'black', null, 5),
+      node('side-b', 3, 'black', null, 5),
+    ],
+    edges: [
+      edge('root-main', 'root', 'main-train', 'root-main', 'white', 20),
+      edge('root-side', 'root', 'side-train', 'root-side', 'white', 10),
+      edge('main-best', 'main-train', 'main-fork', 'main-best', 'black'),
+      edge('side-best', 'side-train', 'side-fork', 'side-best', 'black'),
+      edge('main-a', 'main-fork', 'main-a', 'main-a', 'white', 8),
+      edge('main-b', 'main-fork', 'main-b', 'main-b', 'white', 7),
+      edge('side-a', 'side-fork', 'side-a', 'side-a', 'white', 6),
+      edge('side-b', 'side-fork', 'side-b', 'side-b', 'white', 5),
+    ],
+  };
+}
+
 test('pickLearnBranch varies opponent replies on the main line while user keeps the best move', () => {
   const tree = buildOpponentForkLearnTree();
   const first = pickLearnBranch(tree, 'white', []);
@@ -541,6 +618,71 @@ test('pickLearnBranch varies opponent replies on the main line while user keeps 
   assert.equal(second.branchForkNodeId, 'after-d4');
   assert.notEqual(second.branchEdgeUci, first.branchEdgeUci);
   assert.equal(second.path[1]?.edgeUciFromParent, 'd2d4');
+});
+
+test('pickLearnBranch reaches a selected deep fork outside the default drill path', () => {
+  const tree = buildDeepOffMainForkLearnTree();
+  const completed = [
+    { forkNodeId: 'root', edgeId: 'root-main', edgeUci: 'root-main' },
+    { forkNodeId: 'root', edgeId: 'root-side', edgeUci: 'root-side' },
+    { forkNodeId: 'main-fork', edgeId: 'main-a', edgeUci: 'main-a' },
+    { forkNodeId: 'main-fork', edgeId: 'main-b', edgeUci: 'main-b' },
+  ];
+
+  const picked = pickLearnBranch(tree, 'black', completed);
+  const forkStepIndex = picked.path.findIndex((step) => step.nodeId === picked.branchForkNodeId);
+
+  assert.equal(picked.branchForkNodeId, 'side-fork');
+  assert.ok(forkStepIndex >= 0);
+  assert.equal(picked.path[forkStepIndex + 1]?.edgeUciFromParent, picked.branchEdgeUci);
+  assert.deepEqual(
+    picked.path.slice(0, forkStepIndex + 1).map((step) => step.nodeId),
+    ['root', 'side-train', 'side-fork'],
+  );
+});
+
+test('pickLearnBranch prioritizes the least-mastered reachable line across forks', () => {
+  const tree = buildDeepOffMainForkLearnTree();
+  const completed = [
+    { forkNodeId: 'root', edgeId: 'root-main', edgeUci: 'root-main' },
+    { forkNodeId: 'root', edgeId: 'root-side', edgeUci: 'root-side' },
+    { forkNodeId: 'main-fork', edgeId: 'main-a', edgeUci: 'main-a' },
+  ];
+
+  const picked = pickLearnBranch(tree, 'black', completed);
+
+  assert.equal(picked.branchForkNodeId, 'side-fork');
+  assert.ok(['side-a', 'side-b'].includes(picked.branchEdgeUci ?? ''));
+});
+
+test('live learn attempts immediately reorder the least-mastered branch', () => {
+  const tree = buildDeepOffMainForkLearnTree();
+  const completed = [
+    { forkNodeId: 'root', edgeId: 'root-main', edgeUci: 'root-main' },
+    { forkNodeId: 'root', edgeId: 'root-side', edgeUci: 'root-side' },
+    { forkNodeId: 'main-fork', edgeId: 'main-a', edgeUci: 'main-a' },
+    { forkNodeId: 'side-fork', edgeId: 'side-a', edgeUci: 'side-a' },
+  ];
+  const scores = new Map([
+    ['main-train', 30],
+    ['main-b', 30],
+    ['side-train', 20],
+    ['side-b', 20],
+  ]);
+  const liveTree = {
+    ...tree,
+    nodes: tree.nodes.map((node) => ({ ...node, masteryScore: scores.get(node.id) ?? node.masteryScore })),
+  };
+
+  assert.equal(pickLearnBranch(liveTree, 'black', completed).branchForkNodeId, 'side-fork');
+
+  const afterFirstCorrect = applyOpeningTreeNodeAttempt(liveTree, 'side-train', true);
+  const afterLineCorrect = applyOpeningTreeNodeAttempt(afterFirstCorrect, 'side-b', true);
+
+  assert.equal(afterLineCorrect.nodes.find((node) => node.id === 'side-train')?.masteryScore, 38);
+  assert.equal(afterLineCorrect.nodes.find((node) => node.id === 'side-b')?.masteryScore, 38);
+  assert.equal(pickLearnBranch(afterLineCorrect, 'black', completed).branchForkNodeId, 'main-fork');
+  assert.equal(liveTree.nodes.find((node) => node.id === 'side-train')?.masteryScore, 20);
 });
 
 test('hasRemainingLearnBranches ignores the branch currently in progress', () => {
@@ -731,6 +873,104 @@ test('buildDrillPath follows bestUci on train turns even when another move is mo
 
   assert.equal(path[1]?.nodeId, 'after-e4');
   assert.equal(path[1]?.edgeUciFromParent, 'e2e4');
+});
+
+test('buildDrillPath follows repertoire primary move on train turns when bestUci is missing', () => {
+  const tree = {
+    rootSan: ['e4', 'e5', 'Nf3', 'Nc6', 'Bc4'],
+    rootUci: ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4'],
+    rootPly: 5,
+    rootFenKey: 'after-bc4',
+    nodes: [
+      {
+        id: 'after-bc4',
+        fen: 'rnbqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 3 3',
+        fenKey: 'after-bc4',
+        ply: 5,
+        sideToMove: 'black',
+        bestUci: null,
+        bestSan: null,
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-nf6',
+        fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4',
+        fenKey: 'after-nf6',
+        ply: 6,
+        sideToMove: 'white',
+        bestUci: 'e1g1',
+        bestSan: 'O-O',
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+      {
+        id: 'after-o-o',
+        fen: 'r1bqkb1r/pppp1ppp/2n2n2/4p3/2B1P3/5N2/PPPP1PPP/RNBQ1RK1 b kq - 5 4',
+        fenKey: 'after-o-o',
+        ply: 7,
+        sideToMove: 'black',
+        bestUci: 'f8e7',
+        bestSan: 'Be7',
+        evalCp: null,
+        recentGames: 1,
+        cardCount: 0,
+        masteryScore: 0,
+        seenCount: 0,
+        correctCount: 0,
+        missCount: 0,
+      },
+    ],
+    edges: [
+      {
+        id: 'nf6-edge',
+        fromNodeId: 'after-bc4',
+        toNodeId: 'after-nf6',
+        uci: 'g8f6',
+        san: 'Nf6',
+        moveBy: 'black',
+        source: 'recent_game',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: false,
+      },
+      {
+        id: 'oo-edge',
+        fromNodeId: 'after-nf6',
+        toNodeId: 'after-o-o',
+        uci: 'e1g1',
+        san: 'O-O',
+        moveBy: 'white',
+        source: 'engine_best',
+        recentCount: 1,
+        cardCount: 0,
+        mastersGames: 0,
+        priority: 1,
+        isEngineBest: true,
+      },
+    ],
+  };
+
+  const path = buildDrillPath(tree, { trainSide: 'black', startNodeId: 'after-bc4' });
+
+  assert.equal(path.length, 3);
+  assert.equal(path[0]?.nodeId, 'after-bc4');
+  assert.equal(path[1]?.nodeId, 'after-nf6');
+  assert.equal(path[1]?.edgeUciFromParent, 'g8f6');
+  assert.equal(path[2]?.nodeId, 'after-o-o');
+  assert.equal(path[2]?.edgeUciFromParent, 'e1g1');
 });
 
 test('extendDrillPathFromNode appends continuation when the initial path stops at a leaf', () => {

@@ -172,6 +172,11 @@ export function LabSidebar() {
 
                 if (lab.labState.linesStudyMode === 'review') {
                   lab.startLinesReview(lab.labState.activeOpeningTree ?? undefined, side);
+                  return;
+                }
+
+                if (lab.labState.activeOpeningTree) {
+                  void lab.selectOpeningTree(lab.labState.activeOpeningTree.id, side);
                 }
               }}
               trees={lab.labState.linesBrowseOverrideTrees ?? lab.labState.openingTrees}

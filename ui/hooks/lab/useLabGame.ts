@@ -64,6 +64,9 @@ export function useLabGame(
     deckPlaybackRequestIdRef: React.MutableRefObject<number>;
     deckReplayInitialFenRef: React.MutableRefObject<string | null>;
     deckReplayMovesRef: React.MutableRefObject<StoredMove[]>;
+    updateLinesNodeProgressRef: React.MutableRefObject<
+      (update: { attemptId: string; nodeId: string; correct: boolean; masteryScore?: number }) => void
+    >;
   },
 ) {
   const {
@@ -126,6 +129,7 @@ export function useLabGame(
     deckPlaybackRequestIdRef,
     deckReplayInitialFenRef,
     deckReplayMovesRef,
+    updateLinesNodeProgressRef,
   } = context;
 
   const linesOpeningTree = useMemo(
@@ -294,19 +298,35 @@ export function useLabGame(
           });
         });
 
+        const attemptId = crypto.randomUUID();
+        updateLinesNodeProgressRef.current({ attemptId, nodeId, correct });
+
         void fetch('/api/opening-trees', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
             action: 'attempt',
-            attemptId: crypto.randomUUID(),
+            attemptId,
             nodeId,
             playedUci: move.uci,
             expectedUci: primaryUci,
             correct,
           }),
-        }).catch(() => undefined);
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              return;
+            }
+
+            const payload = (await response.json()) as { masteryScore?: unknown };
+            const masteryScore = Number(payload.masteryScore);
+
+            if (Number.isFinite(masteryScore)) {
+              updateLinesNodeProgressRef.current({ attemptId, nodeId, correct, masteryScore });
+            }
+          })
+          .catch(() => undefined);
 
         if (openingDrillActive && drillPathRef.current.length > 0) {
           if (correct) {
@@ -469,6 +489,7 @@ export function useLabGame(
       activeOpeningTree,
       linesOpeningTree,
       advanceDrillToStepRef,
+      advanceReviewCardRef,
       clearVariation,
       currentFen,
       deckCardPromptStartedAtRef,
@@ -510,6 +531,7 @@ export function useLabGame(
       state,
       timelineRefineRequestIdRef,
       trainAllSession,
+      updateLinesNodeProgressRef,
       variationBaseIndex,
       variationIndex,
       variationMoves,
