@@ -2526,6 +2526,17 @@ export function resolveLinesStudyActiveTree<Tree>(
   return studyMode === 'learn' && sessionSourceTree ? sessionSourceTree : activeTree;
 }
 
+export function resolveLinesLiveProgressPublication<Tree>(
+  activeTree: Tree | null,
+  sessionSourceTree: Tree | null,
+  updatedTree: Tree,
+) {
+  return {
+    sessionTree: updatedTree,
+    activeTree: sessionSourceTree ? activeTree : updatedTree,
+  };
+}
+
 export function resolveOpeningTreeOutcomeSummary(
   trees: OpeningTreeSummary[],
   activeTreeId: string | null,

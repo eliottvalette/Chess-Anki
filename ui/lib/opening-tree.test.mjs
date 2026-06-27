@@ -44,6 +44,7 @@ import {
   replayToNodeUcis,
   resolveAcceptedTrainMoveUcis,
   resolveLinesBoardContext,
+  resolveLinesLiveProgressPublication,
   resolveLinesStudyActiveTree,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
@@ -683,6 +684,18 @@ test('live learn attempts immediately reorder the least-mastered branch', () => 
   assert.equal(afterLineCorrect.nodes.find((node) => node.id === 'side-b')?.masteryScore, 38);
   assert.equal(pickLearnBranch(afterLineCorrect, 'black', completed).branchForkNodeId, 'main-fork');
   assert.equal(liveTree.nodes.find((node) => node.id === 'side-train')?.masteryScore, 20);
+});
+
+test('live learn progress stays in the session tree until the next branch publication', () => {
+  const renderedTree = buildDeepOffMainForkLearnTree();
+  const sessionTree = { ...renderedTree, id: 'session-tree' };
+  const updatedSessionTree = applyOpeningTreeNodeAttempt(sessionTree, 'side-train', true);
+
+  const publication = resolveLinesLiveProgressPublication(renderedTree, sessionTree, updatedSessionTree);
+
+  assert.equal(publication.sessionTree, updatedSessionTree);
+  assert.equal(publication.activeTree, renderedTree);
+  assert.notEqual(publication.activeTree, updatedSessionTree);
 });
 
 test('hasRemainingLearnBranches ignores the branch currently in progress', () => {

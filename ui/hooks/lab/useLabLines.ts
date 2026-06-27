@@ -45,6 +45,7 @@ import {
   replayToNodeUcis,
   resolveCanonicalRootNode,
   resolveLinesBoardContext,
+  resolveLinesLiveProgressPublication,
   resolveLinesStudyActiveTree,
   resolveLinesStudyOpeningTree,
   resolveOpeningTreeSelectionId,
@@ -205,8 +206,11 @@ export function useLabLines(
         return;
       }
 
-      if (learnSourceTreeRef.current || linesStudyMode === 'learn') {
-        learnSourceTreeRef.current = nextTree;
+      const sessionSourceTree = learnSourceTreeRef.current ?? (linesStudyMode === 'learn' ? sourceTree : null);
+      const publication = resolveLinesLiveProgressPublication(activeOpeningTree, sessionSourceTree, nextTree);
+
+      if (sessionSourceTree) {
+        learnSourceTreeRef.current = publication.sessionTree;
       }
 
       const liveNode = nextTree.nodes.find((node) => node.id === update.nodeId);
@@ -217,14 +221,18 @@ export function useLabLines(
         );
       }
 
-      setActiveOpeningTree(nextTree);
-      setOpeningTrees((current) =>
-        current.map((tree) =>
-          tree.id === nextTree.id
-            ? { ...tree, masteryScore: nextTree.masteryScore, dueCount: nextTree.dueCount }
-            : tree,
-        ),
-      );
+      if (publication.activeTree && publication.activeTree !== activeOpeningTree) {
+        startTransition(() => {
+          setActiveOpeningTree(publication.activeTree);
+          setOpeningTrees((current) =>
+            current.map((tree) =>
+              tree.id === nextTree.id
+                ? { ...tree, masteryScore: nextTree.masteryScore, dueCount: nextTree.dueCount }
+                : tree,
+            ),
+          );
+        });
+      }
     },
     [activeOpeningTree, drillPathRef, linesStudyMode, setActiveOpeningTree, setOpeningTrees],
   );
@@ -933,7 +941,17 @@ export function useLabLines(
       if (pickTrigger === 'initial' && treeForDrill !== tree) {
         setActiveOpeningTree(treeForDrill);
       } else if (pickTrigger === 'next' && learnSourceTreeRef.current) {
-        setActiveOpeningTree(learnSourceTreeRef.current);
+        const liveTree = learnSourceTreeRef.current;
+        startTransition(() => {
+          setActiveOpeningTree(liveTree);
+          setOpeningTrees((current) =>
+            current.map((summary) =>
+              summary.id === liveTree.id
+                ? { ...summary, masteryScore: liveTree.masteryScore, dueCount: liveTree.dueCount }
+                : summary,
+            ),
+          );
+        });
       }
 
       const completedBefore = pickTrigger === 'initial' ? [] : linesCompletedLearnBranchesRef.current;
@@ -1035,6 +1053,7 @@ export function useLabLines(
       replayMovesToIndex,
       setActiveOpeningNodeId,
       setActiveOpeningTree,
+      setOpeningTrees,
       setDeckFeedback,
       setDeckFeedbackArrowsVisible,
       setLinesActiveLearnBranch,
