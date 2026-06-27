@@ -120,6 +120,7 @@ import {
   type LinesStudyMode,
   type OpeningTreeDetail,
   type OpeningTreeSummary,
+  resolveOpeningTreeOutcomeSummary,
 } from '@/lib/opening-tree';
 
 export type TrainSessionStats = {
@@ -348,8 +349,8 @@ export const LinesPanel = memo(function LinesPanel({
     [activeTree, trainSide],
   );
   const activeTreeSummary = useMemo(
-    () => trees.find((tree) => tree.id === activeTreeId) ?? null,
-    [activeTreeId, trees],
+    () => resolveOpeningTreeOutcomeSummary(trees, activeTreeId, activeTree),
+    [activeTree, activeTreeId, trees],
   );
   const activeOutcomeSource = activeTreeSummary ?? activeTree;
   const whiteOutcomeBar = formatSideOutcomeBar(activeOutcomeSource, 'white');

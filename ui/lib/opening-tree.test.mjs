@@ -45,6 +45,7 @@ import {
   resolveLinesBoardContext,
   resolveOpeningLibrary,
   resolveOpeningNodeFromHistory,
+  resolveOpeningTreeOutcomeSummary,
   resolveOpeningTreeSelectionId,
   STANDARD_START_FEN_KEY,
   sliceOpeningForest,
@@ -80,6 +81,27 @@ test('openingTreeDetailToSummary preserves outcome rates and precomputed eval', 
   assert.equal(summary.lossCount, tree.lossCount);
   assert.equal(summary.drawCount, tree.drawCount);
   assert.equal(summary.openingEvalCp, 31);
+});
+
+test('resolveOpeningTreeOutcomeSummary keeps aggregated side rates after canonical detail selection', () => {
+  const aggregate = {
+    id: 'aggregate-id',
+    rootFenKey: 'shared-root',
+    rootUci: ['e2e4', 'e7e5'],
+    linesWhite: 4,
+    linesBlack: 3,
+    whiteWinCount: 3,
+    whiteLossCount: 1,
+    blackWinCount: 1,
+    blackLossCount: 2,
+  };
+
+  const resolved = resolveOpeningTreeOutcomeSummary([aggregate], 'white-canonical-id', {
+    rootFenKey: 'shared-root',
+    rootUci: ['e2e4', 'e7e5'],
+  });
+
+  assert.equal(resolved, aggregate);
 });
 
 test('formatOpeningTreeDisplayName strips move suffixes and eco prefixes', () => {

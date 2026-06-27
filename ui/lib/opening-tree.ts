@@ -2305,6 +2305,23 @@ export function resolveOpeningTreeSelectionId(
   return loadedTree?.id ?? requestedTreeId;
 }
 
+export function resolveOpeningTreeOutcomeSummary(
+  trees: OpeningTreeSummary[],
+  activeTreeId: string | null,
+  activeTree: Pick<OpeningTreeSummary, 'rootFenKey' | 'rootUci'> | null,
+) {
+  const exact = trees.find((tree) => tree.id === activeTreeId);
+
+  if (exact || !activeTree) {
+    return exact ?? null;
+  }
+
+  const rootUciKey = activeTree.rootUci.join(' ');
+  const byRootLine = rootUciKey ? trees.find((tree) => tree.rootUci.join(' ') === rootUciKey) : null;
+
+  return byRootLine ?? trees.find((tree) => tree.rootFenKey === activeTree.rootFenKey) ?? null;
+}
+
 export function openingTreeDetailToSummary(tree: OpeningTreeDetail): OpeningTreeSummary {
   const { edges: _edges, nodes: _nodes, ...summary } = tree;
   return summary;
