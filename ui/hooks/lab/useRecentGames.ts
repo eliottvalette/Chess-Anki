@@ -5,8 +5,7 @@ import type { StoredMove } from '@/lib/chess-analysis-client';
 import type { ChessComRecentGameSummary, ChessComRecentGameTimeClass } from '@/lib/chesscom';
 import {
   type CachedTimelineAnalysis,
-  CHESSCOM_TIME_CLASS_COOKIE,
-  CHESSCOM_USERNAME_COOKIE,
+  deleteCookie,
   formatRecentGameLogLabel,
   GAME_ANALYSIS_CACHE_VERSION,
   getRecentGameCacheKey,
@@ -20,6 +19,13 @@ import {
   toStoredMove,
   writeCookie,
 } from '@/lib/lab-helpers';
+import { scheduleRecentGamesAutoFetch } from '@/lib/recent-games-auto-fetch';
+import {
+  CHESSCOM_TIME_CLASS_COOKIE,
+  CHESSCOM_USERNAME_COOKIE,
+  LEGACY_CHESSCOM_USERNAME_COOKIE,
+  readSavedChessComUsername,
+} from '@/lib/recent-games-preferences';
 import type { LabState } from '../useLabState';
 
 export const RECENT_GAMES_INTERACTION_IDLE_MS = 3000;
@@ -293,11 +299,13 @@ export function useRecentGames(
   }, []);
 
   useEffect(() => {
-    const savedUsername = readCookie(CHESSCOM_USERNAME_COOKIE);
+    const savedUsername = readSavedChessComUsername(readCookie);
     const savedTimeClass = readCookie(CHESSCOM_TIME_CLASS_COOKIE);
 
     if (savedUsername) {
       setChesscomUsername(savedUsername);
+      writeCookie(CHESSCOM_USERNAME_COOKIE, savedUsername);
+      deleteCookie(LEGACY_CHESSCOM_USERNAME_COOKIE);
     }
 
     if (
@@ -321,25 +329,21 @@ export function useRecentGames(
       return undefined;
     }
 
-    recentAutoFetchStartedRef.current = true;
-
     const scheduleFetch = () => {
       void fetchRecentChessGames(username, recentGameTimeClass, false, true);
     };
 
     if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      const idleId = window.requestIdleCallback(scheduleFetch, { timeout: 3_000 });
-
-      return () => {
-        window.cancelIdleCallback(idleId);
-      };
+      return scheduleRecentGamesAutoFetch<number>(recentAutoFetchStartedRef, scheduleFetch, {
+        cancel: (idleId) => window.cancelIdleCallback(idleId),
+        schedule: (callback) => window.requestIdleCallback(callback, { timeout: 3_000 }),
+      });
     }
 
-    const timer = setTimeout(scheduleFetch, 1_500);
-
-    return () => {
-      clearTimeout(timer);
-    };
+    return scheduleRecentGamesAutoFetch<ReturnType<typeof setTimeout>>(recentAutoFetchStartedRef, scheduleFetch, {
+      cancel: (timer) => clearTimeout(timer),
+      schedule: (callback) => setTimeout(callback, 1_500),
+    });
   }, [chesscomUsername, fetchRecentChessGames, mode, recentGameTimeClass]);
 
   useEffect(() => {

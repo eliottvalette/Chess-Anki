@@ -2577,6 +2577,92 @@ export function applyLearnMaxPlyToOpeningTree(tree: OpeningTreeDetail, maxPly: n
   };
 }
 
+export function countLearnLines(tree: OpeningTreeDetail, trainSide: OpeningSide, maxPly = 0): number {
+  const rootPly = tree.rootPly ?? tree.rootSan.length;
+  const rootNode = resolveCanonicalRootNode(tree, rootPly);
+
+  if (!rootNode || (maxPly > 0 && rootNode.ply > maxPly)) {
+    return 0;
+  }
+
+  const nodeById = new Map(tree.nodes.map((node) => [node.id, node]));
+  const outgoingByNodeId = new Map<string, OpeningTreeEdge[]>();
+
+  for (const edge of tree.edges) {
+    if (!isRepertoireEdge(edge)) {
+      continue;
+    }
+
+    const targetNode = nodeById.get(edge.toNodeId);
+
+    if (!targetNode || (maxPly > 0 && targetNode.ply > maxPly)) {
+      continue;
+    }
+
+    const outgoing = outgoingByNodeId.get(edge.fromNodeId) ?? [];
+    outgoing.push(edge);
+    outgoingByNodeId.set(edge.fromNodeId, outgoing);
+  }
+
+  const memo = new Map<string, number>();
+  const visiting = new Set<string>();
+
+  const countFromNode = (nodeId: string, hasTrainMove: boolean): number => {
+    const memoKey = `${nodeId}:${hasTrainMove ? 1 : 0}`;
+    const cached = memo.get(memoKey);
+
+    if (cached != null) {
+      return cached;
+    }
+
+    if (visiting.has(memoKey)) {
+      return 0;
+    }
+
+    const node = nodeById.get(nodeId);
+
+    if (!node) {
+      return 0;
+    }
+
+    const outgoing = outgoingByNodeId.get(nodeId) ?? [];
+    const primaryUci =
+      node.sideToMove === trainSide
+        ? (node.bestUci ??
+          [...outgoing].sort(
+            (left, right) =>
+              Number(right.isEngineBest) - Number(left.isEngineBest) ||
+              right.priority - left.priority ||
+              right.recentCount + right.cardCount - (left.recentCount + left.cardCount),
+          )[0]?.uci ??
+          null)
+        : null;
+    const allowed = node.sideToMove === trainSide ? outgoing.filter((edge) => edge.uci === primaryUci) : outgoing;
+
+    if (allowed.length === 0) {
+      const terminalCount = hasTrainMove ? 1 : 0;
+      memo.set(memoKey, terminalCount);
+      return terminalCount;
+    }
+
+    visiting.add(memoKey);
+    let count = 0;
+
+    for (const edge of allowed) {
+      count = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        count + countFromNode(edge.toNodeId, hasTrainMove || node.sideToMove === trainSide),
+      );
+    }
+
+    visiting.delete(memoKey);
+    memo.set(memoKey, count);
+    return count;
+  };
+
+  return countFromNode(rootNode.id, false);
+}
+
 export function resolveLinesStudyOpeningTree(
   tree: OpeningTreeDetail | null,
   linesStudyMode: 'idle' | 'learn' | 'review',
@@ -2598,6 +2684,27 @@ export function filterOpeningTreeSummaries(trees: OpeningTreeSummary[]): Opening
   const sourceForest = withoutLegacy.length > 0 ? withoutLegacy : trees;
 
   return sourceForest.filter((tree) => tree.nodeCount >= 2).sort((left, right) => right.sourceCount - left.sourceCount);
+}
+
+export function filterAndSortOpeningTreeSummariesByColor(
+  trees: OpeningTreeSummary[],
+  side: OpeningSide,
+): OpeningTreeSummary[] {
+  const sideCount = (tree: OpeningTreeSummary) => (side === 'white' ? (tree.linesWhite ?? 0) : (tree.linesBlack ?? 0));
+  const hasSideCounts = (tree: OpeningTreeSummary) => tree.linesWhite != null || tree.linesBlack != null;
+
+  return trees
+    .filter((tree) => !hasSideCounts(tree) || sideCount(tree) > 0)
+    .sort((left, right) => {
+      const leftHasSideCounts = hasSideCounts(left);
+      const rightHasSideCounts = hasSideCounts(right);
+
+      if (leftHasSideCounts !== rightHasSideCounts) {
+        return leftHasSideCounts ? -1 : 1;
+      }
+
+      return sideCount(right) - sideCount(left) || right.sourceCount - left.sourceCount;
+    });
 }
 
 export function filterOpeningTreeSummariesByMinForcedPlies(

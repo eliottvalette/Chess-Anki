@@ -113,7 +113,9 @@ import {
 } from '@/lib/deck-progress';
 import { formatLinesLoadingStatus, type LinesLoadingKind } from '@/lib/lines-loading';
 import {
+  countLearnLines,
   countReviewDueNodes,
+  filterAndSortOpeningTreeSummariesByColor,
   filterOpeningTreeSummaries,
   formatMasteryScoreLabel,
   formatOpeningTreeDisplayName,
@@ -268,10 +270,6 @@ export const LinesPanel = memo(function LinesPanel({
   trees,
   minForcedPlies,
   setMinForcedPlies,
-  minNodes,
-  setMinNodes,
-  minDepth,
-  setMinDepth,
   learnMaxPly,
   setLearnMaxPly,
   positionFilterActive,
@@ -309,10 +307,6 @@ export const LinesPanel = memo(function LinesPanel({
   trees: OpeningTreeSummary[];
   minForcedPlies: number;
   setMinForcedPlies: (value: number) => void;
-  minNodes: number;
-  setMinNodes: (value: number) => void;
-  minDepth: number;
-  setMinDepth: (value: number) => void;
   learnMaxPly: number;
   setLearnMaxPly: (value: number) => void;
   positionFilterActive: boolean;
@@ -321,8 +315,8 @@ export const LinesPanel = memo(function LinesPanel({
 }) {
   const catalogTrees = useMemo(() => filterOpeningTreeSummaries(trees), [trees]);
   const filteredTrees = useMemo(
-    () => catalogTrees.filter((tree) => tree.nodeCount >= minNodes && tree.targetDepth >= minDepth),
-    [catalogTrees, minDepth, minNodes],
+    () => filterAndSortOpeningTreeSummariesByColor(catalogTrees, trainSide),
+    [catalogTrees, trainSide],
   );
   const graphLayout = useMemo(() => layoutOpeningTreeGraph(activeTree), [activeTree]);
   const graphNodes = useMemo(
@@ -347,6 +341,10 @@ export const LinesPanel = memo(function LinesPanel({
   const reviewDueCount = useMemo(
     () => (activeTree ? countReviewDueNodes(activeTree, trainSide) : 0),
     [activeTree, trainSide],
+  );
+  const learnLineCount = useMemo(
+    () => (activeTree ? countLearnLines(activeTree, trainSide, learnMaxPly) : 0),
+    [activeTree, learnMaxPly, trainSide],
   );
   const activeTreeSummary = useMemo(
     () => resolveOpeningTreeOutcomeSummary(trees, activeTreeId, activeTree),
@@ -404,11 +402,9 @@ export const LinesPanel = memo(function LinesPanel({
   }, [activeNodeId, activeTree, forkCoverage]);
 
   const browseFilters = (
-    <div className="flex flex-row gap-3 border-b border-[rgba(226,238,220,0.06)] pb-4 mb-2">
-      <label className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[10px] font-normal text-(--text-soft)">
-          Browse ply{positionFilterActive ? ' (board)' : ''}
-        </span>
+    <div className="grid grid-cols-3 gap-3 border-b border-[rgba(226,238,220,0.06)] pb-4 mb-2">
+      <label className="col-span-1 flex min-w-0 flex-col gap-1">
+        <span className="text-[10px] font-normal text-(--text-soft)">Min ply</span>
         <input
           className={`w-full min-w-0 box-border min-h-[32px] border-0 rounded-[6px] bg-[rgba(2,8,5,0.42)] border border-[rgba(226,238,220,0.10)] focus:border-[rgba(168,216,160,0.48)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] px-2 py-0 text-[13px] text-(--text) outline-none transition-[background-color] duration-150  ${positionFilterActive ? 'cursor-not-allowed opacity-50' : ''}`}
           disabled={positionFilterActive}
@@ -419,28 +415,33 @@ export const LinesPanel = memo(function LinesPanel({
           value={minForcedPlies}
         />
       </label>
-      <label className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[10px] font-normal text-(--text-soft)">Min nodes</span>
-        <input
-          className="w-full min-w-0 box-border min-h-[32px] border-0 rounded-[6px] bg-[rgba(2,8,5,0.42)] border border-[rgba(226,238,220,0.10)] focus:border-[rgba(168,216,160,0.48)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] px-2 py-0 text-[13px] text-(--text) outline-none transition-[background-color] duration-150 "
-          id="filter-min-nodes"
-          min={0}
-          onChange={(event) => setMinNodes(Math.max(0, Number(event.target.value) || 0))}
-          type="number"
-          value={minNodes}
-        />
-      </label>
-      <label className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="text-[10px] font-normal text-(--text-soft)">Min depth</span>
-        <input
-          className="w-full min-w-0 box-border min-h-[32px] border-0 rounded-[6px] bg-[rgba(2,8,5,0.42)] border border-[rgba(226,238,220,0.10)] focus:border-[rgba(168,216,160,0.48)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] px-2 py-0 text-[13px] text-(--text) outline-none transition-[background-color] duration-150 "
-          id="filter-min-depth"
-          min={0}
-          onChange={(event) => setMinDepth(Math.max(0, Number(event.target.value) || 0))}
-          type="number"
-          value={minDepth}
-        />
-      </label>
+      <div className="col-span-2 flex min-w-0 flex-col gap-1">
+        <span className="text-[10px] font-normal text-(--text-soft)">Color sort</span>
+        <fieldset
+          aria-label="Color sort"
+          className="m-0 grid min-h-[32px] min-w-0 grid-cols-2 gap-1 rounded-[6px] border border-[rgba(226,238,220,0.10)] bg-[rgba(2,8,5,0.42)] p-1"
+        >
+          {(['white', 'black'] as const).map((side) => {
+            const selected = trainSide === side;
+
+            return (
+              <button
+                aria-pressed={selected}
+                className={`min-w-0 rounded-[4px] border-0 px-2 text-[12px] transition-[background-color,color] duration-150 ${
+                  selected
+                    ? 'bg-[rgba(152,184,255,0.12)] font-medium text-[#A8D8A0]'
+                    : 'bg-transparent font-normal text-(--text-soft) hover:bg-[rgba(168,216,160,0.045)] hover:text-[rgba(241,245,234,0.85)]'
+                }`}
+                key={side}
+                onClick={() => onChangeTrainSide(side)}
+                type="button"
+              >
+                {side === 'white' ? 'White' : 'Black'}
+              </button>
+            );
+          })}
+        </fieldset>
+      </div>
     </div>
   );
 
@@ -612,7 +613,9 @@ export const LinesPanel = memo(function LinesPanel({
                     type="button"
                   >
                     <span className="text-[13px] font-medium text-[#8AE3C1]">Learn line</span>
-                    <span className="text-[10px] text-[rgba(241,245,234,0.42)]">Full branch</span>
+                    <span className="text-[10px] text-[rgba(241,245,234,0.42)]">
+                      {learnLineCount} {learnLineCount === 1 ? 'line' : 'lines'}
+                    </span>
                   </button>
                   <button
                     className="box-border flex min-h-[44px] flex-1 flex-col items-center justify-center rounded-[6px] border border-transparent bg-[rgba(2,8,5,0.42)] border border-[rgba(226,238,220,0.10)] focus:border-[rgba(168,216,160,0.48)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] px-3 py-1 text-center transition-[background-color] duration-150 hover:bg-[rgba(168,216,160,0.12)] disabled:cursor-not-allowed disabled:opacity-50"

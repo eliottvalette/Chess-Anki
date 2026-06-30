@@ -86,21 +86,11 @@ export function useLabState() {
   const [deckActionError, setDeckActionError] = useState('');
   const [openingTrees, setOpeningTrees] = useState<OpeningTreeSummary[]>([]);
   const [minForcedPlies, setMinForcedPlies] = useState(() => readStoredLinesFilter('chess-lab-min-plies', 4));
-  const [minNodes, setMinNodes] = useState(() => readStoredLinesFilter('chess-lab-min-nodes', 0));
-  const [minDepth, setMinDepth] = useState(() => readStoredLinesFilter('chess-lab-min-depth', 0));
   const [learnMaxPly, setLearnMaxPly] = useState(() => readStoredLinesFilter('chess-lab-learn-max-ply', 0));
 
   useEffect(() => {
     localStorage.setItem('chess-lab-min-plies', minForcedPlies.toString());
   }, [minForcedPlies]);
-
-  useEffect(() => {
-    localStorage.setItem('chess-lab-min-nodes', minNodes.toString());
-  }, [minNodes]);
-
-  useEffect(() => {
-    localStorage.setItem('chess-lab-min-depth', minDepth.toString());
-  }, [minDepth]);
 
   useEffect(() => {
     localStorage.setItem('chess-lab-learn-max-ply', learnMaxPly.toString());
@@ -260,10 +250,6 @@ export function useLabState() {
     setOpeningTrees,
     minForcedPlies,
     setMinForcedPlies,
-    minNodes,
-    setMinNodes,
-    minDepth,
-    setMinDepth,
     learnMaxPly,
     setLearnMaxPly,
     activeOpeningTree,

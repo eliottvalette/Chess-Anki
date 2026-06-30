@@ -19,8 +19,10 @@ import {
   classifyLinesMoveAtHistoryIndex,
   classifyOpeningDrillMove,
   classifyRootPrefixMove,
+  countLearnLines,
   ensureOpeningTreeRootPrefix,
   extendDrillPathFromNode,
+  filterAndSortOpeningTreeSummariesByColor,
   filterOpeningTreeForDisplay,
   filterOpeningTreeSummariesByIds,
   filterOpeningTreeSummariesByMinForcedPlies,
@@ -696,6 +698,14 @@ test('live learn progress stays in the session tree until the next branch public
   assert.equal(publication.sessionTree, updatedSessionTree);
   assert.equal(publication.activeTree, renderedTree);
   assert.notEqual(publication.activeTree, updatedSessionTree);
+});
+
+test('countLearnLines follows opponent variants and the max learn ply cap', () => {
+  const tree = buildDeepOffMainForkLearnTree();
+
+  assert.equal(countLearnLines(tree, 'black', 0), 4);
+  assert.equal(countLearnLines(tree, 'black', 2), 2);
+  assert.equal(countLearnLines(tree, 'black', 1), 0);
 });
 
 test('hasRemainingLearnBranches ignores the branch currently in progress', () => {
@@ -2310,6 +2320,24 @@ test('classifyLinesMove accepts engine-tolerant moves within gate', () => {
   const classified = classifyLinesMove(tree, 'train-node', 'd2d4');
   assert.equal(classified.category, 'book');
   assert.ok(classified.evalLossCp != null && classified.evalLossCp <= LINES_MOVE_EVAL_GATE_CP);
+});
+
+test('filterAndSortOpeningTreeSummariesByColor uses side-specific presence', () => {
+  const trees = [
+    { id: 'mixed', sourceCount: 10, linesWhite: 2, linesBlack: 8 },
+    { id: 'white-only', sourceCount: 5, linesWhite: 5, linesBlack: 0 },
+    { id: 'black-only', sourceCount: 4, linesWhite: 0, linesBlack: 4 },
+    { id: 'legacy', sourceCount: 20 },
+  ];
+
+  assert.deepEqual(
+    filterAndSortOpeningTreeSummariesByColor(trees, 'white').map((tree) => tree.id),
+    ['white-only', 'mixed', 'legacy'],
+  );
+  assert.deepEqual(
+    filterAndSortOpeningTreeSummariesByColor(trees, 'black').map((tree) => tree.id),
+    ['mixed', 'black-only', 'legacy'],
+  );
 });
 
 test('filterOpeningTreeSummariesByIds keeps only matching tree ids when filter is active', () => {

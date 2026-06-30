@@ -1,5 +1,7 @@
 import { Chess } from 'chess.js';
 
+import { AsyncTtlCache } from './async-ttl-cache.ts';
+
 export type ChessComRecentGameSummary = {
   url: string;
   link: string;
@@ -54,6 +56,11 @@ export type RawChessComGame = {
 
 const ARCHIVE_FETCH_CONCURRENCY = 2;
 const CHESSCOM_FETCH_TIMEOUT_MS = 8_000;
+const CHESSCOM_ARCHIVE_CACHE_TTL_MS = 300_000;
+const monthlyArchiveCache = new AsyncTtlCache<string, Record<string, unknown>>({
+  maxEntries: 4,
+  ttlMs: CHESSCOM_ARCHIVE_CACHE_TTL_MS,
+});
 
 export async function fetchArchives(username: string) {
   const response = await fetchJson(`https://api.chess.com/pub/player/${username}/games/archives`);
@@ -188,6 +195,19 @@ export function extractTag(pgn: string | null | undefined, tagName: string) {
 }
 
 async function fetchJson(url: string) {
+  if (isMonthlyArchiveUrl(url)) {
+    const cached = await monthlyArchiveCache.get(url, () => fetchJsonUncached(url, { cache: 'no-store' }));
+    return cached.value;
+  }
+
+  return fetchJsonUncached(url, {
+    next: {
+      revalidate: CHESSCOM_ARCHIVE_CACHE_TTL_MS / 1_000,
+    },
+  });
+}
+
+async function fetchJsonUncached(url: string, cacheOptions: { cache: 'no-store' } | { next: { revalidate: number } }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), CHESSCOM_FETCH_TIMEOUT_MS);
 
@@ -195,11 +215,9 @@ async function fetchJson(url: string) {
 
   try {
     response = await fetch(url, {
+      ...cacheOptions,
       headers: {
         'user-agent': 'chess-analysis-v2/1.0',
-      },
-      next: {
-        revalidate: 300,
       },
       signal: controller.signal,
     });
@@ -217,7 +235,19 @@ async function fetchJson(url: string) {
     throw new Error(`Chess.com request failed for ${url}: HTTP ${response.status}`);
   }
 
-  return response.json();
+  return response.json() as Promise<Record<string, unknown>>;
+}
+
+function isMonthlyArchiveUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    return (
+      parsed.hostname === 'api.chess.com' &&
+      /^\/pub\/player\/[^/]+\/games\/\d{4}\/(?:0[1-9]|1[0-2])$/.test(parsed.pathname)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function dedupeGames(games: RawChessComGame[]) {

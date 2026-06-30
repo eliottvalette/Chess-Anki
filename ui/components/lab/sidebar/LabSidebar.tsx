@@ -182,10 +182,6 @@ export function LabSidebar() {
               trees={lab.labState.linesBrowseOverrideTrees ?? lab.labState.openingTrees}
               minForcedPlies={lab.labState.minForcedPlies}
               setMinForcedPlies={lab.labState.setMinForcedPlies}
-              minNodes={lab.labState.minNodes}
-              setMinNodes={lab.labState.setMinNodes}
-              minDepth={lab.labState.minDepth}
-              setMinDepth={lab.labState.setMinDepth}
               learnMaxPly={lab.labState.learnMaxPly}
               setLearnMaxPly={lab.labState.setLearnMaxPly}
               positionFilterActive={lab.labState.linesBrowseOverrideTrees != null}

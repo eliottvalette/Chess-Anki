@@ -90,8 +90,6 @@ export const TRAINING_USERNAME_COOKIE = 'chess_training_user';
 export const TRAINING_USERNAME_STORAGE_KEY = 'chess_training_user';
 export const TRAINING_PASSWORD_COOKIE = 'chess_training_pass';
 export const TRAINING_PASSWORD_STORAGE_KEY = 'chess_training_pass';
-export const CHESSCOM_USERNAME_COOKIE = 'chesscom_user';
-export const CHESSCOM_TIME_CLASS_COOKIE = 'chesscom_time_class';
 export const DECK_PROGRESS_STORAGE_KEY = 'chess_training_progress';
 export const LAST_TRAINING_DECK_STORAGE_KEY = 'chess_last_training_deck';
 
