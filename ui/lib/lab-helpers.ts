@@ -299,6 +299,16 @@ export function persistTrainingCredentials(username: string, password: string) {
   persistTrainingPassword(password);
 }
 
+export function clearTrainingCredentials() {
+  deleteCookie(TRAINING_USERNAME_COOKIE);
+  deleteCookie(TRAINING_PASSWORD_COOKIE);
+
+  if (typeof window !== 'undefined') {
+    window.localStorage.removeItem(TRAINING_USERNAME_STORAGE_KEY);
+    window.localStorage.removeItem(TRAINING_PASSWORD_STORAGE_KEY);
+  }
+}
+
 export function readCookie(name: string) {
   if (typeof document === 'undefined') {
     return '';

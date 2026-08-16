@@ -82,6 +82,7 @@ import { useLabState } from '../../hooks/useLabState';
 import {
   buildTimelineReviews,
   type CachedTimelineAnalysis,
+  clearTrainingCredentials,
   createEmptyTrainSessionStats,
   createEmptyWorkspaceSnapshot,
   dedupeBoardArrows,
@@ -310,6 +311,7 @@ export function useLabOrchestrator() {
     openingLines,
     deckCards,
     setDeckCards,
+    setDeckSummaries,
     selectedDeckId,
     setSelectedDeckId,
     deckLibraryLoading,
@@ -2391,6 +2393,31 @@ export function useLabOrchestrator() {
     }
   }
 
+  async function logoutTrainingProfile() {
+    try {
+      const response = await fetch('/api/training-profile', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to log out of the training profile.');
+      }
+
+      clearTrainingCredentials();
+      setTrainingProfile(null);
+      setTrainingUsername('');
+      setTrainingPassword('');
+      setTrainingProfileError('');
+      setDeckCards([]);
+      setDeckSummaries([]);
+      setDeckProgress({});
+      setSelectedDeckId(null);
+    } catch (error) {
+      setTrainingProfileError(error instanceof Error ? error.message : 'Unable to log out of the training profile.');
+    }
+  }
+
   async function saveReviewPositionToDeck() {
     setReviewDeckSaveStatus('Saving');
     setDeckActionError('');
@@ -2752,6 +2779,7 @@ export function useLabOrchestrator() {
     handlePgnPaste,
     loadRecentChessGame,
     openTrainingProfile,
+    logoutTrainingProfile,
     saveReviewPositionToDeck,
     selectSaveDeck,
     fetchRecentChessGames,

@@ -258,6 +258,7 @@ export function LabSidebar() {
               onTrainAll={() => void lab.trainAllDecks()}
               onRenameDeck={(deckId, name) => void lab.renameTrainingDeck(deckId, name)}
               onDeleteDeck={() => void lab.deleteTrainingDeck(lab.labState.selectedDeckId!)}
+              onLogout={() => void lab.logoutTrainingProfile()}
               onCreateDeckFocusHandled={() => lab.labState.setFocusTrainCreateDeck(false)}
             />
           )}

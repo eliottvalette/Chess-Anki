@@ -1263,6 +1263,7 @@ export function TrainPanel({
   onTrainAll,
   onRenameDeck,
   onDeleteDeck,
+  onLogout,
   focusCreateDeck,
   onCreateDeckFocusHandled,
   onNewDeckTitleChange,
@@ -1297,6 +1298,7 @@ export function TrainPanel({
   onTrainAll: () => void;
   onRenameDeck: (deckId: string, name: string) => void;
   onDeleteDeck: (deckId: string) => void;
+  onLogout: () => void;
   focusCreateDeck: boolean;
   onCreateDeckFocusHandled: () => void;
   onNewDeckTitleChange: (value: string) => void;
@@ -1308,25 +1310,28 @@ export function TrainPanel({
 }) {
   if (!activeCard) {
     return (
-      <LearnPanel
-        deckActionError={deckActionError}
-        deckActionLoading={deckActionLoading}
-        deckLoadError={deckLoadError}
-        deckBusy={deckBusy}
-        deckLibraryLoading={deckLibraryLoading}
-        deckSummaries={deckSummaries}
-        focusCreateDeck={focusCreateDeck}
-        newDeckTitle={newDeckTitle}
-        onCreateDeck={onCreateDeck}
-        onCreateDeckFocusHandled={onCreateDeckFocusHandled}
-        onGenerateRecentDeck={onGenerateRecentDeck}
-        onNewDeckTitleChange={onNewDeckTitleChange}
-        onTrainDeck={onTrainDeck}
-        onTrainAll={onTrainAll}
-        onRenameDeck={onRenameDeck}
-        onDeleteDeck={onDeleteDeck}
-        selectedDeckId={selectedDeckId}
-      />
+      <>
+        <LearnPanel
+          deckActionError={deckActionError}
+          deckActionLoading={deckActionLoading}
+          deckLoadError={deckLoadError}
+          deckBusy={deckBusy}
+          deckLibraryLoading={deckLibraryLoading}
+          deckSummaries={deckSummaries}
+          focusCreateDeck={focusCreateDeck}
+          newDeckTitle={newDeckTitle}
+          onCreateDeck={onCreateDeck}
+          onCreateDeckFocusHandled={onCreateDeckFocusHandled}
+          onGenerateRecentDeck={onGenerateRecentDeck}
+          onNewDeckTitleChange={onNewDeckTitleChange}
+          onTrainDeck={onTrainDeck}
+          onTrainAll={onTrainAll}
+          onRenameDeck={onRenameDeck}
+          onDeleteDeck={onDeleteDeck}
+          selectedDeckId={selectedDeckId}
+        />
+        <TrainingLogoutButton onLogout={onLogout} />
+      </>
     );
   }
 
@@ -1361,7 +1366,20 @@ export function TrainPanel({
         trainSessionCardCurrent={trainSessionCardCurrent}
         trainSessionCardTotal={trainSessionCardTotal}
       />
+      <TrainingLogoutButton onLogout={onLogout} />
     </>
+  );
+}
+
+function TrainingLogoutButton({ onLogout }: { onLogout: () => void }) {
+  return (
+    <button
+      className="box-border flex min-h-[40px] items-center justify-center rounded-[6px] border border-[rgba(255,141,145,0.18)] bg-[rgba(255,141,145,0.025)] px-3 text-[13px] font-normal text-[rgba(255,190,191,0.78)] transition-[background-color,color,border-color] duration-150 hover:border-[rgba(255,141,145,0.34)] hover:bg-[rgba(255,141,145,0.07)] hover:text-[#ffd8d8] w-full mt-2"
+      onClick={onLogout}
+      type="button"
+    >
+      Log out
+    </button>
   );
 }
 
@@ -1405,7 +1423,7 @@ export function TrainingProfilePanel({
         }}
       >
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border border-solid border-(--border) rounded-[10px] bg-[rgba(7,12,20,0.72)] text-(--text) px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'col-span-full'}`}
+          className="w-full min-w-0 box-border min-h-[40px] rounded-[6px] border border-[rgba(226,238,220,0.10)] bg-[rgba(2,8,5,0.42)] px-3 py-0 text-[13px] font-normal text-(--text) outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-[rgba(241,245,234,0.34)] focus:border-[rgba(168,216,160,0.48)] focus:bg-[rgba(2,8,5,0.58)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] col-span-full"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
           autoComplete="username"
@@ -1416,7 +1434,7 @@ export function TrainingProfilePanel({
           spellCheck={false}
         />
         <input
-          className={`${'w-full min-w-0 box-border min-h-[42px] border border-solid border-(--border) rounded-[10px] bg-[rgba(7,12,20,0.72)] text-(--text) px-[12px] py-0 font-inherit outline-none border-[rgba(198,215,255,0.4)] shadow-[inset_0_0_0_1px_rgba(198,215,255,0.08)] text-(--text-soft)'} ${'col-span-full'}`}
+          className="w-full min-w-0 box-border min-h-[40px] rounded-[6px] border border-[rgba(226,238,220,0.10)] bg-[rgba(2,8,5,0.42)] px-3 py-0 text-[13px] font-normal text-(--text) outline-none transition-[background-color,border-color,box-shadow] duration-150 placeholder:text-[rgba(241,245,234,0.34)] focus:border-[rgba(168,216,160,0.48)] focus:bg-[rgba(2,8,5,0.58)] focus:ring-[3px] focus:ring-[rgba(168,216,160,0.08)] col-span-full"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           autoComplete="current-password"
