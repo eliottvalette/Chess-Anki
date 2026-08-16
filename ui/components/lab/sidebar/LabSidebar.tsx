@@ -139,6 +139,7 @@ export function LabSidebar() {
               activeNodeId={lab.labState.activeOpeningNodeId}
               activeTree={lab.labState.activeOpeningTree}
               activeTreeId={lab.labState.selectedOpeningTreeId}
+              canOpenInReview={lab.currentMoves.length > 0}
               deckFeedback={lab.labState.deckFeedback}
               deckPlaybackBusy={lab.labState.deckPlaybackBusy}
               drillActive={lab.labState.openingDrillActive}
@@ -149,6 +150,7 @@ export function LabSidebar() {
               loading={lab.labState.openingTreesLoading}
               onImportRecent={() => void lab.importRecentOpeningTrees()}
               onNextLearnBranch={() => lab.startNextLearnBranch()}
+              onOpenInReview={() => lab.openLinesPositionInReview()}
               onQuitSession={() => lab.quitLinesSession()}
               onSelectNode={lab.selectOpeningNode}
               onSelectTree={lab.selectOpeningTree}

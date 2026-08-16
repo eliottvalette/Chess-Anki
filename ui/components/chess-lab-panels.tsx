@@ -244,6 +244,7 @@ export const LinesPanel = memo(function LinesPanel({
   activeNodeId,
   activeTree,
   activeTreeId,
+  canOpenInReview,
   deckFeedback,
   deckPlaybackBusy,
   drillActive,
@@ -255,6 +256,7 @@ export const LinesPanel = memo(function LinesPanel({
   onChangeTrainSide,
   onImportRecent: _onImportRecent,
   onNextLearnBranch,
+  onOpenInReview,
   onQuitSession,
   onSelectNode,
   onSelectTree,
@@ -281,6 +283,7 @@ export const LinesPanel = memo(function LinesPanel({
   activeNodeId: string | null;
   activeTree: OpeningTreeDetail | null;
   activeTreeId: string | null;
+  canOpenInReview: boolean;
   deckFeedback: DeckFeedback | null;
   deckPlaybackBusy: boolean;
   drillActive: boolean;
@@ -292,6 +295,7 @@ export const LinesPanel = memo(function LinesPanel({
   onChangeTrainSide: (side: 'white' | 'black') => void;
   onImportRecent: () => void;
   onNextLearnBranch: () => void;
+  onOpenInReview: () => void;
   onQuitSession: () => void;
   onSelectNode: (nodeId: string) => void;
   onSelectTree: (treeId: string) => void;
@@ -647,7 +651,15 @@ export const LinesPanel = memo(function LinesPanel({
             </div>
           ) : null}
           <button
-            className="box-border flex min-h-[40px] items-center justify-center rounded-[6px] border-0 bg-[rgba(241,245,234,0.04)] px-3 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(241,245,234,0.12)] hover:text-(--text) mt-2"
+            className="box-border flex min-h-[40px] items-center justify-center rounded-[6px] border border-[rgba(168,216,160,0.22)] bg-[rgba(168,216,160,0.08)] px-3 text-[13px] font-medium text-[#A8D8A0] transition-[background-color,border-color] duration-150 hover:border-[rgba(168,216,160,0.38)] hover:bg-[rgba(168,216,160,0.14)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={!canOpenInReview || (graphReadOnly && deckPlaybackBusy)}
+            onClick={onOpenInReview}
+            type="button"
+          >
+            Review
+          </button>
+          <button
+            className="box-border flex min-h-[40px] items-center justify-center rounded-[6px] border-0 bg-[rgba(241,245,234,0.04)] px-3 text-[13px] font-normal text-(--text-soft) transition-[background-color,color] duration-150 hover:bg-[rgba(241,245,234,0.12)] hover:text-(--text)"
             onClick={() => void handleCopyStudyDebug()}
             type="button"
           >

@@ -53,6 +53,7 @@ import {
 } from '@/lib/lines-board-eval';
 import { resolveLinesBoardReviewCategory } from '@/lib/lines-board-review';
 import { buildLinesStudyDebugSnapshot } from '@/lib/lines-debug-snapshot';
+import { buildLinesReviewTransfer } from '@/lib/lines-review-transfer';
 import type { DeckCard, DeckFeedback } from '@/lib/opening-training';
 import {
   classifyBoardMoveAtHistoryIndex,
@@ -66,6 +67,7 @@ import {
 } from '@/lib/opening-tree';
 import { requestOpeningTreesJson } from '@/lib/opening-trees-client';
 import { resolvePostMoveVerifiedReviewCardAnswer } from '@/lib/review-card-answer';
+import { WorkspaceSnapshotStore } from '@/lib/workspace-snapshot-store';
 import { useLabAudio } from '../../hooks/lab/useLabAudio';
 import { useLabDeckManager } from '../../hooks/lab/useLabDeckManager';
 import { useLabEngine } from '../../hooks/lab/useLabEngine';
@@ -364,8 +366,7 @@ export function useLabOrchestrator() {
   const progressSyncTimerRef = useRef<number | null>(null);
   const lastDeckLibraryProfileIdRef = useRef<string | null>(null);
 
-  const reviewWorkspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(null);
-  const trainWorkspaceSnapshotRef = useRef<WorkspaceSnapshot | null>(null);
+  const workspaceSnapshotStoreRef = useRef(new WorkspaceSnapshotStore<WorkspaceSnapshot>());
   const workspaceStateRef = useRef<WorkspaceSnapshot>(createEmptyWorkspaceSnapshot());
   const modeRef = useRef<WorkspaceMode>('review');
 
@@ -1228,7 +1229,7 @@ export function useLabOrchestrator() {
       return;
     }
 
-    reviewWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
+    workspaceSnapshotStoreRef.current.save('review', normalizeWorkspaceSnapshot(workspaceStateRef.current));
   }, []);
 
   const persistTrainWorkspaceSnapshot = useCallback(() => {
@@ -1236,7 +1237,15 @@ export function useLabOrchestrator() {
       return;
     }
 
-    trainWorkspaceSnapshotRef.current = normalizeWorkspaceSnapshot(workspaceStateRef.current);
+    workspaceSnapshotStoreRef.current.save('train', normalizeWorkspaceSnapshot(workspaceStateRef.current));
+  }, []);
+
+  const persistLinesWorkspaceSnapshot = useCallback(() => {
+    if (modeRef.current !== 'lines') {
+      return;
+    }
+
+    workspaceSnapshotStoreRef.current.save('lines', normalizeWorkspaceSnapshot(workspaceStateRef.current));
   }, []);
 
   const switchWorkspaceMode = useCallback(
@@ -1249,13 +1258,15 @@ export function useLabOrchestrator() {
         persistReviewWorkspaceSnapshot();
       } else if (modeRef.current === 'train') {
         persistTrainWorkspaceSnapshot();
+      } else if (modeRef.current === 'lines') {
+        persistLinesWorkspaceSnapshot();
       }
 
-      if (nextMode === 'review' && reviewWorkspaceSnapshotRef.current) {
-        applyWorkspaceSnapshot(reviewWorkspaceSnapshotRef.current);
-      } else if (nextMode === 'train' && trainWorkspaceSnapshotRef.current) {
-        applyWorkspaceSnapshot(trainWorkspaceSnapshotRef.current);
-      } else if (nextMode !== 'review' && nextMode !== 'train') {
+      const nextSnapshot = workspaceSnapshotStoreRef.current.load(nextMode);
+
+      if (nextSnapshot) {
+        applyWorkspaceSnapshot(nextSnapshot);
+      } else if (nextMode === 'lines') {
         setActiveDeckCard(null);
         setDeckFeedback(null);
         setDeckFeedbackArrowsVisible(false);
@@ -1275,6 +1286,7 @@ export function useLabOrchestrator() {
       setShowArrow,
       persistTrainWorkspaceSnapshot,
       persistReviewWorkspaceSnapshot,
+      persistLinesWorkspaceSnapshot,
     ],
   );
 
@@ -2058,6 +2070,48 @@ export function useLabOrchestrator() {
     };
   }, []);
 
+  function openLinesPositionInReview() {
+    const transfer = buildLinesReviewTransfer({
+      initialFen,
+      moves: currentMoves,
+      trainSide: activeTrainSide,
+      treeName: activeOpeningTree?.name ?? '',
+      username: chesscomUsername,
+    });
+
+    if (transfer.moveHistory.length === 0) {
+      return;
+    }
+
+    cancelDrillOpponentMove();
+    cancelSoundSequence();
+    cancelReviewPlayback();
+    deckPlaybackRequestIdRef.current += 1;
+    setDeckPlaybackBusy(false);
+    activeRecentGameCacheKeyRef.current = null;
+    activeRecentGameLinkRef.current = null;
+    activeRecentGamePgnRef.current = null;
+
+    const snapshot = normalizeWorkspaceSnapshot({
+      ...createEmptyWorkspaceSnapshot(),
+      fileName: transfer.fileName,
+      historyIndex: transfer.historyIndex,
+      initialFen: transfer.initialFen,
+      metadata: transfer.metadata,
+      moveHistory: transfer.moveHistory,
+      orientation: transfer.orientation,
+      showArrow: true,
+    });
+
+    persistLinesWorkspaceSnapshot();
+    workspaceSnapshotStoreRef.current.save('review', snapshot);
+    applyWorkspaceSnapshot(snapshot);
+    setTimelineProgress(null);
+    setMode('review');
+    modeRef.current = 'review';
+    void runTimelineAnalysis(transfer.moveHistory, transfer.initialFen, transfer.metadata);
+  }
+
   async function runTimelineAnalysis(
     nextMoves = moveHistory,
     nextInitialFen = initialFen,
@@ -2102,17 +2156,13 @@ export function useLabOrchestrator() {
       setPreMoveAnalyses(nextPreMoveAnalyses);
       setTimelineAnalyses(nextTimelineAnalyses);
 
-      if (timelineRequestIdRef.current !== requestId) {
-        setTimelineProgress(96);
-      }
+      setTimelineProgress(96);
 
       setTimelineReviews(
         buildTimelineReviews(nextMoves, nextPreMoveAnalyses, nextTimelineAnalyses, nextInitialFen, nextMetadata),
       );
 
-      if (timelineRequestIdRef.current !== requestId) {
-        setTimelineProgress(100);
-      }
+      setTimelineProgress(100);
 
       if (activeRecentGameCacheKeyRef.current) {
         void saveCachedTimelineAnalysis({
@@ -2133,7 +2183,7 @@ export function useLabOrchestrator() {
       setTimelineReviews([]);
       setTimelineError(error instanceof Error ? error.message : 'Unable to analyze the line.');
     } finally {
-      if (timelineRequestIdRef.current !== requestId) {
+      if (timelineRequestIdRef.current === requestId) {
         setTimelineLoading(false);
         setTimelineProgress(null);
       }
@@ -2155,7 +2205,7 @@ export function useLabOrchestrator() {
   ) {
     cancelRecentPreload('game opened');
     persistTrainWorkspaceSnapshot();
-    reviewWorkspaceSnapshotRef.current = null;
+    workspaceSnapshotStoreRef.current.remove('review');
     timelineRefineRequestIdRef.current += 1;
     activeRecentGameCacheKeyRef.current = options?.cacheKey ?? null;
     activeRecentGameLinkRef.current = options?.gameLink ?? null;
@@ -2417,8 +2467,7 @@ export function useLabOrchestrator() {
   function resetWorkspace() {
     cancelPendingAnalysisRequests();
     timelineRefineRequestIdRef.current += 1;
-    reviewWorkspaceSnapshotRef.current = null;
-    trainWorkspaceSnapshotRef.current = null;
+    workspaceSnapshotStoreRef.current.clear();
     setGame(new Chess());
     setInitialFen(null);
     setMoveHistory([]);
@@ -2651,6 +2700,7 @@ export function useLabOrchestrator() {
     startLinesReview,
     startNextLearnBranch,
     startOpeningDrill,
+    openLinesPositionInReview,
     quitLinesSession,
     stopOpeningDrill,
     importRecentOpeningTrees,
@@ -2691,6 +2741,7 @@ export function useLabOrchestrator() {
     applyWorkspaceSnapshot,
     persistReviewWorkspaceSnapshot,
     persistTrainWorkspaceSnapshot,
+    persistLinesWorkspaceSnapshot,
     switchWorkspaceMode,
     openTrainCreateDeck,
     resetWorkspace,
