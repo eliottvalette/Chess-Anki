@@ -9,6 +9,7 @@ import {
   getCpLoss,
   getMateForColor,
   getScoreCpForColor,
+  reviewCategoryMeta,
 } from './chess-analysis-client.ts';
 
 test('classifyReviewCategory marks Scotch d4 as book from bundled opening data', () => {
@@ -20,7 +21,6 @@ test('classifyReviewCategory marks Scotch d4 as book from bundled opening data',
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0,
       beforeExpected: 0.5,
       afterExpected: 0.5,
@@ -43,7 +43,6 @@ test('classifyReviewCategory marks opening book moves from explorer lookup', () 
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0,
       beforeExpected: 0.5,
       afterExpected: 0.5,
@@ -66,7 +65,6 @@ test('classifyReviewCategory does not let book status hide a significant engine 
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0.184,
       beforeExpected: 0.47,
       afterExpected: 0.29,
@@ -89,7 +87,6 @@ test('classifyReviewCategory does not infer book from early ply alone', () => {
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0,
       beforeExpected: 0.5,
       afterExpected: 0.49,
@@ -228,7 +225,6 @@ test('classifyReviewCategory uses expected points loss for mistakes and blunders
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0.491,
       beforeExpected: 0.55,
       afterExpected: 0.06,
@@ -249,7 +245,6 @@ test('classifyReviewCategory uses expected points loss for mistakes and blunders
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0.343,
       beforeExpected: 0.2,
       afterExpected: 0.01,
@@ -270,7 +265,6 @@ test('classifyReviewCategory uses expected points loss for mistakes and blunders
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0.5,
       beforeExpected: 0.2,
       afterExpected: 0,
@@ -293,7 +287,6 @@ test('classifyReviewCategory falls back to cp loss when expected points are unav
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: null,
       beforeExpected: null,
       afterExpected: null,
@@ -316,7 +309,6 @@ test('classifyReviewCategory reserves best for the engine top move', () => {
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: -0.02,
       beforeExpected: 0.54,
       afterExpected: 0.56,
@@ -337,7 +329,6 @@ test('classifyReviewCategory reserves best for the engine top move', () => {
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: null,
       beforeExpected: null,
       afterExpected: null,
@@ -360,7 +351,6 @@ test('classifyReviewCategory does not call the engine best move a blunder', () =
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
       expectedPointsLost: 0,
       beforeExpected: 0.98,
       afterExpected: 0,
@@ -477,10 +467,9 @@ function reviewPosition(fen, san, beforeMate, afterMate, bestMove) {
 
 test('forced replies are identified and excluded from key moments even when mate is unavoidable', () => {
   const review = reviewPosition('R6k/8/5K2/8/8/8/8/8 b - - 0 1', 'Kh7', 3, 2);
-  assert.equal(review.isForced, true);
-  assert.equal(review.label, 'Forced move');
-  assert.equal(review.category, 'best');
-  assert.equal(review.moveAccuracy, 100);
+  assert.equal(review.label, 'Forced');
+  assert.equal(review.category, 'forced');
+  assert.equal(review.moveAccuracy, null);
   assert.equal(review.isKeyMoment, false);
   assert.match(review.coachText, /only legal move/);
   assert.match(review.coachText, /Mated in 3 -> Mated in 2/);
@@ -489,13 +478,17 @@ test('forced replies are identified and excluded from key moments even when mate
 
 test('winning mate sequences show mate distance instead of artificial centipawns', () => {
   const review = reviewPosition('7k/8/5KQ1/8/8/8/8/8 w - - 0 1', 'Qg7#', 1, 0);
+  assert.equal(review.category, 'best');
+  assert.equal(review.isKeyMoment, false);
+  assert.equal(review.afterExpected, 1);
+  assert.equal(review.cpLossCp, null);
   assert.match(review.coachText, /Mate in 1 -> Checkmate/);
   assert.doesNotMatch(review.coachText, /1000|Expected score|loss .*cp/);
 });
 
 test('an already lost mate position does not make every legal alternative a blunder', () => {
   const review = reviewPosition('7k/8/5K2/8/8/8/8/R7 b - - 0 1', 'Kh7', 4, 3, 'h8g8');
-  assert.equal(review.isForced, false);
+  assert.notEqual(review.category, 'forced');
   assert.equal(review.category, 'excellent');
   assert.equal(review.isKeyMoment, false);
   assert.match(review.coachText, /Mated in 4 -> Mated in 3/);
@@ -509,11 +502,10 @@ test('classifyReviewCategory marks a non-best move allowing a new forced mate as
       sacrifice: false,
       afterWinning: false,
       beforeCompletelyWinning: false,
-      decisiveMove: false,
-      expectedPointsLost: 0,
-      beforeExpected: 0.98,
+      expectedPointsLost: 0.5,
+      beforeExpected: 0.5,
       afterExpected: 0,
-      cpLossCp: 99616,
+      cpLossCp: null,
       beforeMate: null,
       afterMate: -12,
       secondBestGapCp: 0,
@@ -521,4 +513,53 @@ test('classifyReviewCategory marks a non-best move allowing a new forced mate as
     }),
     'blunder',
   );
+});
+
+test('forced reviews use their own badge and counter instead of Best', () => {
+  const review = reviewPosition('R6k/8/5K2/8/8/8/8/8 b - - 0 1', 'Kh7', 3, 2);
+  const summary = buildGameReview([review], null);
+  assert.equal(summary.counts.black.forced, 1);
+  assert.equal(summary.counts.black.best, 0);
+  assert.equal(summary.accuracy.black, null);
+  assert.deepEqual(summary.keyMoments, []);
+  assert.equal(reviewCategoryMeta[review.category].badge, '/review-badges/forced.svg');
+});
+
+test('continuing a forced mate is Best rather than automatically Great', () => {
+  const review = reviewPosition('7k/8/5K2/8/8/8/8/R7 w - - 0 1', 'Ra7', 4, 3);
+  assert.equal(review.category, 'best');
+  assert.equal(review.isKeyMoment, false);
+  assert.equal(review.beforeCp, null);
+  assert.equal(review.afterCp, null);
+  assert.equal(review.cpLossCp, null);
+  assert.equal(review.beforeExpected, 1);
+  assert.equal(review.afterExpected, 1);
+  assert.match(review.coachText, /Mate in 4 -> Mate in 3/);
+});
+
+test('allowing mate in an already lost position is classified by expected loss', () => {
+  const game = new Chess('7k/8/5K2/8/8/8/8/R7 b - - 0 1');
+  const move = game.move('Kh7');
+  const [review] = classifyTimelineMoves(
+    [{ ...move, uci: move.lan, promotion: null, captured: null }],
+    [makeAnalysis({ scoreCp: 1500, bestMove: 'h8g8' })],
+    [
+      {
+        ...makeAnalysis({ scoreCp: null, bestMove: 'a1a7' }),
+        whitePerspective: { type: 'mate', value: 3, bound: 'exact' },
+      },
+    ],
+    '7k/8/5K2/8/8/8/8/R7 b - - 0 1',
+  );
+  assert.equal(review.category, 'excellent');
+  assert.equal(review.isKeyMoment, false);
+  assert.equal(review.cpLossCp, null);
+});
+
+test('mate scores never become artificial centipawn scores or losses', () => {
+  const mate = { whitePerspective: { type: 'mate', value: 4 } };
+  const cp = { whitePerspective: { type: 'cp', value: 300 } };
+  assert.equal(getScoreCpForColor(mate, 'w'), null);
+  assert.equal(getScoreCpForColor(mate, 'b'), null);
+  assert.equal(getCpLoss(mate, cp, 'w'), null);
 });

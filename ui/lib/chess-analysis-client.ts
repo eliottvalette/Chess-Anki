@@ -45,6 +45,7 @@ export type GameMetadata = {
 };
 
 export type ReviewCategory =
+  | 'forced'
   | 'book'
   | 'brilliant'
   | 'great'
@@ -82,7 +83,6 @@ export type TimelineReview = {
   afterMate: number | null;
   moveAccuracy: number | null;
   isKeyMoment: boolean;
-  isForced: boolean;
   coachText: string;
   fenBefore: string;
   fenAfter: string;
@@ -110,6 +110,7 @@ export type GameReview = {
 };
 
 export const reviewCategoryOrder: ReviewCategory[] = [
+  'forced',
   'book',
   'brilliant',
   'great',
@@ -131,6 +132,12 @@ export const reviewCategoryMeta: Record<
     pointStyle: TimelinePointStyle;
   }
 > = {
+  forced: {
+    label: 'Forced',
+    color: '#96af8b',
+    badge: '/review-badges/forced.svg',
+    pointStyle: 'circle',
+  },
   brilliant: {
     label: 'Brilliant',
     color: '#26C2A3',
@@ -725,8 +732,8 @@ export function classifyTimelineMoves(
     const ratingFlex = getRatingFlex(playerRating);
     const expectedPointsDelta = getMoveExpectedPointsLoss(beforeAnalysis, afterAnalysis, color, move.uci);
     const beforeExpected = expectedPointsDelta.before;
-    const afterExpected = expectedPointsDelta.after;
-    const expectedPointsLost = expectedPointsDelta.value;
+    const afterExpected = afterGame.isCheckmate() ? 1 : expectedPointsDelta.after;
+    const expectedPointsLost = afterGame.isCheckmate() ? 0 : expectedPointsDelta.value;
     const beforeCp = getScoreCpForColor(beforeAnalysis, color);
     const afterCp = getScoreCpForColor(afterAnalysis, color);
     const cpLossCp = getMoveCpLoss(beforeAnalysis, afterAnalysis, color, move.uci);
@@ -736,7 +743,6 @@ export function classifyTimelineMoves(
     const sacrifice = isPieceSacrifice(beforeFen, afterGame.fen(), color);
     const afterWinning = isWinningOutcome(afterAnalysis, color);
     const beforeCompletelyWinning = isCompletelyWinning(beforeAnalysis, color);
-    const decisiveMove = move.san.includes('#') || move.san.includes('+') || isMateForColor(afterAnalysis, color);
     const bestMoveSan = beforeAnalysis?.bestMove ? formatBestMove(beforeFen, beforeAnalysis.bestMove) : null;
     const secondBestGapCp = getSecondBestGapCp(beforeAnalysis, color);
 
@@ -748,7 +754,6 @@ export function classifyTimelineMoves(
       sacrifice,
       afterWinning,
       beforeCompletelyWinning,
-      decisiveMove,
       beforeExpected,
       afterExpected,
       expectedPointsLost,
@@ -770,15 +775,8 @@ export function classifyTimelineMoves(
       });
     }
 
-    const moveAccuracy = getMoveAccuracy(category, expectedPointsLost, cpLossCp, afterMate);
-    const isKeyMoment =
-      !isForced &&
-      isReviewKeyMoment(
-        category,
-        expectedPointsLost,
-        cpLossCp,
-        beforeMate == null || beforeMate >= 0 ? afterMate : null,
-      );
+    const moveAccuracy = getMoveAccuracy(category, expectedPointsLost, cpLossCp);
+    const isKeyMoment = isReviewKeyMoment(category, expectedPointsLost, cpLossCp);
     const coachText = buildCoachText({
       isForced,
       beforeMate,
@@ -807,7 +805,7 @@ export function classifyTimelineMoves(
       ply: index + 1,
       color,
       category,
-      label: isForced ? 'Forced move' : (meta?.label ?? null),
+      label: meta?.label ?? null,
       colorHex: meta?.color ?? null,
       pointStyle: meta?.pointStyle ?? 'circle',
       moveLabel,
@@ -825,7 +823,6 @@ export function classifyTimelineMoves(
       afterMate,
       moveAccuracy,
       isKeyMoment,
-      isForced,
       coachText,
       fenBefore: beforeFen,
       fenAfter: afterGame.fen(),
@@ -923,6 +920,7 @@ function applyUciMove(chess: Chess, move: string) {
 
 function createReviewCounter() {
   return {
+    forced: 0,
     book: 0,
     brilliant: 0,
     great: 0,
@@ -958,6 +956,10 @@ function getRatingFlex(rating: number | null) {
 }
 
 function getExpectedPoints(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
+  if (analysis?.whitePerspective?.type === 'mate') {
+    return getExpectedPointsFromScore(analysis.whitePerspective, color);
+  }
+
   const wdl = analysis?.whitePerspectiveWdl;
 
   if (wdl) {
@@ -969,14 +971,7 @@ function getExpectedPoints(analysis: AnalysisResult | null | undefined, color: '
     }
   }
 
-  const chartValue = analysis ? toChartScore(analysis) : null;
-
-  if (chartValue == null) {
-    return null;
-  }
-
-  const perspectiveValue = color === 'w' ? chartValue : -chartValue;
-  return 1 / (1 + Math.exp(-perspectiveValue / 1.35));
+  return getExpectedPointsFromScore(analysis?.whitePerspective, color);
 }
 
 function getExpectedPointsLoss(
@@ -1038,7 +1033,12 @@ function getExpectedPointsFromScore(score: PerspectiveScore | null | undefined, 
     return null;
   }
 
-  const whiteChartValue = score.type === 'mate' ? Math.sign(score.value) * 12 : score.value / 100;
+  if (score.type === 'mate') {
+    if (score.value === 0) return null;
+    return (color === 'w' ? score.value : -score.value) > 0 ? 1 : 0;
+  }
+
+  const whiteChartValue = score.value / 100;
   const perspectiveValue = color === 'w' ? whiteChartValue : -whiteChartValue;
   return 1 / (1 + Math.exp(-perspectiveValue / 1.35));
 }
@@ -1046,12 +1046,11 @@ function getExpectedPointsFromScore(score: PerspectiveScore | null | undefined, 
 export function getScoreCpForColor(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
   const score = analysis?.whitePerspective;
 
-  if (!score) {
+  if (!score || score.type !== 'cp') {
     return null;
   }
 
-  const whiteScore = score.type === 'mate' ? Math.sign(score.value) * 100000 : score.value;
-  return color === 'w' ? whiteScore : -whiteScore;
+  return color === 'w' ? score.value : -score.value;
 }
 
 function getScoreBoundForColor(score: PerspectiveScore | null | undefined, color: 'w' | 'b') {
@@ -1183,7 +1182,6 @@ export function classifyReviewCategory({
   sacrifice,
   afterWinning,
   beforeCompletelyWinning,
-  decisiveMove,
   beforeExpected,
   afterExpected,
   expectedPointsLost,
@@ -1200,7 +1198,6 @@ export function classifyReviewCategory({
   sacrifice: boolean;
   afterWinning: boolean;
   beforeCompletelyWinning: boolean;
-  decisiveMove: boolean;
   beforeExpected: number | null;
   afterExpected: number | null;
   expectedPointsLost: number | null;
@@ -1211,7 +1208,7 @@ export function classifyReviewCategory({
   ratingFlex: number;
 }): ReviewCategory | null {
   if (isForced) {
-    return 'best';
+    return 'forced';
   }
 
   if (
@@ -1223,20 +1220,15 @@ export function classifyReviewCategory({
     return 'book';
   }
 
-  if (!bestMovePlayed && afterMate != null && afterMate < 0 && (beforeMate == null || beforeMate >= 0)) {
-    return 'blunder';
-  }
-
   if (bestMovePlayed && sacrifice && afterWinning && !beforeCompletelyWinning && (cpLossCp ?? 0) <= 20) {
     return 'brilliant';
   }
 
   if (
     bestMovePlayed &&
-    ((afterMate != null && afterMate > 0) ||
-      (decisiveMove && afterWinning) ||
-      ((secondBestGapCp ?? 0) >= 140 && afterWinning) ||
-      ((beforeExpected ?? 0.5) <= 0.38 && (afterExpected ?? 0.5) >= 0.34))
+    !beforeCompletelyWinning &&
+    (((secondBestGapCp ?? 0) >= 140 && afterWinning) ||
+      ((beforeExpected ?? 0.5) <= 0.38 && (afterExpected ?? 0.5) >= 0.5))
   ) {
     return 'great';
   }
@@ -1335,13 +1327,8 @@ function cpLossToAccuracy(cpLossCp: number) {
   return Math.round(Math.max(0, Math.min(100, 100 - cpLossCp / 3)));
 }
 
-function getMoveAccuracy(
-  category: ReviewCategory | null,
-  expectedPointsLost: number | null,
-  cpLossCp: number | null,
-  afterMate: number | null,
-) {
-  if (!category) {
+function getMoveAccuracy(category: ReviewCategory | null, expectedPointsLost: number | null, cpLossCp: number | null) {
+  if (!category || category === 'forced') {
     return null;
   }
 
@@ -1350,10 +1337,6 @@ function getMoveAccuracy(
   }
 
   if (expectedPointsLost == null) {
-    if (afterMate != null && afterMate < 0) {
-      return 0;
-    }
-
     if (cpLossCp == null) {
       return null;
     }
@@ -1370,17 +1353,12 @@ function isReviewKeyMoment(
   category: ReviewCategory | null,
   expectedPointsLost: number | null,
   cpLossCp: number | null,
-  afterMate: number | null,
 ) {
   if (!category) {
     return false;
   }
 
   if (category === 'brilliant' || category === 'great') {
-    return true;
-  }
-
-  if (afterMate != null && afterMate < 0) {
     return true;
   }
 
@@ -1548,9 +1526,7 @@ function getKeyMomentRank(review: TimelineReview) {
 function getKeyMomentLossScore(review: TimelineReview) {
   const expectedLoss = Math.round((review.expectedPointsLost ?? 0) * 1_000);
   const cpLoss = review.cpLossCp ?? 0;
-  const matePenalty = review.afterMate != null && review.afterMate < 0 ? 10_000 : 0;
-
-  return matePenalty + Math.max(cpLoss, expectedLoss);
+  return Math.max(cpLoss, expectedLoss);
 }
 
 function formatCpScore(scoreCp: number) {
@@ -1599,16 +1575,6 @@ function getPieceValue(piece: string) {
     default:
       return 0;
   }
-}
-
-function isMateForColor(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
-  const score = analysis?.whitePerspective;
-
-  if (score?.type !== 'mate') {
-    return false;
-  }
-
-  return color === 'w' ? score.value > 0 : score.value < 0;
 }
 
 function isWinningOutcome(analysis: AnalysisResult | null | undefined, color: 'w' | 'b') {
