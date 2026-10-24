@@ -2200,6 +2200,10 @@ function getTimelineProgressValue(progress: number | null) {
 }
 
 function compactCoachText(review: TimelineReview) {
+  if (review.isForced || review.beforeMate != null || review.afterMate != null || review.san.includes('#')) {
+    return review.coachText;
+  }
+
   if (review.category === 'book') {
     return `${review.moveLabel} stays in book.`;
   }

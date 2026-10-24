@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { Chess } from 'chess.js';
 
 import {
   buildGameReview,
@@ -350,7 +351,7 @@ test('classifyReviewCategory reserves best for the engine top move', () => {
   );
 });
 
-test('classifyReviewCategory treats mate swings against the player as blunders', () => {
+test('classifyReviewCategory does not call the engine best move a blunder', () => {
   assert.equal(
     classifyReviewCategory({
       openingBookMove: false,
@@ -369,7 +370,7 @@ test('classifyReviewCategory treats mate swings against the player as blunders',
       secondBestGapCp: 0,
       ratingFlex: 0.02,
     }),
-    'blunder',
+    'best',
   );
 });
 
@@ -458,3 +459,66 @@ function makeLine({ bestMove, scoreCp }) {
     whitePerspective: { type: 'cp', value: scoreCp, bound: 'exact' },
   };
 }
+
+function reviewPosition(fen, san, beforeMate, afterMate, bestMove) {
+  const game = new Chess(fen);
+  const move = game.move(san);
+  const analysis = (mate, best) => ({
+    ...makeAnalysis({ scoreCp: null, bestMove: best }),
+    whitePerspective: { type: 'mate', value: mate, bound: 'exact' },
+  });
+  return classifyTimelineMoves(
+    [{ ...move, uci: move.lan, promotion: move.promotion ?? null, captured: move.captured ?? null }],
+    [analysis(beforeMate, bestMove ?? move.lan)],
+    [analysis(afterMate, null)],
+    fen,
+  )[0];
+}
+
+test('forced replies are identified and excluded from key moments even when mate is unavoidable', () => {
+  const review = reviewPosition('R6k/8/5K2/8/8/8/8/8 b - - 0 1', 'Kh7', 3, 2);
+  assert.equal(review.isForced, true);
+  assert.equal(review.label, 'Forced move');
+  assert.equal(review.category, 'best');
+  assert.equal(review.moveAccuracy, 100);
+  assert.equal(review.isKeyMoment, false);
+  assert.match(review.coachText, /only legal move/);
+  assert.match(review.coachText, /Mated in 3 -> Mated in 2/);
+  assert.doesNotMatch(review.coachText, /1000|loss .*cp/);
+});
+
+test('winning mate sequences show mate distance instead of artificial centipawns', () => {
+  const review = reviewPosition('7k/8/5KQ1/8/8/8/8/8 w - - 0 1', 'Qg7#', 1, 0);
+  assert.match(review.coachText, /Mate in 1 -> Checkmate/);
+  assert.doesNotMatch(review.coachText, /1000|Expected score|loss .*cp/);
+});
+
+test('an already lost mate position does not make every legal alternative a blunder', () => {
+  const review = reviewPosition('7k/8/5K2/8/8/8/8/R7 b - - 0 1', 'Kh7', 4, 3, 'h8g8');
+  assert.equal(review.isForced, false);
+  assert.equal(review.category, 'excellent');
+  assert.equal(review.isKeyMoment, false);
+  assert.match(review.coachText, /Mated in 4 -> Mated in 3/);
+});
+test('classifyReviewCategory marks a non-best move allowing a new forced mate as a blunder', () => {
+  assert.equal(
+    classifyReviewCategory({
+      openingBookMove: false,
+      san: 'Rxc2',
+      bestMovePlayed: false,
+      sacrifice: false,
+      afterWinning: false,
+      beforeCompletelyWinning: false,
+      decisiveMove: false,
+      expectedPointsLost: 0,
+      beforeExpected: 0.98,
+      afterExpected: 0,
+      cpLossCp: 99616,
+      beforeMate: null,
+      afterMate: -12,
+      secondBestGapCp: 0,
+      ratingFlex: 0.02,
+    }),
+    'blunder',
+  );
+});

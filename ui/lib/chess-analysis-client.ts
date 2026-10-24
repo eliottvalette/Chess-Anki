@@ -82,6 +82,7 @@ export type TimelineReview = {
   afterMate: number | null;
   moveAccuracy: number | null;
   isKeyMoment: boolean;
+  isForced: boolean;
   coachText: string;
   fenBefore: string;
   fenAfter: string;
@@ -709,6 +710,7 @@ export function classifyTimelineMoves(
   return moves.map((move, index) => {
     const color = move.color === 'b' ? 'b' : 'w';
     const beforeFen = beforeGame.fen();
+    const isForced = beforeGame.moves().length === 1;
     const afterGame = new Chess(beforeFen);
     afterGame.move({
       from: move.from,
@@ -739,6 +741,7 @@ export function classifyTimelineMoves(
     const secondBestGapCp = getSecondBestGapCp(beforeAnalysis, color);
 
     const reviewCategoryInput = {
+      isForced,
       openingBookMove: openingBookFlags?.[index] === true,
       san: move.san,
       bestMovePlayed,
@@ -768,8 +771,19 @@ export function classifyTimelineMoves(
     }
 
     const moveAccuracy = getMoveAccuracy(category, expectedPointsLost, cpLossCp, afterMate);
-    const isKeyMoment = isReviewKeyMoment(category, expectedPointsLost, cpLossCp, afterMate);
+    const isKeyMoment =
+      !isForced &&
+      isReviewKeyMoment(
+        category,
+        expectedPointsLost,
+        cpLossCp,
+        beforeMate == null || beforeMate >= 0 ? afterMate : null,
+      );
     const coachText = buildCoachText({
+      isForced,
+      beforeMate,
+      afterMate,
+      isCheckmate: afterGame.isCheckmate(),
       moveLabel,
       category,
       bestMoveSan,
@@ -793,7 +807,7 @@ export function classifyTimelineMoves(
       ply: index + 1,
       color,
       category,
-      label: meta?.label ?? null,
+      label: isForced ? 'Forced move' : (meta?.label ?? null),
       colorHex: meta?.color ?? null,
       pointStyle: meta?.pointStyle ?? 'circle',
       moveLabel,
@@ -811,6 +825,7 @@ export function classifyTimelineMoves(
       afterMate,
       moveAccuracy,
       isKeyMoment,
+      isForced,
       coachText,
       fenBefore: beforeFen,
       fenAfter: afterGame.fen(),
@@ -1161,6 +1176,7 @@ function findAnalysisLineForMove(analysis: AnalysisResult | null | undefined, mo
 }
 
 export function classifyReviewCategory({
+  isForced = false,
   openingBookMove = false,
   san,
   bestMovePlayed,
@@ -1177,6 +1193,7 @@ export function classifyReviewCategory({
   secondBestGapCp,
   ratingFlex,
 }: {
+  isForced?: boolean;
   openingBookMove?: boolean;
   san: string;
   bestMovePlayed: boolean;
@@ -1193,6 +1210,10 @@ export function classifyReviewCategory({
   secondBestGapCp: number | null;
   ratingFlex: number;
 }): ReviewCategory | null {
+  if (isForced) {
+    return 'best';
+  }
+
   if (
     openingBookMove &&
     !san.includes('+') &&
@@ -1202,7 +1223,7 @@ export function classifyReviewCategory({
     return 'book';
   }
 
-  if (afterMate != null && afterMate < 0) {
+  if (!bestMovePlayed && afterMate != null && afterMate < 0 && (beforeMate == null || beforeMate >= 0)) {
     return 'blunder';
   }
 
@@ -1379,6 +1400,10 @@ function isReviewKeyMoment(
 }
 
 function buildCoachText({
+  isForced,
+  beforeMate,
+  afterMate,
+  isCheckmate,
   moveLabel,
   category,
   bestMoveSan,
@@ -1389,6 +1414,10 @@ function buildCoachText({
   beforeCp,
   afterCp,
 }: {
+  isForced: boolean;
+  beforeMate: number | null;
+  afterMate: number | null;
+  isCheckmate: boolean;
   moveLabel: string;
   category: ReviewCategory | null;
   bestMoveSan: string | null;
@@ -1399,16 +1428,32 @@ function buildCoachText({
   beforeCp: number | null;
   afterCp: number | null;
 }) {
+  const hasMate = beforeMate != null || afterMate != null || isCheckmate;
+  const formatEvaluation = (cp: number | null, mate: number | null) =>
+    mate != null
+      ? mate === 0
+        ? 'Checkmate'
+        : mate > 0
+          ? `Mate in ${mate}`
+          : `Mated in ${Math.abs(mate)}`
+      : cp == null
+        ? 'Unknown'
+        : formatCpScore(cp);
   const swing =
-    beforeExpected == null || afterExpected == null
+    hasMate || beforeExpected == null || afterExpected == null
       ? ''
       : ` Expected score: ${formatExpected(beforeExpected)} -> ${formatExpected(afterExpected)}.`;
   const best = bestMoveSan ? ` Best was ${bestMoveSan}.` : '';
-  const loss = expectedPointsLost == null ? '' : ` Loss: ${(expectedPointsLost * 100).toFixed(1)}%.`;
-  const cp =
-    cpLossCp == null || beforeCp == null || afterCp == null
+  const loss = hasMate || expectedPointsLost == null ? '' : ` Loss: ${(expectedPointsLost * 100).toFixed(1)}%.`;
+  const cp = hasMate
+    ? ` Eval: ${formatEvaluation(beforeCp, beforeMate)} -> ${isCheckmate ? 'Checkmate' : formatEvaluation(afterCp, afterMate)}.`
+    : cpLossCp == null || beforeCp == null || afterCp == null
       ? ''
       : ` Eval: ${formatCpScore(beforeCp)} -> ${formatCpScore(afterCp)} (loss ${cpLossCp}cp).`;
+
+  if (isForced) {
+    return `${moveLabel} is a forced move (only legal move).${cp}`;
+  }
 
   switch (category) {
     case 'book':
@@ -1418,7 +1463,7 @@ function buildCoachText({
     case 'great':
       return `${moveLabel} is a key engine-aligned move.${swing}${cp}`;
     case 'best':
-      return `${moveLabel} matches the engine's top choice.`;
+      return `${moveLabel} matches the engine's top choice.${hasMate ? cp : ''}`;
     case 'excellent':
       return `${moveLabel} is accurate with only a tiny practical loss.${loss}${cp}`;
     case 'good':
